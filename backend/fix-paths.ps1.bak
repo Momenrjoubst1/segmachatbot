@@ -1,0 +1,10 @@
+$files = Get-ChildItem -Path "C:\Users\User\OneDrive\Desktop\New folder (5)\backend\src\services\chat\pipeline" -Filter *.ts
+foreach ($file in $files) {
+  $f = $file.FullName
+  $content = Get-Content -Raw $f
+  $new = $content -replace '"../../../rag/', '"../../rag/'
+  if ($new -ne $content) {
+    Set-Content -Path $f -Value $new -Encoding UTF8 -NoNewline
+    Write-Host "Fixed: $f"
+  }
+}

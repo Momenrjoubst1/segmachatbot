@@ -1,0 +1,255 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  --font-handwritten: 'Aref Ruqaa', serif;
+}
+
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius: var(--radius);
+
+  --color-glass: hsl(var(--glass));
+  --color-glow: hsl(var(--glow));
+  --color-surface: hsl(var(--surface));
+}
+
+@layer base {
+  :root,
+  .light {
+    --card: #ffffff;
+    --ring: #a0a0a0;
+    --input: #ffffff;
+    --muted: #e3e3e3;
+    --accent: #f3eac8;
+    --border: #747272;
+    --radius: 0.625rem;
+    --chart-1: #333333;
+    --chart-2: #555555;
+    --chart-3: #777777;
+    --chart-4: #999999;
+    --chart-5: #bbbbbb;
+    --popover: #ffffff;
+    --primary: #606060;
+    --sidebar: #f0f0f0;
+    --spacing: 0.25rem;
+    --font-mono: "Courier New", Courier, monospace;
+    --font-sans: Architects Daughter, sans-serif;
+    --secondary: #dedede;
+    --background: #f9f9f9;
+    --font-serif: "Times New Roman", Times, serif;
+    --foreground: #3a3a3a;
+    --destructive: #c87a7a;
+    --shadow-blur: 5px;
+    --shadow-color: #000000;
+    --sidebar-ring: #a0a0a0;
+    --shadow-spread: 0px;
+    --letter-spacing: 0.5px;
+    --shadow-opacity: 0.03;
+    --sidebar-accent: #f3eac8;
+    --sidebar-border: #c0c0c0;
+    --card-foreground: #3a3a3a;
+    --shadow-offset-x: 1px;
+    --shadow-offset-y: 4px;
+    --sidebar-primary: #606060;
+    --muted-foreground: #505050;
+    --accent-foreground: #5d4037;
+    --popover-foreground: #3a3a3a;
+    --primary-foreground: #f0f0f0;
+    --sidebar-foreground: #3a3a3a;
+    --secondary-foreground: #3a3a3a;
+    --destructive-foreground: #ffffff;
+    --sidebar-accent-foreground: #5d4037;
+    --sidebar-primary-foreground: #f0f0f0;
+
+    --glass: 255 255 255 / 0.72;
+    --glow: 96 96 96 / 0.35;
+    --surface: 210 20% 98%;
+
+    --vc-bg: #f9f9f9;
+    --vc-surface: 255 255 255 / 0.8;
+    --vc-panel-bg: 255 255 255 / 0.95;
+    --vc-panel-border: #747272;
+    --vc-glass-bg: 210 20% 98% / 0.7;
+    --vc-glass-border: #747272;
+    --vc-text: #3a3a3a;
+    --vc-text-secondary: #505050;
+    --vc-text-muted: #505050 / 0.6;
+    --vc-accent: #606060;
+    --vc-accent-neon: #606060;
+  }
+
+  .dark {
+    --card: #1a1a1a;
+    --ring: #404040;
+    --input: #2a2a2a;
+    --muted: #2a2a2a;
+    --accent: #3a3a3a;
+    --border: #3a3a3a;
+    --popover: #1a1a1a;
+    --primary: #ffffff;
+    --sidebar: #1a1a1a;
+    --secondary: #2a2a2a;
+    --background: #0a0a0a;
+    --foreground: #fafafa;
+    --destructive: #7f1d1d;
+    --sidebar-ring: #404040;
+    --sidebar-accent: #3a3a3a;
+    --sidebar-border: #3a3a3a;
+    --card-foreground: #fafafa;
+    --sidebar-primary: #ffffff;
+    --muted-foreground: #a0a0a0;
+    --accent-foreground: #fafafa;
+    --popover-foreground: #fafafa;
+    --primary-foreground: #0a0a0a;
+    --sidebar-foreground: #fafafa;
+    --secondary-foreground: #fafafa;
+    --destructive-foreground: #fafafa;
+    --sidebar-accent-foreground: #fafafa;
+    --sidebar-primary-foreground: #0a0a0a;
+    --glass: 10 10 10 / 0.72;
+    --glow: 255 255 255 / 0.15;
+    --surface: 210 20% 8%;
+  }
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans, "Inter", sans-serif);
+    width: 100%;
+    cursor: url("/cursors/default.svg") 8 4, auto;
+  }
+
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="number"],
+  textarea,
+  [contenteditable="true"],
+  .aui-composer-input,
+  .aui-lexical-input {
+    cursor: text !important;
+  }
+
+  button,
+  a,
+  [role="button"],
+  [role="link"],
+  select,
+  label,
+  summary,
+  .cursor-pointer,
+  [data-slot*="button"],
+  [data-slot*="trigger"] {
+    cursor: url("/cursors/pointer.svg") 10 2, pointer !important;
+  }
+
+  button:disabled,
+  input:disabled,
+  textarea:disabled,
+  select:disabled,
+  [disabled] {
+    cursor: not-allowed !important;
+  }
+}
+
+::selection {
+  background: rgba(96, 96, 96, 0.35);
+}
+
+.aui-assistant-message-content *::selection,
+.aui-user-message-content *::selection,
+.aui-thread-message *::selection {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+}
+
+:root {
+  --thread-max-width: 44rem;
+}
+
+button,
+input,
+textarea,
+select,
+a {
+  transition: background-color 0.1s ease-out, border-color 0.1s ease-out;
+}
+
+:root {
+  --perspective-red-bg: #e89c9c;
+  --perspective-red-ring: 220, 130, 130;
+  --perspective-purple-bg: #b8a0db;
+  --perspective-purple-ring: 160, 120, 220;
+  --perspective-green-bg: #9fd68d;
+  --perspective-green-ring: 120, 200, 100;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .animate-status-text-in,
+  .animate-breathing-glow,
+  .tool-card-running::before,
+  .reasoning-active::before,
+  .shimmer,
+  .simple-thinking-circle,
+  .simple-thinking-shadow {
+    animation: none !important;
+  }
+
+  /* Disable Tailwind animation utilities */
+  [class*="animate-"] {
+    animation: none !important;
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "pageTitle": "الملف الشخصي • JUST Social",
+  "headerTitle": "الملف الشخصي",
+  "seoDescription": "اطلع على هذا الملف الشخصي في JUST Social وابدأ تواصلك الآمن.",
+  "editProfile": "تعديل الملف الشخصي",
+  "follow": "متابعة",
+  "following": "تتم متابعته",
+  "stats": {
+    "following": "يتابع",
+    "followers": "المتابعون"
+  },
+  "cover": {
+    "change": "تغيير الغلاف"
+  },
+  "bio": {
+    "title": "نبذة",
+    "empty": "لا توجد نبذة بعد. أخبر العالم عنك!",
+    "placeholder": "اكتب شيئًا عن نفسك..."
+  },
+  "social": {
+    "title": "روابط التواصل",
+    "empty": "لا توجد روابط اجتماعية مضافة."
+  },
+  "socialProviders": {
+    "instagram": "إنستغرام",
+    "twitter": "إكس / تويتر",
+    "github": "غيت هاب",
+    "discord": "ديسكورد",
+    "tiktok": "تيك توك"
+  },
+  "socialPlaceholders": {
+    "username": "@اسم_المستخدم",
+    "handle": "اسم المستخدم"
+  },
+  "actions": {
+    "cancel": "إلغاء",
+    "save": "حفظ"
+  },
+  "universities": {
+    "just": "جامعة العلوم والتكنولوجيا الأردنية"
+  },
+  "editModal": {
+    "title": "تعديل الملف الشخصي",
+    "avatarFrame": "إطار الصورة",
+    "chatHanger": "مرافق المحادثة (يتدلى من صورتك في الشات)",
+    "chatHangerHelp": "اختر مرافقًا يظهر لأصدقائك في المحادثة.",
+    "usernameLabel": "اسم المستخدم",
+    "usernameImmutable": "لا يمكن تغيير اسم المستخدم",
+    "usernameWarning": "اسم المستخدم ثابت ولا يمكن تغييره حاليًا.",
+    "fullNameLabel": "الاسم الكامل",
+    "fullNamePlaceholder": "اسمك الكامل",
+    "universityLabel": "الجامعة",
+    "universityEmpty": "بدون تحديد",
+    "bioLabel": "النبذة",
+    "bioPlaceholder": "اكتب شيئًا عن نفسك...",
+    "saveChanges": "حفظ التغييرات",
+    "saving": "جارٍ الحفظ..."
+  },
+  "avatarFrames": {
+    "none": "بدون إطار",
+    "neon": "نبض نيون",
+    "gold": "ذهبي ملكي",
+    "cyberpunk": "سايبربانك",
+    "nature": "روح الطبيعة",
+    "rainbow": "حلم قوس قزح",
+    "glass": "كريستال زجاجي"
+  },
+  "chatHangers": {
+    "none": "بدون",
+    "spider": "عنكبوت",
+    "monkey": "قرد",
+    "ghost": "شبح",
+    "ufo": "طبق طائر",
+    "moon": "قمر",
+    "star": "نجمة",
+    "heart": "قلب"
+  }
+}

@@ -1,0 +1,157 @@
+@layer base {
+  [dir="rtl"] {
+    direction: rtl;
+    text-align: right;
+  }
+
+  [dir="rtl"] body,
+  [dir="rtl"] p,
+  [dir="rtl"] h1,
+  [dir="rtl"] h2,
+  [dir="rtl"] h3,
+  [dir="rtl"] h4,
+  [dir="rtl"] h5,
+  [dir="rtl"] h6,
+  [dir="rtl"] span,
+  [dir="rtl"] a,
+  [dir="rtl"] li,
+  [dir="rtl"] td,
+  [dir="rtl"] th,
+  [dir="rtl"] label,
+  [dir="rtl"] button {
+    font-family: "Tajawal", "Inter", sans-serif;
+  }
+
+  [dir="rtl"] p,
+  [dir="rtl"] button,
+  [dir="rtl"] input,
+  [dir="rtl"] textarea {
+    unicode-bidi: plaintext;
+    text-align: start;
+  }
+
+  [dir="rtl"] input::placeholder,
+  [dir="rtl"] textarea::placeholder {
+    text-align: right;
+  }
+}
+
+@layer components {
+  [dir="rtl"] .aui-user-message-content,
+  [dir="rtl"] .aui-assistant-message-content {
+    direction: rtl;
+    text-align: right;
+  }
+
+  [dir="rtl"] .aui-lexical-input {
+    text-align: right;
+    direction: rtl;
+  }
+
+  [dir="rtl"] .aui-user-message-root {
+    flex-direction: row-reverse;
+  }
+
+  [dir="rtl"] .aui-assistant-message-root {
+    flex-direction: row;
+  }
+
+  [dir="rtl"] .aui-composer-send {
+    margin-left: 0;
+    margin-right: 8px;
+  }
+
+  [dir="rtl"] .aui-thread-list-item-root {
+    text-align: right;
+    direction: rtl;
+  }
+
+  [dir="rtl"] .aui-message-content {
+    direction: rtl;
+    text-align: right;
+    unicode-bidi: embed;
+  }
+
+  [dir="rtl"] .aui-lexical-input {
+    direction: rtl;
+    text-align: right;
+  }
+
+  [dir="rtl"] .aui-user-message-root {
+    justify-content: flex-start;
+  }
+
+  [dir="rtl"] .aui-assistant-message-root {
+    justify-content: flex-start;
+  }
+}
+
+@layer utilities {
+  [dir="rtl"] [data-sonner-toast] {
+    direction: rtl;
+    text-align: right;
+  }
+
+  [dir="rtl"] [data-sonner-toast] {
+    animation: toast-slide-in-left 0.3s ease-out !important;
+  }
+
+  [dir="rtl"] [data-sonner-toast][data-removed="true"] {
+    animation: toast-slide-out-left 0.2s ease-in !important;
+  }
+
+  [dir="rtl"],
+  [dir="rtl"] p,
+  [dir="rtl"] span,
+  [dir="rtl"] h1,
+  [dir="rtl"] h2,
+  [dir="rtl"] h3,
+  [dir="rtl"] h4,
+  [dir="rtl"] h5,
+  [dir="rtl"] h6,
+  [dir="rtl"] li,
+  [dir="rtl"] label,
+  [dir="rtl"] a,
+  [dir="rtl"] button,
+  [dir="rtl"] input,
+  [dir="rtl"] textarea,
+  .lang-ar {
+    font-family: var(--font-handwritten);
+  }
+
+  .aui-root,
+  .aui-root *,
+  [class*="aui-"],
+  [data-slot*="aui"] {
+    font-family: "Tajawal", "Inter", sans-serif !important;
+  }
+
+  .assistant-app-shell {
+    font-family: "Tajawal", "Inter", sans-serif !important;
+  }
+
+  .assistant-app-shell p,
+  .assistant-app-shell span,
+  .assistant-app-shell li,
+  .assistant-app-shell h1,
+  .assistant-app-shell h2,
+  .assistant-app-shell h3,
+  .assistant-app-shell h4,
+  .assistant-app-shell h5,
+  .assistant-app-shell h6,
+  .assistant-app-shell label,
+  .assistant-app-shell [dir="auto"] {
+    font-family: "Tajawal", "Inter", sans-serif !important;
+  }
+
+  .assistant-app-shell .aui-root [dir="auto"],
+  .assistant-app-shell .aui-root p,
+  .assistant-app-shell .aui-root span,
+  .assistant-app-shell .aui-root li {
+    unicode-bidi: plaintext !important;
+  }
+
+  .aui-root, .aui-root * {
+    font-family: 'Tajawal', 'Inter', sans-serif !important;
+  }
+}

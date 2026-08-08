@@ -1,0 +1,88 @@
+/* From Uiverse.io by Yaya12085, modified for chat rendering */ 
+.notebook-page {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  font-family: "Comic Sans MS", cursive, sans-serif;
+  font-size: 16px;
+  border-radius: 10px;
+  background: #fff;
+  background-image: linear-gradient(#f5f5f0 1.5rem, #ccc 1.6rem);
+  background-size: 100% 1.6rem;
+  line-height: 1.6rem;
+  padding: 1.6rem 1rem 1rem 4.5rem;
+  color: #222;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.notebook-page::before,
+.notebook-page::after {
+  position: absolute;
+  content: "";
+  bottom: 10px;
+  width: 40%;
+  height: 10px;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.7);
+  z-index: -1;
+  transition: all 0.3s ease;
+}
+
+.notebook-page::before {
+  left: 15px;
+  transform: skew(-5deg) rotate(-5deg);
+}
+
+.notebook-page::after {
+  right: 15px;
+  transform: skew(5deg) rotate(5deg);
+}
+
+.notebook-page:hover::before,
+.notebook-page:hover::after {
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.4);
+}
+
+.notebook-margin {
+  position: absolute;
+  border-left: 2px solid #d88;
+  height: 100%;
+  left: 3.3rem;
+  top: 0;
+  z-index: 1;
+}
+
+.notebook-content {
+  position: relative;
+  z-index: 2;
+}
+
+.notebook-content p {
+  margin: 0 0 1.6rem 0;
+  color: #111;
+}
+
+.notebook-content h1, .notebook-content h2, .notebook-content h3 {
+  margin: 0 0 1.6rem 0;
+  color: #111;
+  font-weight: bold;
+}
+
+.notebook-content ul, .notebook-content ol {
+  margin: 0 0 1.6rem 0;
+  padding-left: 1.5rem;
+}
+
+.notebook-content li {
+  margin-bottom: 0.8rem;
+}
+
+p:has(math), p:has(.katex-display) {
+  margin-bottom: 1.6rem;
+}
+
+/* Fix katex display spacing to align with lines if possible */
+.notebook-content .katex-display {
+  margin: 0.8rem 0;
+}

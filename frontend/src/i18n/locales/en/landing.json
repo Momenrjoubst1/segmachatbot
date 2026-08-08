@@ -1,0 +1,140 @@
+{
+  "pageTitle": "Home • JUST Social",
+  "videochatButtonTitle": "Video Chat",
+  "messagesTitle": "Messages",
+  "newMessage": "New message",
+  "notifications": "Notifications",
+  "profileAlt": "Profile",
+  "senderAlt": "Sender",
+  "actorAlt": "Actor",
+  "liveConnection": "Live Connection",
+  "feedback": {
+    "titlePrefix": "Share Your",
+    "titleAccent": "Feedback",
+    "description": "We value your suggestions to make JUST Social better.",
+    "categoryLabel": "Category",
+    "ratingLabel": "Overall Experience",
+    "messageLabel": "Your Suggestion",
+    "messagePlaceholder": "Tell us what you think...",
+    "loggedInAs": "Logged in as {{email}}",
+    "anonymous": "Submitting anonymously",
+    "sent": "Sent!",
+    "submit": "Submit",
+    "sending": "Sending...",
+    "categories": {
+      "general": "General",
+      "feature": "Feature Request",
+      "bug": "Bug Report",
+      "design": "Design",
+      "performance": "Performance"
+    },
+    "ratings": {
+      "1": "Terrible",
+      "2": "Bad",
+      "3": "Okay",
+      "4": "Good",
+      "5": "Excellent!"
+    },
+    "errors": {
+      "messageRequired": "Please write your suggestion.",
+      "ratingRequired": "Please select a rating.",
+      "requestFailed": "Something went wrong. Please try again."
+    }
+  },
+  "community": {
+    "badge": "Community Members",
+    "title": "Discover Our Community Members",
+    "description": "Modern member cards that highlight people on the platform and surface their key details at a glance.",
+    "empty": "No members available right now.",
+    "active": "Active",
+    "fallbackMemberName": "JUST Member",
+    "fallbackBio": "Passionate about learning and sharing skills with the community.",
+    "fallbackRole": "Skill Explorer",
+    "viewProfile": "View Profile",
+    "joinedRecently": "Joined recently",
+    "loadError": "Unable to load community members right now. Please try again shortly."
+  },
+  "searchPlaceholder": "Search for users",
+  "signIn": "Sign In",
+  "signUp": "Sign Up",
+  "start": "Find Your Partner",
+  "connectNew": "Connect with someone new",
+  "signInHint": "Sign in or create an account",
+  "nav": {
+    "home": "Home",
+    "features": "Features",
+    "community": "Community",
+    "about": "About"
+  },
+  "exploreFeatures": "Explore Features",
+  "subtitle": "Swap Skills · Grow Together · Connect with the World",
+  "features": {
+    "title": "Empowering Meaningful Exchange",
+    "description": "Everything you need to master new skills and share your expertise through a seamless, interactive experience.",
+    "highlightWord": "Meaningful"
+  },
+  "feature": {
+    "video": "Crystal Clear Video",
+    "videoDesc": "High-definition video calls optimized for remote teaching and real-time collaboration.",
+    "chat": "Smart Real-time Chat",
+    "chatDesc": "Instant messaging with file sharing and code snippet support to keep the conversation flowing.",
+    "workspace": "Interactive Workspace",
+    "workspaceDesc": "Built-in whiteboard and code editor for hands-on learning and technical demonstrations.",
+    "games": "Mini-Games & Social",
+    "gamesDesc": "Break the ice with integrated chess and other games while you wait or take a break.",
+    "security": "Secure Connections",
+    "securityDesc": "Industry-standard security measures to protect your data and privacy.",
+    "community": "Global Community",
+    "communityDesc": "Connect with experts and enthusiasts from across the globe in seconds."
+  },
+  "safety": {
+    "title": "Safe & Moderated by AI",
+    "desc": "Our platform takes immediate action against violators to ensure a safe learning environment using advanced AI moderation."
+  },
+  "howItWorks": {
+    "title": "How it Works",
+    "subtitle": "Not just for learning, but For Fun too!",
+    "description": "Start video chatting with enthusiasts around the world. It's not just about exchanging skills—it's about making friends, having fun, and meeting new people! Connect in 3 simple steps.",
+    "step1": {
+      "title": "Sign Up",
+      "desc": "Register your free account to access features."
+    },
+    "step2": {
+      "title": "Click Start",
+      "desc": "Hit the start button to quickly match with someone."
+    },
+    "step3": {
+      "title": "Start Talking",
+      "desc": "Turn on your camera and microphone, chat and start exchanging skills!"
+    },
+    "cta": "Start Chatting Now"
+  },
+  "cta": {
+    "title": "Ready to your skillest? Upgrade your skillest now",
+    "highlightWord": "Upgrade",
+    "description": "Join a community where knowledge is the currency. Swap what you know for what you want to learn. No fees, no barriers, just pure growth.",
+    "button": "Join the Swap",
+    "onlineUsers": "10,000+ Swappers Online"
+  },
+  "categories": {
+    "artDesign": "Art & Design",
+    "languages": "Languages"
+  },
+  "footer": {
+    "tagline": "Empowering the next generation of lifelong learners through Peer-to-Peer skill exchange and global collaboration.",
+    "product": "Product",
+    "company": "Company",
+    "features": "Features",
+    "safety": "Safety",
+    "enterprise": "Enterprise",
+    "roadmap": "Roadmap",
+    "about": "About Us",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service",
+    "contact": "Contact",
+    "copyright": "© 2026 JUST Social. All rights reserved.",
+    "privacyLink": "Privacy",
+    "termsLink": "Terms",
+    "cookiesLink": "Cookies"
+  }
+}

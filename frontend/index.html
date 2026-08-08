@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=overlays-content" />
+    <meta name="theme-color" content="#3b82f6" />
+    <meta name="description" content="AI-powered chatbot with multiple models and tools" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>Sigma AI Assistant</title>
+    <style>
+      @keyframes shell-pulse {
+        0%, 100% { opacity: 0.15; }
+        50% { opacity: 0.3; }
+      }
+      .shell-bar {
+        background: #2a2a2a;
+        border-radius: 8px;
+        animation: shell-pulse 1.8s ease-in-out infinite;
+      }
+      .shell-shell { display: flex; height: 100%; width: 100%; overflow: hidden; }
+      .shell-sidebar {
+        display: none;
+        width: 260px;
+        flex-shrink: 0;
+        flex-direction: column;
+        gap: 16px;
+        padding: 16px;
+        border-right: 1px solid #3a3a3a;
+      }
+      @media (min-width: 768px) { .shell-sidebar { display: flex; } }
+      .shell-chat { display: flex; flex: 1; flex-direction: column; overflow: hidden; }
+      .shell-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 56px;
+        padding: 0 16px;
+        border-bottom: 1px solid #3a3a3a;
+      }
+      .shell-messages {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        justify-content: flex-end;
+        gap: 16px;
+        padding: 24px 24px 16px;
+      }
+      .shell-msg-row { display: flex; width: 100%; }
+      .shell-msg-row.right { justify-content: flex-end; }
+      .shell-msg-row.left { justify-content: flex-start; }
+      .shell-composer { padding: 0 16px 20px; }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="shell-shell">
+        <div class="shell-sidebar">
+          <div class="shell-bar" style="height:28px;width:96px;border-radius:6px"></div>
+          <div class="shell-bar" style="height:36px;width:100%;border-radius:12px"></div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+            <div class="shell-bar" style="height:32px;width:70%;border-radius:8px;animation-delay:0ms"></div>
+            <div class="shell-bar" style="height:32px;width:80%;border-radius:8px;animation-delay:60ms"></div>
+            <div class="shell-bar" style="height:32px;width:90%;border-radius:8px;animation-delay:120ms"></div>
+            <div class="shell-bar" style="height:32px;width:70%;border-radius:8px;animation-delay:180ms"></div>
+            <div class="shell-bar" style="height:32px;width:80%;border-radius:8px;animation-delay:240ms"></div>
+          </div>
+        </div>
+        <div class="shell-chat">
+          <div class="shell-header">
+            <div class="shell-bar" style="height:20px;width:20px;border-radius:4px"></div>
+            <div class="shell-bar" style="height:16px;width:128px;border-radius:4px"></div>
+          </div>
+          <div class="shell-messages">
+            <div class="shell-msg-row right"><div class="shell-bar" style="height:36px;width:65%;max-width:360px;border-radius:16px;animation-delay:0ms"></div></div>
+            <div class="shell-msg-row left"><div class="shell-bar" style="height:36px;width:45%;max-width:360px;border-radius:16px;animation-delay:80ms"></div></div>
+            <div class="shell-msg-row right"><div class="shell-bar" style="height:36px;width:80%;max-width:360px;border-radius:16px;animation-delay:160ms"></div></div>
+            <div class="shell-msg-row left"><div class="shell-bar" style="height:36px;width:55%;max-width:360px;border-radius:16px;animation-delay:240ms"></div></div>
+          </div>
+          <div class="shell-composer"><div class="shell-bar" style="height:48px;width:100%;border-radius:16px;border:1px solid #3a3a3a"></div></div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

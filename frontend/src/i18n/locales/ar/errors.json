@@ -1,0 +1,22 @@
+{
+  "generic": "حدث خطأ غير متوقع.",
+  "network": "خطأ في الشبكة. يرجى التحقق من الاتصال.",
+  "unauthorized": "ليس لديك صلاحية لتنفيذ هذا الإجراء.",
+  "notFound": "المورد المطلوب غير موجود.",
+  "pageError": "حدث خطأ ما في هذه الصفحة.",
+  "serverUnavailable": "لا يمكن الوصول إلى السيرفر",
+  "serverUnavailableDetail": "تعذّر الاتصال بسيرفر البوت. تأكد من أن `npm run dev` شغّال في الطرفية، أو شغّل الـ backend يدوياً عبر `npm run dev:backend`. ثم أعد إرسال رسالتك.",
+  "sessionExpired": "انتهت الجلسة",
+  "sessionExpiredDetail": "سجّل الدخول مرة أخرى وأعد المحاولة.",
+  "rateLimited": "طلبات كثيرة جداً",
+  "rateLimitedDetail": "انتظر لحظة وأعد المحاولة.",
+  "serverError": "خطأ في السيرفر",
+  "serverErrorDetail": "حصل خطأ مؤقت في معالجة طلبك. حاول مرة ثانية بعد قليل.",
+  "processingError": "عذراً، صار خطأ أثناء معالجة طلبك",
+  "tryAgain": "حاول مرة ثانية.",
+  "emailSent": "تم إرسال البريد الإلكتروني بنجاح",
+  "emailFailed": "فشل إرسال البريد الإلكتروني",
+  "emailRateLimited": "تم تجاوز الحد المسموح بإرسال البريد",
+  "emailConfirmRequired": "يرجى تأكيد إرسال البريد الإلكتروني",
+  "codeExecutionFailed": "فشل في تنفيذ الكود"
+}

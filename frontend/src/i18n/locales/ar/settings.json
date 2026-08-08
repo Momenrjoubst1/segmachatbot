@@ -1,0 +1,45 @@
+{
+  "pageTitle": "الإعدادات",
+  "tabs": {
+    "security": "الأمان",
+    "preferences": "التفضيلات",
+    "panic": "الخصوصية"
+  },
+  "security": {
+    "sectionTitle": "الأمان",
+    "sectionDescription": "إدارة أمان حسابك وإعدادات الخصوصية.",
+    "encryptionTitle": "حماية البيانات",
+    "statusActive": "نشط",
+    "encryptionDescription": "بياناتك محمية بمعايير أمان صناعية بما في ذلك التشفير أثناء النقل (HTTPS) والتخزين الآمن.",
+    "fingerprintLabel": "معرف حسابك",
+    "keysBackedUp": "تمت مزامنة بياناتك بأمان.",
+    "keysSyncing": "جارٍ مزامنة البيانات...",
+    "dashboardTitle": "لوحة الأمان",
+    "dashboardDescription": "راقب حالة أمان حسابك ونشاطه."
+  },
+  "preferences": {
+    "sectionTitle": "تفضيلات التطبيق",
+    "sectionDescription": "خصص تجربتك وواجهة الاستخدام."
+  },
+  "panic": {
+    "sectionTitle": "الخصوصية",
+    "sectionDescription": "التحكم في خصوصية بياناتك ومشاركة المعلومات.",
+    "protocolTitle": "احتفاظ البيانات",
+    "protocolDescription": "تحكم في مدة تخزين سجل المحادثات.",
+    "fakePinLabel": "حذف الرسائل تلقائيًا بعد",
+    "fakePinPlaceholder": "اختر المدة",
+    "confirmFakePinLabel": "مسح سجل المحادثات",
+    "confirmFakePinPlaceholder": "سيؤدي هذا إلى إزالة جميع محادثاتك",
+    "contactLabel": "تصدير البيانات",
+    "contactPlaceholder": "تنزيل بياناتك",
+    "contactHelp": "تصدير جميع محادثاتك وبياناتك.",
+    "activate": "حفظ الإعدادات",
+    "successSaved": "تم حفظ إعدادات الخصوصية بنجاح.",
+    "errors": {
+      "enterPin": "يرجى اختيار خيار.",
+      "pinsMismatch": "الإعدادات غير متطابقة.",
+      "pinMinLength": "اختيار غير صالح.",
+      "saveFailed": "فشل حفظ الإعدادات."
+    }
+  }
+}

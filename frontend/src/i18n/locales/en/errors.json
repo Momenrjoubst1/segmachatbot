@@ -1,0 +1,22 @@
+{
+  "generic": "An unexpected error occurred.",
+  "network": "Network error. Please check your connection.",
+  "unauthorized": "You are not authorized to perform this action.",
+  "notFound": "The requested resource was not found.",
+  "pageError": "Something went wrong on this page.",
+  "serverUnavailable": "Cannot reach server",
+  "serverUnavailableDetail": "The backend server is not running. Please start it with `npm run dev` in the terminal, or run the backend manually via `npm run dev:backend`. Then try sending your message again.",
+  "sessionExpired": "Session expired",
+  "sessionExpiredDetail": "Please sign in again and retry.",
+  "rateLimited": "Too many requests",
+  "rateLimitedDetail": "Please wait a moment and try again.",
+  "serverError": "Server error",
+  "serverErrorDetail": "A temporary error occurred while processing your request. Please try again shortly.",
+  "processingError": "Sorry, an error occurred while processing your request",
+  "tryAgain": "Please try again.",
+  "emailSent": "Email sent successfully",
+  "emailFailed": "Failed to send email",
+  "emailRateLimited": "Email rate limit exceeded",
+  "emailConfirmRequired": "Please confirm sending the email",
+  "codeExecutionFailed": "Failed to execute code"
+}

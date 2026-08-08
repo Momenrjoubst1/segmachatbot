@@ -1,0 +1,78 @@
+{
+  "pageTitle": "Profile • JUST Social",
+  "headerTitle": "Profile",
+  "seoDescription": "Check out this JUST Social profile. Connect and start a secure exchange!",
+  "editProfile": "Edit Profile",
+  "follow": "Follow",
+  "following": "Following",
+  "stats": {
+    "following": "Following",
+    "followers": "Followers"
+  },
+  "cover": {
+    "change": "Change Cover"
+  },
+  "bio": {
+    "title": "About",
+    "empty": "No bio available. Tell the world about yourself!",
+    "placeholder": "Write something about yourself..."
+  },
+  "social": {
+    "title": "Connect",
+    "empty": "No social links added."
+  },
+  "socialProviders": {
+    "instagram": "Instagram",
+    "twitter": "X / Twitter",
+    "github": "GitHub",
+    "discord": "Discord",
+    "tiktok": "TikTok"
+  },
+  "socialPlaceholders": {
+    "username": "@username",
+    "handle": "username"
+  },
+  "actions": {
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "universities": {
+    "just": "Jordan University of Science and Technology"
+  },
+  "editModal": {
+    "title": "Edit Profile",
+    "avatarFrame": "Avatar Frame",
+    "chatHanger": "Chat Hanger (hangs from your avatar in chat)",
+    "chatHangerHelp": "Choose a companion that appears for your friends in chat.",
+    "usernameLabel": "Username",
+    "usernameImmutable": "Username cannot be changed",
+    "usernameWarning": "This username is fixed and cannot be changed right now.",
+    "fullNameLabel": "Full Name",
+    "fullNamePlaceholder": "Your full name",
+    "universityLabel": "University",
+    "universityEmpty": "Not specified",
+    "bioLabel": "Bio",
+    "bioPlaceholder": "Write something about yourself...",
+    "saveChanges": "Save Changes",
+    "saving": "Saving..."
+  },
+  "avatarFrames": {
+    "none": "No Frame",
+    "neon": "Neon Pulse",
+    "gold": "Golden Royal",
+    "cyberpunk": "Cyberpunk",
+    "nature": "Earth Spirit",
+    "rainbow": "Rainbow Dream",
+    "glass": "Crystal Glass"
+  },
+  "chatHangers": {
+    "none": "None",
+    "spider": "Spider",
+    "monkey": "Monkey",
+    "ghost": "Ghost",
+    "ufo": "UFO",
+    "moon": "Moon",
+    "star": "Star",
+    "heart": "Heart"
+  }
+}

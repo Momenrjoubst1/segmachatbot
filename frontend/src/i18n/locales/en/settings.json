@@ -1,0 +1,45 @@
+{
+  "pageTitle": "Settings",
+  "tabs": {
+    "security": "Security",
+    "preferences": "Preferences",
+    "panic": "Privacy"
+  },
+  "security": {
+    "sectionTitle": "Security",
+    "sectionDescription": "Manage your account security and privacy settings.",
+    "encryptionTitle": "Data Protection",
+    "statusActive": "Active",
+    "encryptionDescription": "Your data is protected with industry-standard security measures including encryption in transit (HTTPS) and secure storage.",
+    "fingerprintLabel": "Your Account ID",
+    "keysBackedUp": "Your data is securely synchronized.",
+    "keysSyncing": "Syncing data...",
+    "dashboardTitle": "Security Dashboard",
+    "dashboardDescription": "Monitor your account security status and activity."
+  },
+  "preferences": {
+    "sectionTitle": "App Preferences",
+    "sectionDescription": "Customize your experience and interface."
+  },
+  "panic": {
+    "sectionTitle": "Privacy",
+    "sectionDescription": "Control your privacy and data sharing preferences.",
+    "protocolTitle": "Data Retention",
+    "protocolDescription": "Control how long your conversation history is stored.",
+    "fakePinLabel": "Auto-delete messages after",
+    "fakePinPlaceholder": "Select duration",
+    "confirmFakePinLabel": "Clear chat history",
+    "confirmFakePinPlaceholder": "This will remove all your conversations",
+    "contactLabel": "Data export",
+    "contactPlaceholder": "Download your data",
+    "contactHelp": "Export all your conversations and data.",
+    "activate": "Save Settings",
+    "successSaved": "Privacy settings saved successfully.",
+    "errors": {
+      "enterPin": "Please select an option.",
+      "pinsMismatch": "Settings do not match.",
+      "pinMinLength": "Invalid selection.",
+      "saveFailed": "Failed to save settings."
+    }
+  }
+}

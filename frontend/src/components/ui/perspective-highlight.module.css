@@ -1,0 +1,8 @@
+.highlightComponent {
+  --highlight-shadow: rgba(var(--perspective-color-ring), calc(0.8 * var(--lift, 0))) 1.5px 1px 0px 0.5px, rgba(var(--perspective-color-ring), calc(0.3 * var(--lift, 0))) 4px 2px 2px 0px;
+}
+
+.highlightComponent::selection {
+  --highlight-shadow: none;
+  box-shadow: none !important;
+}

@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%">
+  <style>
+    .b-t-line {
+      stroke: currentColor; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
+      stroke-dasharray: 40; stroke-dashoffset: 40;
+      animation: dBranchTop 5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+    }
+    .b-b-line {
+      stroke: currentColor; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
+      stroke-dasharray: 40; stroke-dashoffset: 40;
+      animation: dBranchBottom 5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+    }
+    .r-tri-path {
+      stroke: currentColor; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
+      stroke-dasharray: 120; stroke-dashoffset: 120;
+      animation: dRightTriangle 5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+    }
+    .m-vert-line {
+      stroke: currentColor; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
+      stroke-dasharray: 80; stroke-dashoffset: 80;
+      animation: dVerticalLine 5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+    }
+    .l-tri-path {
+      stroke: currentColor; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
+      stroke-dasharray: 120; stroke-dashoffset: 120;
+      animation: dLeftTriangle 5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+    }
+
+    @keyframes dBranchTop {
+      0% { stroke-dashoffset: 40; opacity: 0; }
+      2% { opacity: 1; }
+      14% { stroke-dashoffset: -8; }
+      20%, 82% { stroke-dashoffset: 0; opacity: 1; }
+      90%, 100% { stroke-dashoffset: 40; opacity: 0; }
+    }
+    @keyframes dBranchBottom {
+      0% { stroke-dashoffset: 40; opacity: 0; }
+      2% { opacity: 1; }
+      14% { stroke-dashoffset: -8; }
+      20%, 82% { stroke-dashoffset: 0; opacity: 1; }
+      90%, 100% { stroke-dashoffset: 40; opacity: 0; }
+    }
+    @keyframes dRightTriangle {
+      0%, 18% { stroke-dashoffset: 120; opacity: 0; }
+      20% { opacity: 1; }
+      34% { stroke-dashoffset: -12; }
+      40%, 82% { stroke-dashoffset: 0; opacity: 1; }
+      90%, 100% { stroke-dashoffset: 120; opacity: 0; }
+    }
+    @keyframes dVerticalLine {
+      0%, 36% { stroke-dashoffset: 80; opacity: 0; }
+      38% { opacity: 1; }
+      48% { stroke-dashoffset: -10; }
+      54%, 82% { stroke-dashoffset: 0; opacity: 1; }
+      90%, 100% { stroke-dashoffset: 80; opacity: 0; }
+    }
+    @keyframes dLeftTriangle {
+      0%, 50% { stroke-dashoffset: 120; opacity: 0; }
+      52% { opacity: 1; }
+      66% { stroke-dashoffset: -14; }
+      72%, 82% { stroke-dashoffset: 0; opacity: 1; }
+      90%, 100% { stroke-dashoffset: 120; opacity: 0; }
+    }
+
+    .n-br-t { transform: scale(0); transform-origin: 87px 37px; animation: pNodeE 5s ease-out infinite; animation-delay: 0s; fill: currentColor; }
+    .n-br-b { transform: scale(0); transform-origin: 87px 63px; animation: pNodeE 5s ease-out infinite; animation-delay: 0s; fill: currentColor; }
+    .n-center-t { transform: scale(0); transform-origin: 50px 23px; animation: pNodeE 5s ease-out infinite; animation-delay: 1.9s; fill: currentColor; }
+    .n-center-b { transform: scale(0); transform-origin: 50px 77px; animation: pNodeE 5s ease-out infinite; animation-delay: 1.9s; fill: currentColor; }
+    .n-left-far { transform: scale(0); transform-origin: 26px 50px; animation: pNodeE 5s ease-out infinite; animation-delay: 3.5s; fill: currentColor; }
+
+    @keyframes pNodeE {
+      0% { transform: scale(0); opacity: 0; }
+      8%, 82% { transform: scale(1); opacity: 1; }
+      90%, 100% { transform: scale(0); opacity: 0; }
+    }
+  </style>
+  <g>
+    <line x1="50" y1="23" x2="50" y2="77" class="m-vert-line" />
+    <path d="M 50 23 L 26 50 L 50 77" class="l-tri-path" />
+    <path d="M 50 23 L 74 50 L 50 77" class="r-tri-path" />
+    <line x1="74" y1="50" x2="87" y2="37" class="b-t-line" />
+    <line x1="74" y1="50" x2="87" y2="63" class="b-b-line" />
+  </g>
+  <g>
+    <circle cx="50" cy="23" r="6.5" class="n-center-t" />
+    <circle cx="50" cy="77" r="6.5" class="n-center-b" />
+    <circle cx="26" cy="50" r="7.5" class="n-left-far" />
+    <circle cx="87" cy="37" r="6.5" class="n-br-t" />
+    <circle cx="87" cy="63" r="6.5" class="n-br-b" />
+  </g>
+</svg>
