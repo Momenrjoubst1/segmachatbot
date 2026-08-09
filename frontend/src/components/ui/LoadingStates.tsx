@@ -162,11 +162,17 @@ export const CompactSkeleton = () => {
           </div>
         ))}
       </div>
-      <div className="px-4 pb-5 shrink-0">
+      <div className="mx-auto w-full max-w-3xl px-4 pb-4 md:pb-6 shrink-0">
         <div
           style={{ animation: "fadeInUp 0.3s ease-in-out 0.3s both" }}
-          className="h-12 rounded-2xl bg-muted animate-pulse border border-border"
-        />
+          className="rounded-3xl border border-border bg-muted animate-pulse p-2.5"
+        >
+          <div className="min-h-10 w-full" />
+          <div className="mt-2 flex items-center justify-between">
+            <div className="size-8 rounded-full bg-border/50" />
+            <div className="size-8 rounded-full bg-border/50" />
+          </div>
+        </div>
       </div>
     </motion.div>
   );

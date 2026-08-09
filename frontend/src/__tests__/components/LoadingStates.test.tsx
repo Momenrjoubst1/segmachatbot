@@ -127,7 +127,7 @@ describe('LoadingStates', () => {
 
     it('renders composer skeleton', () => {
       const { container } = render(<CompactSkeleton />);
-      const composer = container.querySelector('.h-12.rounded-2xl');
+      const composer = container.querySelector('.rounded-3xl');
       expect(composer).toBeInTheDocument();
     });
   });
