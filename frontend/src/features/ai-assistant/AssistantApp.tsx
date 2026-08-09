@@ -2,7 +2,7 @@
 import { AssistantRuntimeProvider, Suggestions, useAui, useAuiState } from "@assistant-ui/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Shadcn } from "./shadcn/AssistantLayout";
-import { useRuntime } from "./ui/useChatRuntime";
+import { useRuntime, MessageSyncer } from "./ui/useChatRuntime";
 import { useChatHistory, ChatHistoryProvider } from "../../hooks/useChatHistory";
 import { useCourses, type AcademicCourse } from "../../hooks/useCourses";
 import { useScrollPreservation } from "../../hooks/useScrollPreservation";
@@ -10,8 +10,9 @@ import { useTitle } from "@/context/TitleContext";
 import { useState, useCallback, useEffect, useRef, useLayoutEffect } from "react";
 import { Toaster } from "sonner";
 import { RAGProvider } from "../../context/RAGContext";
-import { CompactSkeleton } from "@/components/ui/LoadingStates";
-import { AnimatePresence, motion } from "framer-motion";
+import { TopLoadingBar } from "@/components/ui/TopLoadingBar";
+import { motion } from "framer-motion";
+
 import { SidebarView } from "./shadcn/components/Sidebar/SidebarView";
 import { MobileSidebarView } from "./shadcn/components/Sidebar/MobileSidebarView";
 import { Header } from "./shadcn/components/Header/Header";
@@ -147,6 +148,7 @@ const AssistantChatInner = ({
 
   return (
     <AssistantRuntimeProvider runtime={runtime} aui={aui}>
+      <MessageSyncer />
       <RAGProvider>
         <DraftSaver chatKey={chatKey} onDraftSave={onDraftSave} onThreadSwitch={onThreadSwitch} />
         <DraftRestorer draftText={draftText} />
@@ -292,43 +294,36 @@ const AssistantAppContent = () => {
             onToggleArtifacts={() => setArtifactPanelOpen(!artifactPanelOpen)}
             onToggleEmailHistory={() => setEmailHistoryOpen(!emailHistoryOpen)}
           />
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <AnimatePresence mode="popLayout">
-              {isLoadingMessages ? (
-                <CompactSkeleton key="compact-skeleton" />
-              ) : (
-                <motion.div
-                  key={chatKey}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="flex flex-1 h-full w-full overflow-hidden"
-                >
-                  <AssistantChatInner
-                    key={chatKey}
-                    activeCourse={activeCourse}
-                    isOnboarded={isOnboarded}
-                    coursesLoading={coursesLoading}
-                    localOnboarded={localOnboarded}
-                    handleCompleteOnboarding={handleCompleteOnboarding}
-                    handleSkipOnboarding={handleSkipOnboarding}
-                    setActiveCourse={setActiveCourse}
-                    activeThreadId={activeThreadId}
-                    draftText={draftText}
-                    chatKey={chatKey}
-                    onDraftSave={handleDraftSave}
-                    onThreadSwitch={onThreadChange}
-                    activeView={activeView}
-                    onToggleView={setActiveView}
-                    artifactPanelOpen={artifactPanelOpen}
-                    setArtifactPanelOpen={setArtifactPanelOpen}
-                    emailHistoryOpen={emailHistoryOpen}
-                    setEmailHistoryOpen={setEmailHistoryOpen}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
+          <div className="relative flex-1 min-h-0 overflow-hidden">
+            {isLoadingMessages && <TopLoadingBar />}
+            <motion.div
+              key={chatKey}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-1 h-full w-full overflow-hidden"
+            >
+              <AssistantChatInner
+                key={chatKey}
+                activeCourse={activeCourse}
+                isOnboarded={isOnboarded}
+                coursesLoading={coursesLoading}
+                localOnboarded={localOnboarded}
+                handleCompleteOnboarding={handleCompleteOnboarding}
+                handleSkipOnboarding={handleSkipOnboarding}
+                setActiveCourse={setActiveCourse}
+                activeThreadId={activeThreadId}
+                draftText={draftText}
+                chatKey={chatKey}
+                onDraftSave={handleDraftSave}
+                onThreadSwitch={onThreadChange}
+                activeView={activeView}
+                onToggleView={setActiveView}
+                artifactPanelOpen={artifactPanelOpen}
+                setArtifactPanelOpen={setArtifactPanelOpen}
+                emailHistoryOpen={emailHistoryOpen}
+                setEmailHistoryOpen={setEmailHistoryOpen}
+              />
+            </motion.div>
           </div>
         </div>
       </TooltipProvider>

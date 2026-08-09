@@ -76,7 +76,6 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
 
   const setActiveThreadId = useCallback((id: string | null) => {
     if (id && id !== urlThreadId) {
-      console.log("[ChatHistory] setActiveThreadId (post-stream):", id);
       setSearchParams({ thread: id }, { replace: true });
     }
   }, [setSearchParams, urlThreadId]);
@@ -112,7 +111,6 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const threadId = urlThreadId;
-    console.log("[ChatHistory] URL thread changed →", threadId ?? "(new chat)");
     setGlobalActiveThreadId(threadId);
 
     if (threadId) {
@@ -184,7 +182,6 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
   }, [user?.id, setThreadsSafe]);
 
   const loadThread = useCallback((id: string | null) => {
-    console.log("[ChatHistory] loadThread →", id ?? "(new chat)");
     goToThread(id);
   }, [goToThread]);
 

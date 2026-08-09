@@ -1,5 +1,5 @@
 
-import { AssistantChatTransport, useChatRuntime } from "@assistant-ui/react-ai-sdk";
+import { AssistantChatTransport, useChatRuntime, useAISDKChat } from "@assistant-ui/react-ai-sdk";
 import { useMemo, useCallback, useRef, useEffect } from "react";
 import { useChatHistory } from "../../../hooks/useChatHistory";
 import { supabase } from "@/lib/supabaseClient";
@@ -101,6 +101,55 @@ class UIActionStreamParser {
   }
 }
 
+// ─── Message Syncer ────────────────────────────────────────────────────────────
+//
+// Bridges the gap between ChatMessagesProvider (async fetch) and the AI SDK
+// runtime (initial-mount-only messages). When fetchMessages resolves AFTER
+// mount (cache miss), this component imperatively pushes the fetched messages
+// into the already-mounted runtime via useAISDKChat().setMessages().
+//
+// Safety guards:
+// 1. Skips if messages reference hasn't changed (avoids redundant calls)
+// 2. Skips if the runtime is actively streaming (never overwrites live content)
+// 3. Skips the initial mount (initial messages are handled by useChatRuntime)
+
+export const MessageSyncer = () => {
+  const chat = useAISDKChat();
+  const { activeThreadMessages } = useChatHistory();
+  const lastSyncedRef = useRef<typeof activeThreadMessages | null>(null);
+
+  useEffect(() => {
+    if (!chat) return;
+
+    // Skip initial mount — messages were already passed to useChatRuntime
+    if (lastSyncedRef.current === null) {
+      lastSyncedRef.current = activeThreadMessages;
+      return;
+    }
+
+    // Skip if reference hasn't changed (same array = no new data)
+    if (lastSyncedRef.current === activeThreadMessages) return;
+
+    // NEVER overwrite while streaming or submitting
+    if (chat.status === "streaming" || chat.status === "submitted") {
+      console.warn("[MessageSyncer] Skipping sync — runtime is", chat.status);
+      return;
+    }
+
+    lastSyncedRef.current = activeThreadMessages;
+
+    const mapped = activeThreadMessages.map((msg) => ({
+      id: msg.id,
+      role: msg.role as "user" | "assistant" | "system",
+      parts: [{ type: "text" as const, text: msg.content }],
+    }));
+    chat.setMessages(mapped);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThreadMessages]);
+
+  return null;
+};
+
 // ─── Runtime Hook ─────────────────────────────────────────────────────────────────
 
 export const useRuntime = (activeCourse: AcademicCourse | null) => {
@@ -123,12 +172,6 @@ export const useRuntime = (activeCourse: AcademicCourse | null) => {
   const guidRef = useRef<string | null>(
     !activeThreadId ? crypto.randomUUID() : null,
   );
-
-  useEffect(() => {
-    console.log("[Runtime] mounted — activeThreadId:", activeThreadId ?? "(new chat)");
-    return () => console.log("[Runtime] unmounting — was:", activeThreadId ?? "(new chat)");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Reset threadCreatedRef when the active thread changes (e.g. navigating
   // between existing threads). On a fresh mount this ref is already false,
@@ -215,7 +258,6 @@ export const useRuntime = (activeCourse: AcademicCourse | null) => {
 
       // Capture new thread ID from backend after stream completes
       const serverThreadId = res.headers.get("X-Thread-Id");
-      console.log("[Runtime] X-Thread-Id:", serverThreadId ?? "none", "| activeThreadId:", activeThreadId ?? "none");
 
       const isNewThread = !!serverThreadId && serverThreadId !== activeThreadId && !threadCreatedRef.current;
 
@@ -252,12 +294,10 @@ export const useRuntime = (activeCourse: AcademicCourse | null) => {
                   // Changing activeThreadId changes the component key, which remounts
                   // the component and would lose the streamed response if done immediately.
                   if (isNewThread && serverThreadId) {
-                    console.log("[Runtime] Stream done → will update URL to thread:", serverThreadId);
                     threadCreatedRef.current = true;
                     clearDraft(chatKey);
                     refreshThreads();
                     setTimeout(() => {
-                      console.log("[Runtime] Updating URL to thread:", serverThreadId);
                       setActiveThreadId(serverThreadId);
                     }, 200);
                   }
@@ -338,12 +378,13 @@ export const useRuntime = (activeCourse: AcademicCourse | null) => {
 
   // Because this component remounts on every key change, activeThreadMessages
   // always contains the correct messages for this thread at mount time.
+  const mappedMessages = activeThreadMessages.map((msg) => ({
+    id: msg.id,
+    role: msg.role as "user" | "assistant" | "system",
+    parts: [{ type: "text" as const, text: msg.content }],
+  }));
   return useChatRuntime({
     transport,
-    messages: activeThreadMessages.map((msg) => ({
-      id: msg.id,
-      role: msg.role as "user" | "assistant" | "system",
-      parts: [{ type: "text", text: msg.content }],
-    })),
+    messages: mappedMessages,
   });
 };

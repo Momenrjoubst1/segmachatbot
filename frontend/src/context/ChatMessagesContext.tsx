@@ -71,14 +71,12 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchMessages = useCallback(async (threadId: string, isBackground = false) => {
     const requestId = ++fetchRequestSeq.current;
-    console.log("[ChatHistory] fetchMessages for:", threadId);
     if (!isBackground) setIsLoadingMessages(true);
     try {
       const res = await authFetch(`${backendUrl}/api/chat/threads/${threadId}`);
       if (res.ok) {
         const data = await res.json();
         if (activeThreadIdRef.current !== threadId || requestId !== fetchRequestSeq.current) {
-          console.log("[ChatHistory] Stale response discarded for:", threadId);
           return;
         }
         setActiveThreadMessages(data);

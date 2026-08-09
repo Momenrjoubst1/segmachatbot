@@ -90,6 +90,18 @@ export const MODELS = [
     contextWindow: 262_144,
     provider: "fireworks" as const,
   },
+
+  // ==========================================
+  // 5. Novita.ai Models (via NOVITA_API_KEY)
+  // ==========================================
+  {
+    name: "Ling 3.0 Tiny (Novita)",
+    value: "inclusionai/ling-3.0-tiny",
+    icon: "/icons/novita.svg",
+    disabled: false,
+    contextWindow: 262_144,
+    provider: "novita" as const,
+  },
 ] as const;
 
 export type Model = (typeof MODELS)[number];

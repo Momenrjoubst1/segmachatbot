@@ -92,9 +92,10 @@ export const ALLOWED_MODELS = [
   "qwen/qwen-2.5-72b-instruct:free",
   "anthropic/claude-3.5-haiku",
   "accounts/fireworks/models/gemma-4-31b-it",
+  "inclusionai/ling-3.0-tiny",
 ];
 
-export type ProviderName = "openrouter" | "github" | "groq" | "fireworks" | "azure";
+export type ProviderName = "openrouter" | "github" | "groq" | "fireworks" | "azure" | "novita";
 
 function pickFirstAvailableProvider(
   preferred: Array<{ provider: ProviderName; envKey: string }>,
@@ -135,6 +136,9 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
   }
   if (modelId.startsWith("accounts/fireworks/models/")) {
     return { provider: "fireworks", modelName: modelId };
+  }
+  if (modelId.includes("ling-3.0-tiny") || modelId.startsWith("inclusionai/")) {
+    return { provider: "novita", modelName: modelId };
   }
   return { provider: "openrouter", modelName: modelId };
 }
@@ -177,6 +181,14 @@ export function createProviderClient(provider: ProviderName) {
     return createOpenAI({
       baseURL: "https://api.fireworks.ai/inference/v1",
       apiKey: process.env.FIREWORKS_API_KEY,
+    });
+  }
+
+  if (provider === "novita") {
+    if (!process.env.NOVITA_API_KEY) throw new Error("Missing NOVITA_API_KEY in environment");
+    return createOpenAI({
+      baseURL: "https://api.novita.ai/openai",
+      apiKey: process.env.NOVITA_API_KEY,
     });
   }
 

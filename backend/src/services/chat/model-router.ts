@@ -142,6 +142,7 @@ const FALLBACK_CHAINS: Record<string, string[]> = {
   "qwen/qwen-2.5-72b-instruct:free": ["gpt-4o-mini", "llama-3.3-70b-versatile"],
   "anthropic/claude-3.5-haiku": ["gpt-4o-mini", "gpt-4o"],
   "accounts/fireworks/models/gemma-4-31b-it": ["gpt-4o-mini", "gemma2-9b-it"],
+  "inclusionai/ling-3.0-tiny": ["llama-3.3-70b-versatile", "gpt-4o-mini"],
 };
 
 // ─── ModelRouter Class / صنف موجه النماذج ───

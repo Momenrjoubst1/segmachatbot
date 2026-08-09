@@ -35,8 +35,8 @@ vi.mock('@/features/ai-assistant/shadcn/components/Sidebar/MobileSidebarView', (
   MobileSidebarView: () => <div data-testid="mobile-sidebar-view" />,
 }));
 
-vi.mock('@/components/ui/LoadingStates', () => ({
-  CompactSkeleton: () => <div data-testid="compact-skeleton" />,
+vi.mock('@/components/ui/TopLoadingBar', () => ({
+  TopLoadingBar: () => <div data-testid="top-loading-bar" />,
 }));
 
 vi.mock('@/hooks/useChatHistory', () => ({
@@ -77,8 +77,15 @@ vi.mock('@assistant-ui/react', () => ({
   useAuiState: vi.fn(() => ({ thread: { isEmpty: true } })),
 }));
 
+vi.mock('@assistant-ui/react-ai-sdk', () => ({
+  useAISDKChat: vi.fn(() => undefined),
+  AssistantChatTransport: vi.fn(),
+  useChatRuntime: vi.fn(() => ({})),
+}));
+
 vi.mock('@/features/ai-assistant/ui/useChatRuntime', () => ({
   useRuntime: vi.fn(() => ({})),
+  MessageSyncer: () => null,
 }));
 
 vi.mock('@/features/ai-assistant/shadcn/AssistantLayout', () => ({
@@ -119,7 +126,7 @@ describe('AssistantApp', () => {
 
     render(<AssistantApp />);
     expect(screen.getByTestId('header')).toBeInTheDocument();
-    expect(screen.getByTestId('compact-skeleton')).toBeInTheDocument();
+    expect(screen.getByTestId('top-loading-bar')).toBeInTheDocument();
   });
 
   it('renders Header when isLoadingMessages is false', () => {
