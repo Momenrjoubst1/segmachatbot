@@ -14,6 +14,7 @@ interface ChatHistoryContextType {
   threadsError: string | null;
   retryFetchThreads: () => Promise<void>;
   activeThreadMessages: ChatMessage[];
+  /** Streaming-only: used by WebSocket/runtime hooks to append messages during stream */
   setActiveThreadMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   isLoadingMessages: boolean;
   messagesError: string | null;
@@ -23,6 +24,7 @@ interface ChatHistoryContextType {
     background?: boolean;
     clear?: boolean;
   }) => void;
+  removeFromCache: (threadId: string) => void;
   prefetchThread: (threadId: string) => Promise<void>;
   refreshThreads: () => void;
   createNewThread: (courseId?: string) => Promise<void>;
@@ -38,14 +40,14 @@ const ChatHistoryContext = createContext<ChatHistoryContextType | undefined>(und
 
 const ChatHistoryInner = ({ children }: { children: ReactNode }) => {
   const { saveDraft, getDraft, clearDraft } = useChatDrafts();
-  const { activeThreadMessages, setActiveThreadMessages, isLoadingMessages, messagesError, retryFetchMessages, loadMessagesForThread, prefetchThread, messagesCache, setActiveThreadId: _setActiveThreadId, incrementFetchRequestSeq: _incrementFetchRequestSeq, getFetchRequestSeq: _getFetchRequestSeq } = useChatMessages();
+  const { activeThreadMessages, setActiveThreadMessages, isLoadingMessages, messagesError, retryFetchMessages, loadMessagesForThread, removeFromCache, prefetchThread, setActiveThreadId: _setActiveThreadId, incrementFetchRequestSeq: _incrementFetchRequestSeq, getFetchRequestSeq: _getFetchRequestSeq } = useChatMessages();
   const { threads, activeThreadId, setActiveThreadId, loadThread, isLoadingThreads, threadsError, retryFetchThreads, fetchThreads, deleteThread: rawDeleteThread, getThreadsByCourse, createNewThread, newChatCount } = useChatThreads();
 
   const deleteThread = useCallback(async (threadId: string) => {
-    messagesCache.remove(threadId);
+    removeFromCache(threadId);
     clearDraft(threadId);
     await rawDeleteThread(threadId);
-  }, [rawDeleteThread, messagesCache, clearDraft]);
+  }, [rawDeleteThread, removeFromCache, clearDraft]);
 
   const contextValue = useMemo(() => ({
     threads,
@@ -61,6 +63,7 @@ const ChatHistoryInner = ({ children }: { children: ReactNode }) => {
     messagesError,
     retryFetchMessages,
     loadMessagesForThread,
+    removeFromCache,
     prefetchThread,
     refreshThreads: fetchThreads,
     createNewThread,
@@ -70,7 +73,7 @@ const ChatHistoryInner = ({ children }: { children: ReactNode }) => {
     getDraft,
     clearDraft,
     newChatCount,
-  }), [threads, activeThreadId, setActiveThreadId, loadThread, isLoadingThreads, threadsError, retryFetchThreads, activeThreadMessages, setActiveThreadMessages, isLoadingMessages, messagesError, retryFetchMessages, loadMessagesForThread, prefetchThread, fetchThreads, createNewThread, deleteThread, getThreadsByCourse, saveDraft, getDraft, clearDraft, newChatCount]);
+  }), [threads, activeThreadId, setActiveThreadId, loadThread, isLoadingThreads, threadsError, retryFetchThreads, activeThreadMessages, setActiveThreadMessages, isLoadingMessages, messagesError, retryFetchMessages, loadMessagesForThread, removeFromCache, prefetchThread, fetchThreads, createNewThread, deleteThread, getThreadsByCourse, saveDraft, getDraft, clearDraft, newChatCount]);
 
   return (
     <ChatHistoryContext.Provider value={contextValue}>

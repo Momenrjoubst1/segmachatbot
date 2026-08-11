@@ -47,19 +47,18 @@ function useLRUCache<K, V>(maxSize: number) {
 
 interface ChatMessagesContextType {
   activeThreadMessages: ChatMessage[];
+  /** Streaming-only: used by WebSocket/runtime hooks to append messages during stream */
   setActiveThreadMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   isLoadingMessages: boolean;
-  setIsLoadingMessages: React.Dispatch<React.SetStateAction<boolean>>;
   messagesError: string | null;
   retryFetchMessages: () => Promise<void>;
-  fetchMessages: (threadId: string, isBackground?: boolean) => Promise<void>;
   loadMessagesForThread: (threadId: string | null, options?: {
     seedMessages?: ChatMessage[];
     background?: boolean;
     clear?: boolean;
   }) => void;
+  removeFromCache: (threadId: string) => void;
   prefetchThread: (threadId: string) => Promise<void>;
-  messagesCache: ReturnType<typeof useLRUCache<string, ChatMessage[]>>;
   setActiveThreadId: (id: string | null) => void;
   incrementFetchRequestSeq: () => number;
   getFetchRequestSeq: () => number;
@@ -160,6 +159,10 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [messagesCache, fetchMessages]);
 
+  const removeFromCache = useCallback((threadId: string) => {
+    messagesCache.remove(threadId);
+  }, [messagesCache]);
+
   const prefetchThread = useCallback(async (threadId: string) => {
     if (!threadId || threadId === "new-chat-virtual" || messagesCache.get(threadId)) return;
     try {
@@ -189,13 +192,11 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
     activeThreadMessages,
     setActiveThreadMessages,
     isLoadingMessages,
-    setIsLoadingMessages,
     messagesError,
     retryFetchMessages,
-    fetchMessages,
     loadMessagesForThread,
+    removeFromCache,
     prefetchThread,
-    messagesCache,
     setActiveThreadId,
     incrementFetchRequestSeq,
     getFetchRequestSeq,
@@ -204,10 +205,9 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
     isLoadingMessages,
     messagesError,
     retryFetchMessages,
-    fetchMessages,
     loadMessagesForThread,
+    removeFromCache,
     prefetchThread,
-    messagesCache,
     setActiveThreadId,
     incrementFetchRequestSeq,
     getFetchRequestSeq,
