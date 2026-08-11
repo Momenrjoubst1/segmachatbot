@@ -53,6 +53,11 @@ interface ChatMessagesContextType {
   messagesError: string | null;
   retryFetchMessages: () => Promise<void>;
   fetchMessages: (threadId: string, isBackground?: boolean) => Promise<void>;
+  loadMessagesForThread: (threadId: string | null, options?: {
+    seedMessages?: ChatMessage[];
+    background?: boolean;
+    clear?: boolean;
+  }) => void;
   prefetchThread: (threadId: string) => Promise<void>;
   messagesCache: ReturnType<typeof useLRUCache<string, ChatMessage[]>>;
   setActiveThreadId: (id: string | null) => void;
@@ -112,6 +117,49 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [fetchMessages]);
 
+  const loadMessagesForThread = useCallback((threadId: string | null, options?: {
+    seedMessages?: ChatMessage[];
+    background?: boolean;
+    clear?: boolean;
+  }) => {
+    const { seedMessages, background = false, clear = false } = options ?? {};
+
+    // Clear path (new chat / sign-out / no thread)
+    if (!threadId || clear) {
+      setActiveThreadMessages([]);
+      setIsLoadingMessages(false);
+      if (clear) messagesCache.clear();
+      return;
+    }
+
+    // Cache hit — show immediately, background refresh
+    const cached = messagesCache.get(threadId);
+    if (cached) {
+      setActiveThreadMessages(cached);
+      setIsLoadingMessages(false);
+      fetchMessages(threadId, true);
+      return;
+    }
+
+    // Post-stream transition — pre-seed from caller, background refresh
+    if (seedMessages && seedMessages.length > 0) {
+      messagesCache.set(threadId, seedMessages);
+      setActiveThreadMessages(seedMessages);
+      setIsLoadingMessages(false);
+      fetchMessages(threadId, true);
+      return;
+    }
+
+    // Cache miss — full fetch with loading state
+    if (background) {
+      fetchMessages(threadId, true);
+    } else {
+      setActiveThreadMessages([]);
+      setIsLoadingMessages(true);
+      fetchMessages(threadId, false);
+    }
+  }, [messagesCache, fetchMessages]);
+
   const prefetchThread = useCallback(async (threadId: string) => {
     if (!threadId || threadId === "new-chat-virtual" || messagesCache.get(threadId)) return;
     try {
@@ -145,6 +193,7 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
     messagesError,
     retryFetchMessages,
     fetchMessages,
+    loadMessagesForThread,
     prefetchThread,
     messagesCache,
     setActiveThreadId,
@@ -156,6 +205,7 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
     messagesError,
     retryFetchMessages,
     fetchMessages,
+    loadMessagesForThread,
     prefetchThread,
     messagesCache,
     setActiveThreadId,

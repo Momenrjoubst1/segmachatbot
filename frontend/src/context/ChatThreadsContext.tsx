@@ -32,7 +32,7 @@ const ChatThreadsContext = createContext<ChatThreadsContextType | undefined>(und
 export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuthContext();
-  const { activeThreadMessages: _activeThreadMessages, setActiveThreadMessages, isLoadingMessages: _isLoadingMessages, setIsLoadingMessages, fetchMessages, messagesCache, setActiveThreadId: setGlobalActiveThreadId, incrementFetchRequestSeq: _incrementFetchRequestSeq, getFetchRequestSeq: _getFetchRequestSeq } = useChatMessages();
+  const { activeThreadMessages, setActiveThreadId: setGlobalActiveThreadId, loadMessagesForThread } = useChatMessages();
 
   const urlThreadId = searchParams.get("thread");
 
@@ -48,8 +48,8 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
   const [isLoadingThreads, setIsLoadingThreads] = useState(false);
   const [threadsError, setThreadsError] = useState<string | null>(null);
   // Ref to read latest messages without adding them to useEffect deps
-  const activeMessagesRef = useRef<typeof _activeThreadMessages>([]);
-  activeMessagesRef.current = _activeThreadMessages;
+  const activeMessagesRef = useRef(activeThreadMessages);
+  activeMessagesRef.current = activeThreadMessages;
 
   // newChatCount is derived from the URL ?new=N param so it changes atomically
   // with the URL in a single setSearchParams call (no race condition).
@@ -59,23 +59,13 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
 
   const goToThread = useCallback((id: string | null) => {
     if (id) {
-      const cached = messagesCache.get(id);
-      if (cached) {
-        setActiveThreadMessages(cached);
-        setIsLoadingMessages(false);
-      } else {
-        setActiveThreadMessages([]);
-        setIsLoadingMessages(true);
-      }
       setSearchParams({ thread: id });
     } else {
-      setActiveThreadMessages([]);
-      setIsLoadingMessages(false);
       // Increment ?new=N atomically with the URL change — single render, no race
       const nextCount = (parseInt(searchParams.get("new") ?? "0", 10) || 0) + 1;
       setSearchParams({ new: String(nextCount) });
     }
-  }, [searchParams, setSearchParams, messagesCache, setActiveThreadMessages, setIsLoadingMessages]);
+  }, [searchParams, setSearchParams]);
 
   const setActiveThreadId = useCallback((id: string | null) => {
     if (id && id !== urlThreadId) {
@@ -121,44 +111,32 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
     setGlobalActiveThreadId(threadId);
 
     if (threadId) {
-      const cached = messagesCache.get(threadId);
-      if (cached) {
-        // Cache hit — show immediately, background-refresh
-        setActiveThreadMessages(cached);
-        setIsLoadingMessages(false);
-        fetchMessages(threadId, true);
-      } else if (activeMessagesRef.current.length > 0) {
-        // Post-stream transition: messages already rendered in the UI.
-        // Pre-seed cache and do a background refresh — no loading flash.
-        messagesCache.set(threadId, activeMessagesRef.current);
-        setIsLoadingMessages(false);
-        fetchMessages(threadId, true);
-      } else {
-        setIsLoadingMessages(true);
-        setActiveThreadMessages([]);
-        fetchMessages(threadId, false);
-      }
+      const hasMessagesRendered = activeMessagesRef.current.length > 0;
+      loadMessagesForThread(threadId, hasMessagesRendered
+        ? { seedMessages: activeMessagesRef.current }
+        : undefined
+      );
     } else {
-      setActiveThreadMessages([]);
-      setIsLoadingMessages(false);
+      loadMessagesForThread(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlThreadId, setGlobalActiveThreadId, setActiveThreadMessages, setIsLoadingMessages, fetchMessages, messagesCache]);
+  }, [urlThreadId, setGlobalActiveThreadId, loadMessagesForThread]);
 
   useEffect(() => { fetchThreads(); }, [fetchThreads]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
-        messagesCache.clear();
-        setActiveThreadMessages([]);
+        loadMessagesForThread(null, { clear: true });
         fetchThreads();
         const cur = urlThreadId;
-        if (cur) fetchMessages(cur, true);
+        if (cur) {
+          loadMessagesForThread(cur, { background: true });
+        }
       }
     });
     return () => subscription.unsubscribe();
-  }, [fetchThreads, fetchMessages, messagesCache, setActiveThreadMessages, urlThreadId]);
+  }, [fetchThreads, loadMessagesForThread, urlThreadId]);
 
   useEffect(() => {
     if (!user?.id) return;
