@@ -50,6 +50,8 @@ interface ChatMessagesContextType {
   setActiveThreadMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   isLoadingMessages: boolean;
   setIsLoadingMessages: React.Dispatch<React.SetStateAction<boolean>>;
+  messagesError: string | null;
+  retryFetchMessages: () => Promise<void>;
   fetchMessages: (threadId: string, isBackground?: boolean) => Promise<void>;
   prefetchThread: (threadId: string) => Promise<void>;
   messagesCache: ReturnType<typeof useLRUCache<string, ChatMessage[]>>;
@@ -63,6 +65,7 @@ const ChatMessagesContext = createContext<ChatMessagesContextType | undefined>(u
 export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
   const [activeThreadMessages, setActiveThreadMessages] = useState<ChatMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
   const messagesCache = useLRUCache<string, ChatMessage[]>(MESSAGES_CACHE_MAX);
   const activeThreadIdRef = useRef<string | null>(null);
   const fetchRequestSeq = useRef(0);
@@ -72,6 +75,7 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
   const fetchMessages = useCallback(async (threadId: string, isBackground = false) => {
     const requestId = ++fetchRequestSeq.current;
     if (!isBackground) setIsLoadingMessages(true);
+    setMessagesError(null);
     try {
       const res = await authFetch(`${backendUrl}/api/chat/threads/${threadId}`);
       if (res.ok) {
@@ -81,17 +85,32 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
         }
         setActiveThreadMessages(data);
         messagesCache.set(threadId, data);
+        setMessagesError(null);
       } else if (res.status === 401) {
         if (activeThreadIdRef.current === threadId) setActiveThreadMessages([]);
+      } else {
+        if (requestId === fetchRequestSeq.current) {
+          setMessagesError("Failed to load messages. Please try again.");
+        }
       }
     } catch (err) {
       console.error("[ChatHistory] fetchMessages error:", err);
+      if (requestId === fetchRequestSeq.current) {
+        setMessagesError("Cannot reach the server. Please check your connection.");
+      }
     } finally {
       if (requestId === fetchRequestSeq.current) {
         setIsLoadingMessages(false);
       }
     }
   }, [backendUrl, messagesCache]);
+
+  const retryFetchMessages = useCallback(async () => {
+    const threadId = activeThreadIdRef.current;
+    if (threadId) {
+      await fetchMessages(threadId);
+    }
+  }, [fetchMessages]);
 
   const prefetchThread = useCallback(async (threadId: string) => {
     if (!threadId || threadId === "new-chat-virtual" || messagesCache.get(threadId)) return;
@@ -123,6 +142,8 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
     setActiveThreadMessages,
     isLoadingMessages,
     setIsLoadingMessages,
+    messagesError,
+    retryFetchMessages,
     fetchMessages,
     prefetchThread,
     messagesCache,
@@ -132,6 +153,8 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
   }), [
     activeThreadMessages,
     isLoadingMessages,
+    messagesError,
+    retryFetchMessages,
     fetchMessages,
     prefetchThread,
     messagesCache,

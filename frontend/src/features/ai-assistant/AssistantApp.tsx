@@ -178,7 +178,7 @@ const AssistantChatInner = ({
 };
 
 const AssistantAppContent = () => {
-  const { threads, activeThreadId, isLoadingMessages, saveDraft, getDraft, newChatCount } = useChatHistory();
+  const { threads, activeThreadId, isLoadingMessages, messagesError, retryFetchMessages, saveDraft, getDraft, newChatCount } = useChatHistory();
   const { setBaseTitle } = useTitle();
   const [activeCourse, setActiveCourse] = useState<AcademicCourse | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -316,10 +316,23 @@ const AssistantAppContent = () => {
             onToggleEmailHistory={() => setEmailHistoryOpen(!emailHistoryOpen)}
           />
           <div className="relative flex-1 min-h-0 overflow-hidden">
-            {isLoadingMessages && <TopLoadingBar />}
-            {isLoadingMessages && (
+            {isLoadingMessages && !messagesError && <TopLoadingBar />}
+            {isLoadingMessages && !messagesError && (
               <div className="absolute inset-0 z-20 flex flex-1 flex-col bg-background">
                 <ThreadSwitchSkeleton />
+              </div>
+            )}
+            {messagesError && !isLoadingMessages && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-background">
+                <div className="flex flex-col items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-center">
+                  <p className="text-xs text-destructive">{messagesError}</p>
+                  <button
+                    onClick={retryFetchMessages}
+                    className="text-xs font-medium text-destructive underline underline-offset-2 hover:text-destructive/80"
+                  >
+                    Retry
+                  </button>
+                </div>
               </div>
             )}
             <motion.div
