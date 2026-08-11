@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/artifact";
 
 const MarkdownTextImpl = () => {
-  const { isStreaming } = useBotStatus();
+  const { isStreamingText } = useBotStatus();
   const role = useAuiState((s) => s.message.role);
 
   return (
@@ -46,7 +46,7 @@ const MarkdownTextImpl = () => {
         className="aui-md"
         components={defaultComponents}
       />
-      {isStreaming && role === "assistant" && <CursorBlinker />}
+      {isStreamingText && role === "assistant" && <CursorBlinker />}
     </span>
   );
 };

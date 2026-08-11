@@ -30,20 +30,20 @@ function findRunningTool(
   return null;
 }
 
-export function useBotStatus(): { status: BotStatus; label: string; isStreaming: boolean } {
+export function useBotStatus(): { status: BotStatus; label: string; isStreamingText: boolean } {
   const parts = useAuiState(
     (s) => s.message.parts as unknown as { type: string; toolName?: string; status?: { type: string }; text?: string }[]
   );
   const status = useAuiState((s) => s.message.status);
 
   const isRunning = status?.type === "running";
-  if (!isRunning) return { status: "idle", label: "", isStreaming: false };
+  if (!isRunning) return { status: "idle", label: "", isStreamingText: false };
 
   const toolStatus = findRunningTool(parts);
-  if (toolStatus) return { ...toolStatus, isStreaming: false };
+  if (toolStatus) return { ...toolStatus, isStreamingText: false };
 
   const hasTextContent = parts.some((p) => p.type === "text");
-  if (hasTextContent) return { status: "generating", label: "", isStreaming: true };
+  if (hasTextContent) return { status: "generating", label: "", isStreamingText: true };
 
-  return { status: "thinking", label: "Thinking...", isStreaming: false };
+  return { status: "thinking", label: "Thinking...", isStreamingText: false };
 }

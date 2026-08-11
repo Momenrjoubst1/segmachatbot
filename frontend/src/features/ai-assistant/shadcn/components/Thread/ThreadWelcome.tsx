@@ -208,7 +208,7 @@ export const Thread: FC<{
     resetNewMessageCount,
   } = useSmartAutoScroll({
     messageCount,
-    isStreaming: isRunning,
+    isRunning: isRunning,
   });
 
   return (

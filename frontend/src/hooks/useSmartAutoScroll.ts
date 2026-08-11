@@ -7,7 +7,7 @@ interface UseSmartAutoScrollOptions {
   /** Number of messages currently in the thread */
   messageCount: number;
   /** Whether the AI is currently streaming */
-  isStreaming: boolean;
+  isRunning: boolean;
 }
 
 interface UseSmartAutoScrollReturn {
@@ -25,7 +25,7 @@ interface UseSmartAutoScrollReturn {
 
 export function useSmartAutoScroll({
   messageCount,
-  isStreaming,
+  isRunning,
 }: UseSmartAutoScrollOptions): UseSmartAutoScrollReturn {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const prevMessageCountRef = useRef(messageCount);
@@ -75,7 +75,7 @@ export function useSmartAutoScroll({
     const newMessagesAdded = messageCount - prevCount;
 
     if (newMessagesAdded > 0) {
-      if (isNearBottom && isStreaming) {
+      if (isNearBottom && isRunning) {
         // User is near bottom and streaming → auto-scroll
         requestAnimationFrame(() => {
           const el = scrollContainerRef.current;
@@ -90,7 +90,7 @@ export function useSmartAutoScroll({
     }
 
     prevMessageCountRef.current = messageCount;
-  }, [messageCount, isNearBottom, isStreaming]);
+  }, [messageCount, isNearBottom, isRunning]);
 
   // Reset counter when user scrolls to bottom
   useEffect(() => {
