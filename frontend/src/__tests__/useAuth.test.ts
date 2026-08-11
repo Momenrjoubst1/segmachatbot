@@ -24,6 +24,11 @@ vi.mock('@/lib/supabaseClient', () => ({
   onAuthStateChange: vi.fn(),
 }));
 
+// ─── Mock AssistantApp chunk (prefetch import in useAuth) ─────────────────────
+vi.mock('@/features/ai-assistant/AssistantApp', () => ({
+  AssistantApp: () => null,
+}));
+
 const mockGetCurrentUser = getCurrentUser as ReturnType<typeof vi.fn>;
 const mockSignInWithEmail = signInWithEmail as ReturnType<typeof vi.fn>;
 const mockSignUpWithEmail = signUpWithEmail as ReturnType<typeof vi.fn>;
@@ -45,9 +50,9 @@ describe('useAuth', () => {
     mockGetCurrentUser.mockResolvedValue(null);
     const { result } = renderHook(() => useAuth());
 
-    expect(result.current.isLoading).toBe(true);
+    expect(result.current.isAuthLoading).toBe(true);
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isAuthLoading).toBe(false));
 
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.user).toBeNull();
@@ -57,7 +62,7 @@ describe('useAuth', () => {
     mockGetCurrentUser.mockResolvedValue(MOCK_USER);
     const { result } = renderHook(() => useAuth());
 
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isAuthLoading).toBe(false));
 
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.user).toEqual(MOCK_USER);
@@ -72,7 +77,7 @@ describe('useAuth', () => {
     });
 
     const { result } = renderHook(() => useAuth());
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isAuthLoading).toBe(false));
 
     act(() => {
       authCallback?.(MOCK_USER);
@@ -90,7 +95,7 @@ describe('useAuth', () => {
     });
 
     const { result } = renderHook(() => useAuth());
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isAuthLoading).toBe(false));
 
     let signInResult: Awaited<ReturnType<typeof result.current.signIn>>;
     await act(async () => {
@@ -107,7 +112,7 @@ describe('useAuth', () => {
     mockSignInWithEmail.mockResolvedValue({ data: {}, error: authError });
 
     const { result } = renderHook(() => useAuth());
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isAuthLoading).toBe(false));
 
     await act(async () => {
       await result.current.signIn('bad@example.com', 'wrongpass');
@@ -124,7 +129,7 @@ describe('useAuth', () => {
     });
 
     const { result } = renderHook(() => useAuth());
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isAuthLoading).toBe(false));
 
     let signUpResult: Awaited<ReturnType<typeof result.current.signUp>>;
     await act(async () => {
@@ -140,7 +145,7 @@ describe('useAuth', () => {
     mockSignOut.mockResolvedValue({ error: null });
 
     const { result } = renderHook(() => useAuth());
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isAuthLoading).toBe(false));
 
     await act(async () => {
       await result.current.logout();
@@ -155,7 +160,7 @@ describe('useAuth', () => {
     mockSignOut.mockResolvedValue({ error: { message: 'Network error' } });
 
     const { result } = renderHook(() => useAuth());
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isAuthLoading).toBe(false));
 
     await act(async () => {
       await result.current.logout();
@@ -169,7 +174,7 @@ describe('useAuth', () => {
     mockSignOut.mockRejectedValue(new Error('Connection refused'));
 
     const { result } = renderHook(() => useAuth());
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(result.current.isAuthLoading).toBe(false));
 
     await act(async () => {
       await result.current.logout();

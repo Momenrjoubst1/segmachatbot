@@ -11,6 +11,8 @@ interface ChatHistoryContextType {
   setActiveThreadId: (id: string | null) => void;
   loadThread: (id: string | null) => void;
   isLoadingThreads: boolean;
+  threadsError: string | null;
+  retryFetchThreads: () => Promise<void>;
   activeThreadMessages: ChatMessage[];
   setActiveThreadMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   isLoadingMessages: boolean;
@@ -30,7 +32,7 @@ const ChatHistoryContext = createContext<ChatHistoryContextType | undefined>(und
 const ChatHistoryInner = ({ children }: { children: ReactNode }) => {
   const { saveDraft, getDraft, clearDraft } = useChatDrafts();
   const { activeThreadMessages, setActiveThreadMessages, isLoadingMessages, prefetchThread, messagesCache, setActiveThreadId: _setActiveThreadId, incrementFetchRequestSeq: _incrementFetchRequestSeq, getFetchRequestSeq: _getFetchRequestSeq } = useChatMessages();
-  const { threads, activeThreadId, setActiveThreadId, loadThread, isLoadingThreads, fetchThreads, deleteThread: rawDeleteThread, getThreadsByCourse, createNewThread, newChatCount } = useChatThreads();
+  const { threads, activeThreadId, setActiveThreadId, loadThread, isLoadingThreads, threadsError, retryFetchThreads, fetchThreads, deleteThread: rawDeleteThread, getThreadsByCourse, createNewThread, newChatCount } = useChatThreads();
 
   const deleteThread = useCallback(async (threadId: string) => {
     messagesCache.remove(threadId);
@@ -44,6 +46,8 @@ const ChatHistoryInner = ({ children }: { children: ReactNode }) => {
     setActiveThreadId,
     loadThread,
     isLoadingThreads,
+    threadsError,
+    retryFetchThreads,
     activeThreadMessages,
     setActiveThreadMessages,
     isLoadingMessages,
@@ -56,7 +60,7 @@ const ChatHistoryInner = ({ children }: { children: ReactNode }) => {
     getDraft,
     clearDraft,
     newChatCount,
-  }), [threads, activeThreadId, setActiveThreadId, loadThread, isLoadingThreads, activeThreadMessages, setActiveThreadMessages, isLoadingMessages, prefetchThread, fetchThreads, createNewThread, deleteThread, getThreadsByCourse, saveDraft, getDraft, clearDraft, newChatCount]);
+  }), [threads, activeThreadId, setActiveThreadId, loadThread, isLoadingThreads, threadsError, retryFetchThreads, activeThreadMessages, setActiveThreadMessages, isLoadingMessages, prefetchThread, fetchThreads, createNewThread, deleteThread, getThreadsByCourse, saveDraft, getDraft, clearDraft, newChatCount]);
 
   return (
     <ChatHistoryContext.Provider value={contextValue}>

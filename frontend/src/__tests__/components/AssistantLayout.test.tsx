@@ -106,7 +106,7 @@ vi.mock('@/features/calendar/hooks/useCalendarSync', () => ({
   default: vi.fn(() => ({
     events: [],
     insights: null,
-    isLoading: false,
+    isCalendarLoading: false,
     error: null,
     fetchEvents: vi.fn(),
     fetchInsights: vi.fn(),
@@ -179,10 +179,10 @@ describe('AssistantLayout (Shadcn)', () => {
     expect(screen.getByTestId('onboarded')).toHaveTextContent('false');
   });
 
-  it('renders loading spinner when showLoading is true', () => {
-    render(<Shadcn {...defaultProps} showLoading={true} />);
+  it('renders loading spinner when isCoursesLoadingVisible is true', () => {
+    render(<Shadcn {...defaultProps} isCoursesLoadingVisible={true} />);
     expect(screen.getByTestId('bars-spinner')).toBeInTheDocument();
-    expect(screen.queryByTestId('thread')).not.toBeInTheDocument();
+    expect(screen.getByTestId('thread')).toBeInTheDocument();
   });
 
   it('does not render loading spinner by default', () => {

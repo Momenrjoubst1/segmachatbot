@@ -87,7 +87,7 @@ export const SidebarView: FC<SidebarViewProps> = ({
   activeCourse,
   onActiveCourseChange,
 }) => {
-  const { loadThread } = useChatHistory();
+  const { loadThread, threadsError, retryFetchThreads } = useChatHistory();
 
   return (
     <aside
@@ -118,7 +118,19 @@ export const SidebarView: FC<SidebarViewProps> = ({
             </TooltipIconButton>
           </div>
           <div className="flex-1 overflow-y-auto p-3 pb-1">
-            <ThreadList courses={courses} activeCourse={activeCourse} onActiveCourseChange={onActiveCourseChange} />
+            {threadsError ? (
+              <div className="flex flex-col items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-center">
+                <p className="text-xs text-destructive">{threadsError}</p>
+                <button
+                  onClick={() => retryFetchThreads()}
+                  className="text-xs font-medium text-destructive underline underline-offset-2 hover:text-destructive/80"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <ThreadList courses={courses} activeCourse={activeCourse} onActiveCourseChange={onActiveCourseChange} />
+            )}
           </div>
           <div className="px-3 pb-3 shrink-0">
             <UserProfileCard />

@@ -19,7 +19,7 @@ interface AuthResult {
 
 interface AuthContextType {
   user: User | null;
-  isLoading: boolean;
+  isAuthLoading: boolean;
   isAuthenticated: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<AuthResult>;

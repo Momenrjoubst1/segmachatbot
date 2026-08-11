@@ -99,6 +99,6 @@ export interface CalendarState {
   events: CalendarEvent[];
   selectedDate: Date;
   view: CalendarView;
-  isLoading: boolean;
+  isCalendarLoading: boolean;
   error?: string;
 }

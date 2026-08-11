@@ -328,7 +328,7 @@ const FriendlyErrorMessage: FC = () => {
     navigator.clipboard.writeText(raw).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
+    }).catch(console.error);
   }, [raw]);
 
   return (

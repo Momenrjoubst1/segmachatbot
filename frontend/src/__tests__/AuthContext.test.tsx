@@ -15,7 +15,7 @@ import { registerVerifiedUserId } from '@/components/ui/core';
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: vi.fn(() => ({
     user: null,
-    isLoading: false,
+    isAuthLoading: false,
     isAuthenticated: false,
     error: null,
     signIn: vi.fn().mockResolvedValue({ data: { user: null, session: null }, error: null }),
@@ -36,7 +36,7 @@ beforeEach(() => {
   // Reset to default unauthenticated state
   mockUseAuth.mockReturnValue({
     user: null,
-    isLoading: false,
+    isAuthLoading: false,
     isAuthenticated: false,
     error: null,
     signIn: vi.fn().mockResolvedValue({ data: { user: null, session: null }, error: null }),
@@ -64,7 +64,7 @@ describe('AuthContext', () => {
 
       expect(result.current.isAuthenticated).toBe(false);
       expect(result.current.user).toBeNull();
-      expect(result.current.isLoading).toBe(false);
+      expect(result.current.isAuthLoading).toBe(false);
       expect(result.current.error).toBeNull();
     });
 
@@ -72,7 +72,7 @@ describe('AuthContext', () => {
       const mockUser = { id: 'user-1', email: 'test@example.com' };
       mockUseAuth.mockReturnValue({
         user: mockUser,
-        isLoading: false,
+        isAuthLoading: false,
         isAuthenticated: true,
         error: null,
         signIn: vi.fn(),
@@ -92,7 +92,7 @@ describe('AuthContext', () => {
       const mockUser = { id: 'user-abc', email: 'verified@example.com' };
       mockUseAuth.mockReturnValue({
         user: mockUser,
-        isLoading: false,
+        isAuthLoading: false,
         isAuthenticated: true,
         error: null,
         signIn: vi.fn(),
@@ -133,7 +133,7 @@ describe('AuthContext', () => {
       const mockSignIn = vi.fn().mockResolvedValue({ data: { user: null, session: null }, error: null });
       mockUseAuth.mockReturnValue({
         user: null,
-        isLoading: false,
+        isAuthLoading: false,
         isAuthenticated: false,
         error: null,
         signIn: mockSignIn,
@@ -154,7 +154,7 @@ describe('AuthContext', () => {
       const mockLogout = vi.fn().mockResolvedValue(undefined);
       mockUseAuth.mockReturnValue({
         user: null,
-        isLoading: false,
+        isAuthLoading: false,
         isAuthenticated: false,
         error: null,
         signIn: vi.fn(),

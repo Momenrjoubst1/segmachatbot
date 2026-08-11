@@ -55,7 +55,7 @@ vi.mock('@/hooks/useCourses', () => ({
   useCourses: vi.fn(() => ({
     courses: [],
     isOnboarded: false,
-    isLoading: false,
+    isCoursesLoading: false,
     replaceCourses: vi.fn(),
     refetch: vi.fn(),
   })),
@@ -89,9 +89,9 @@ vi.mock('@/features/ai-assistant/ui/useChatRuntime', () => ({
 }));
 
 vi.mock('@/features/ai-assistant/shadcn/AssistantLayout', () => ({
-  Shadcn: ({ showLoading }: { showLoading?: boolean }) => (
+  Shadcn: ({ isCoursesLoadingVisible }: { isCoursesLoadingVisible?: boolean }) => (
     <div data-testid="shadcn">
-      {showLoading ? <div data-testid="loading-spinner" /> : <div data-testid="thread" />}
+      {isCoursesLoadingVisible ? <div data-testid="loading-spinner" /> : <div data-testid="thread" />}
     </div>
   ),
 }));
@@ -122,6 +122,19 @@ describe('AssistantApp', () => {
       saveDraft: vi.fn(),
       getDraft: vi.fn(),
       newChatCount: 0,
+      threadsError: null,
+      retryFetchThreads: vi.fn(),
+      setActiveThreadId: vi.fn(),
+      loadThread: vi.fn(),
+      isLoadingThreads: false,
+      activeThreadMessages: [],
+      setActiveThreadMessages: vi.fn(),
+      prefetchThread: vi.fn(),
+      refreshThreads: vi.fn(),
+      createNewThread: vi.fn(),
+      deleteThread: vi.fn(),
+      getThreadsByCourse: vi.fn(),
+      clearDraft: vi.fn(),
     });
 
     render(<AssistantApp />);
@@ -137,6 +150,19 @@ describe('AssistantApp', () => {
       saveDraft: vi.fn(),
       getDraft: vi.fn(),
       newChatCount: 0,
+      threadsError: null,
+      retryFetchThreads: vi.fn(),
+      setActiveThreadId: vi.fn(),
+      loadThread: vi.fn(),
+      isLoadingThreads: false,
+      activeThreadMessages: [],
+      setActiveThreadMessages: vi.fn(),
+      prefetchThread: vi.fn(),
+      refreshThreads: vi.fn(),
+      createNewThread: vi.fn(),
+      deleteThread: vi.fn(),
+      getThreadsByCourse: vi.fn(),
+      clearDraft: vi.fn(),
     });
 
     render(<AssistantApp />);

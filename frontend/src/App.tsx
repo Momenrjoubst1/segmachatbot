@@ -12,7 +12,7 @@ import { AppSkeleton } from "@/components/ui/AppSkeleton";
 const AssistantApp = lazy(() => import("@/features/ai-assistant/AssistantApp").then(m => ({ default: m.AssistantApp })));
 
 function AppContent() {
-  const { isAuthenticated, isLoading } = useAuthContext();
+  const { isAuthenticated, isAuthLoading } = useAuthContext();
 
   useEffect(() => {
     // Register service worker for offline support
@@ -23,7 +23,7 @@ function AppContent() {
     }
   }, []);
 
-  if (isLoading) {
+  if (isAuthLoading) {
     return <AppSkeleton />;
   }
 

@@ -26,7 +26,7 @@ export type { User };
 
 interface AuthState {
   user: User | null;
-  isLoading: boolean;
+  isAuthLoading: boolean;
   isAuthenticated: boolean;
 }
 
@@ -39,9 +39,9 @@ interface AuthState {
  * import { useAuth } from '@/hooks/useAuth';
  * 
  * export function MyComponent() {
- *   const { user, isAuthenticated, isLoading, signIn, signUp, logout } = useAuth();
+ *   const { user, isAuthenticated, isAuthLoading, signIn, signUp, logout } = useAuth();
  *   
- *   if (isLoading) return <div>Loading...</div>;
+ *   if (isAuthLoading) return <div>Loading...</div>;
  *   
  *   if (isAuthenticated) {
  *     return <div>Welcome, {user?.email}</div>;
@@ -53,7 +53,7 @@ interface AuthState {
 export function useAuth() {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
-    isLoading: true,
+    isAuthLoading: true,
     isAuthenticated: false,
   });
 
@@ -61,6 +61,12 @@ export function useAuth() {
 
   // Check initial auth state on mount
   useEffect(() => {
+    // Prefetch the AssistantApp chunk during auth check to avoid sequential waterfall.
+    // The dynamic import triggers the browser to download the chunk immediately,
+    // so by the time auth resolves and React.lazy() in App.tsx requests it,
+    // the module is already cached.
+    import("@/features/ai-assistant/AssistantApp");
+
     let isMounted = true;
 
     const checkAuth = async () => {
@@ -69,21 +75,21 @@ export function useAuth() {
         if (isMounted) {
           setAuthState({
             user: user ?? null,
-            isLoading: false,
+            isAuthLoading: false,
             isAuthenticated: !!user,
           });
         }
       } catch (err) {
         if (isMounted) {
           setError((err as Error).message);
-          setAuthState({ user: null, isLoading: false, isAuthenticated: false });
+          setAuthState({ user: null, isAuthLoading: false, isAuthenticated: false });
         }
       }
     };
 
     const safetyTimer = setTimeout(() => {
       if (isMounted) {
-        setAuthState((prev) => (prev.isLoading ? { ...prev, isLoading: false } : prev));
+        setAuthState((prev) => (prev.isAuthLoading ? { ...prev, isAuthLoading: false } : prev));
       }
     }, 3000);
 
@@ -94,7 +100,7 @@ export function useAuth() {
       if (isMounted) {
         setAuthState({
           user,
-          isLoading: false,
+          isAuthLoading: false,
           isAuthenticated: !!user,
         });
       }

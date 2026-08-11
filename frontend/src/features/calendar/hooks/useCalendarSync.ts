@@ -12,7 +12,7 @@ interface UseCalendarSyncOptions {
 interface UseCalendarSyncReturn {
   events: CalendarEvent[];
   insights: CalendarInsights | null;
-  isLoading: boolean;
+  isCalendarLoading: boolean;
   error: string | null;
   
   // Actions
@@ -27,7 +27,7 @@ interface UseCalendarSyncReturn {
 export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCalendarSyncReturn {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [insights, setInsights] = useState<CalendarInsights | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isCalendarLoading, setIsCalendarLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchEvents = useCallback(async (
@@ -39,7 +39,7 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
       return;
     }
 
-    setIsLoading(true);
+    setIsCalendarLoading(true);
     setError(null);
 
     try {
@@ -98,7 +98,7 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
       setError(err.message || 'Failed to fetch events');
       console.error('[Calendar] fetchEvents error:', err);
     } finally {
-      setIsLoading(false);
+      setIsCalendarLoading(false);
     }
   }, [options?.userId]);
 
@@ -110,7 +110,7 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
       return;
     }
 
-    setIsLoading(true);
+    setIsCalendarLoading(true);
     setError(null);
 
     try {
@@ -197,7 +197,7 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
       setError(err.message || 'Failed to fetch insights');
       console.error('[Calendar] fetchInsights error:', err);
     } finally {
-      setIsLoading(false);
+      setIsCalendarLoading(false);
     }
   }, [options?.userId]);
 
@@ -448,7 +448,7 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
   return {
     events,
     insights,
-    isLoading,
+    isCalendarLoading,
     error,
     fetchEvents,
     fetchInsights,

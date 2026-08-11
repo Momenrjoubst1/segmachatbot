@@ -6,18 +6,18 @@ import { Input } from "@/components/ui/input";
 import { LogIn, Mail, Lock, Loader2 } from "lucide-react";
 
 export function LoginPage() {
-  const { signIn, signUp, isLoading } = useAuth();
+  const { signIn, signUp, isAuthLoading } = useAuth();
   const { t } = useTranslation("auth");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isSubmittingLogin, setIsSubmittingLogin] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setIsSubmittingLogin(true);
 
     try {
       const result = isSignUp
@@ -30,7 +30,7 @@ export function LoginPage() {
     } catch {
       setError("An unexpected error occurred");
     } finally {
-      setLoading(false);
+      setIsSubmittingLogin(false);
     }
   };
 
@@ -89,8 +89,8 @@ export function LoginPage() {
             </div>
           </div>
 
-          <Button type="submit" className="w-full" disabled={loading || isLoading}>
-            {loading ? (
+          <Button type="submit" className="w-full" disabled={isSubmittingLogin || isAuthLoading}>
+            {isSubmittingLogin ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <LogIn className="size-4" />

@@ -21,10 +21,12 @@ export interface AcademicCourse {
 export function useCourses() {
   const [courses, setCourses] = useState<AcademicCourse[]>([]);
   const [isOnboarded, setIsOnboarded] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isCoursesLoading, setIsCoursesLoading] = useState(true);
+  const [coursesError, setCoursesError] = useState<string | null>(null);
 
   // Fetch courses from Supabase
   const fetchCourses = useCallback(async () => {
+    setCoursesError(null);
     try {
       const {
         data: { user },
@@ -32,7 +34,7 @@ export function useCourses() {
       if (!user) {
         setCourses([]);
         setIsOnboarded(false);
-        setIsLoading(false);
+        setIsCoursesLoading(false);
         return;
       }
 
@@ -44,15 +46,18 @@ export function useCourses() {
 
       if (error) {
         console.error("[useCourses] Fetch error:", error);
+        setCoursesError("Failed to load courses. Please try again.");
         return;
       }
 
       setCourses(data ?? []);
       setIsOnboarded((data ?? []).length > 0);
+      setCoursesError(null);
     } catch (err) {
       console.error("[useCourses] Unexpected error:", err);
+      setCoursesError("An unexpected error occurred while loading courses.");
     } finally {
-      setIsLoading(false);
+      setIsCoursesLoading(false);
     }
   }, []);
 
@@ -168,10 +173,12 @@ export function useCourses() {
   return {
     courses,
     isOnboarded,
-    isLoading,
+    isCoursesLoading,
+    coursesError,
     addCourse,
     removeCourse,
     replaceCourses,
     refetch: fetchCourses,
+    retryCourses: fetchCourses,
   };
 }

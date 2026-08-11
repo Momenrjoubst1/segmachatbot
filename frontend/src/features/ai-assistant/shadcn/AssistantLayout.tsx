@@ -1,4 +1,3 @@
-import { cn } from "@/lib/cn";
 import { type AcademicCourse } from "../../../hooks/useCourses";
 import { useState, useEffect, useCallback, useMemo, type FC, lazy, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
@@ -22,9 +21,17 @@ const SchedulingPanel = lazy(() => import("@/features/calendar/components").then
 export { useAssistantSettingsStore } from "./components/Thread/MessageComponents";
 export { Thread } from "./components/Thread/ThreadWelcome";
 
+const PanelLoading = () => (
+  <div className="flex items-center justify-center h-32">
+    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+  </div>
+);
+
 export const Shadcn: FC<{
   isOnboarded: boolean;
-  showLoading?: boolean;
+  isCoursesLoadingVisible?: boolean;
+  coursesError?: string | null;
+  retryCourses?: () => void;
   onActiveCourseChange: (course: AcademicCourse | null) => void;
   onCompleteOnboarding: (draftCourses: { course_name: string; credit_hours: number }[]) => Promise<void>;
   onSkipOnboarding?: () => void;
@@ -34,7 +41,7 @@ export const Shadcn: FC<{
   setArtifactPanelOpen: (open: boolean) => void;
   emailHistoryOpen: boolean;
   setEmailHistoryOpen: (open: boolean) => void;
-}> = ({ isOnboarded, showLoading, onActiveCourseChange, onCompleteOnboarding, onSkipOnboarding, activeView, onToggleView, artifactPanelOpen, setArtifactPanelOpen, emailHistoryOpen, setEmailHistoryOpen }) => {
+}> = ({ isOnboarded, isCoursesLoadingVisible, coursesError, retryCourses, onActiveCourseChange, onCompleteOnboarding, onSkipOnboarding, activeView, onToggleView, artifactPanelOpen, setArtifactPanelOpen, emailHistoryOpen, setEmailHistoryOpen }) => {
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
 
   // Calendar state
@@ -46,7 +53,7 @@ export const Shadcn: FC<{
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (data?.user) setCalendarUserId(data.user.id);
-    });
+    }).catch(console.error);
   }, []);
 
   const calendar = useCalendarSync({ userId: calendarUserId });
@@ -200,28 +207,15 @@ export const Shadcn: FC<{
     }
   }, []));
 
-  const PanelLoading = () => (
-    <div className="flex items-center justify-center h-32">
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-    </div>
-  );
-
   return (
     <div className="flex flex-1 flex-col h-full w-full bg-background">
-          <div className="flex flex-1 overflow-hidden">
+          <div className="flex flex-1 overflow-hidden relative">
             <main
-              className={cn(
-                "flex flex-1 overflow-hidden min-w-0",
-                showLoading && "flex items-center justify-center",
-              )}
+              className="relative flex flex-1 overflow-hidden min-w-0"
             >
-              {showLoading ? (
-                <div className="flex items-center justify-center h-full w-full">
-                  <BarsSpinner size={60} className="text-primary" />
-                </div>
-              ) : activeView === 'calendar' ? (
+              {activeView === 'calendar' ? (
                 <div className="flex-1 h-full overflow-y-auto custom-scrollbar bg-background">
-                  {calendar.isLoading ? (
+                  {calendar.isCalendarLoading ? (
                     <div className="flex items-center justify-center h-full">
                       <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
                     </div>
@@ -266,6 +260,26 @@ export const Shadcn: FC<{
                   onSkipOnboarding={onSkipOnboarding}
                 />
               )}
+              {isCoursesLoadingVisible && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
+                  <BarsSpinner size={60} className="text-primary" />
+                </div>
+              )}
+              {coursesError && !isCoursesLoadingVisible && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
+                  <div className="flex flex-col items-center gap-4 rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center max-w-md">
+                    <div className="text-destructive text-sm font-medium">{coursesError}</div>
+                    {retryCourses && (
+                      <button
+                        onClick={retryCourses}
+                        className="rounded-lg bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20"
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </main>
             <Suspense fallback={<PanelLoading />}>
               <ErrorBoundary componentName="ArtifactPanel">
@@ -277,7 +291,7 @@ export const Shadcn: FC<{
               </ErrorBoundary>
             </Suspense>
             {emailHistoryOpen && (
-              <div className="w-96 border-l">
+              <div className="absolute right-0 top-0 h-full w-96 border-l bg-background z-30 shadow-xl">
                 <Suspense fallback={<PanelLoading />}>
                   <ErrorBoundary componentName="EmailHistoryPanel">
                     <EmailHistoryPanel

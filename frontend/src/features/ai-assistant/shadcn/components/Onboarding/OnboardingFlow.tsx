@@ -15,7 +15,7 @@ export const OnboardingFlow: FC<OnboardingFlowProps> = ({ onComplete, onSkip }) 
   const [courseName, setCourseName] = useState("");
   const [creditHours, setCreditHours] = useState("3");
   const [draftCourses, setDraftCourses] = useState<AcademicCourse[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingOnboarding, setIsSavingOnboarding] = useState(false);
 
   const canContinue = totalHours.trim() !== "" && Number(totalHours) > 0;
   const canAddCourse = courseName.trim() !== "" && Number(creditHours) > 0;
@@ -41,12 +41,12 @@ export const OnboardingFlow: FC<OnboardingFlowProps> = ({ onComplete, onSkip }) 
   };
 
   const handleConfirm = async () => {
-    if (!canConfirm || isSaving) return;
-    setIsSaving(true);
+    if (!canConfirm || isSavingOnboarding) return;
+    setIsSavingOnboarding(true);
     try {
       await onComplete(draftCourses.map((c) => ({ course_name: c.course_name, credit_hours: c.credit_hours })));
     } finally {
-      setIsSaving(false);
+      setIsSavingOnboarding(false);
     }
   };
 
@@ -212,10 +212,10 @@ export const OnboardingFlow: FC<OnboardingFlowProps> = ({ onComplete, onSkip }) 
               <Button
                 type="button"
                 onClick={handleConfirm}
-                disabled={!canConfirm || isSaving}
+                disabled={!canConfirm || isSavingOnboarding}
                 className="h-11 rounded-2xl bg-white px-6 text-sm font-medium text-black transition-all hover:bg-neutral-200 disabled:bg-white/10 disabled:text-white/40"
               >
-                {isSaving ? "Saving..." : "Confirm & Save"}
+                {isSavingOnboarding ? "Saving..." : "Confirm & Save"}
               </Button>
             </div>
           </div>

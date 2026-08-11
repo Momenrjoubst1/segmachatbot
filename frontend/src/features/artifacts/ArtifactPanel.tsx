@@ -21,12 +21,12 @@ interface ArtifactPanelProps {
 export function ArtifactPanel({ open, onClose, activeArtifactId }: ArtifactPanelProps) {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [isFetchingArtifacts, setIsFetchingArtifacts] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const fallbackRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchLatest = useCallback(async () => {
-    setLoading(true);
+    setIsFetchingArtifacts(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
@@ -45,7 +45,7 @@ export function ArtifactPanel({ open, onClose, activeArtifactId }: ArtifactPanel
     } catch {
       // Keep the panel quiet; chat can continue even if artifact fetch fails.
     } finally {
-      setLoading(false);
+      setIsFetchingArtifacts(false);
     }
   }, [activeArtifactId, activeId]);
 
@@ -139,7 +139,7 @@ export function ArtifactPanel({ open, onClose, activeArtifactId }: ArtifactPanel
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        {loading && artifacts.length === 0 ? (
+        {isFetchingArtifacts && artifacts.length === 0 ? (
           <div className="space-y-3">
             {[1, 2].map((i) => (
               <div key={i} className="h-32 animate-pulse rounded-lg bg-muted/20" />

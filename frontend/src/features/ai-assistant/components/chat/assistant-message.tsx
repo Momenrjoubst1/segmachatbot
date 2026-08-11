@@ -39,21 +39,21 @@ export const AssistantMessage: FC = () => {
   const [feedbackText, setFeedbackText] = useState("");
   const [showDenyInput, setShowDenyInput] = useState(false);
   // Double-click race-condition protection: once submitted, lock all buttons
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
 
   const handleApprove = useCallback(() => {
-    if (isSubmitting || !chatMessage?.require_approval) return;
-    setIsSubmitting(true);
+    if (hasSubmitted || !chatMessage?.require_approval) return;
+    setHasSubmitted(true);
     sendApprovalDecision?.(chatMessage.require_approval.toolCallId, true);
-  }, [isSubmitting, chatMessage, sendApprovalDecision]);
+  }, [hasSubmitted, chatMessage, sendApprovalDecision]);
 
   const handleDeny = useCallback(() => {
-    if (isSubmitting || !chatMessage?.require_approval) return;
-    setIsSubmitting(true);
+    if (hasSubmitted || !chatMessage?.require_approval) return;
+    setHasSubmitted(true);
     sendApprovalDecision?.(chatMessage.require_approval.toolCallId, false, feedbackText);
     setShowDenyInput(false);
     setFeedbackText("");
-  }, [isSubmitting, chatMessage, feedbackText, sendApprovalDecision]);
+  }, [hasSubmitted, chatMessage, feedbackText, sendApprovalDecision]);
 
 
   const ACTION_BAR_PT = "pt-1.5";
@@ -163,14 +163,14 @@ export const AssistantMessage: FC = () => {
                     rows={2}
                     value={feedbackText}
                     onChange={(e) => setFeedbackText(e.target.value)}
-                    disabled={isSubmitting}
+                    disabled={hasSubmitted}
                   />
                   <div className="flex justify-end gap-2">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowDenyInput(false)}
-                      disabled={isSubmitting}
+                      disabled={hasSubmitted}
                     >
                       Cancel
                     </Button>
@@ -178,10 +178,10 @@ export const AssistantMessage: FC = () => {
                       variant="destructive"
                       size="sm"
                       onClick={handleDeny}
-                      disabled={isSubmitting || !feedbackText.trim()}
+                      disabled={hasSubmitted || !feedbackText.trim()}
                       className="min-w-[140px]"
                     >
-                      {isSubmitting ? (
+                      {hasSubmitted ? (
                         <span className="flex items-center gap-1.5">
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           Submitting...
@@ -196,17 +196,17 @@ export const AssistantMessage: FC = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => setShowDenyInput(true)}
-                    disabled={isSubmitting}
+                    disabled={hasSubmitted}
                   >
                     Modify / Deny
                   </Button>
                   <Button
                     size="sm"
                     onClick={handleApprove}
-                    disabled={isSubmitting}
+                    disabled={hasSubmitted}
                     className="min-w-[130px] bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
                   >
-                    {isSubmitting ? (
+                    {hasSubmitted ? (
                       <span className="flex items-center gap-1.5">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         Approving...

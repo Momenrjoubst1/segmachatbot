@@ -22,8 +22,6 @@ export interface CourseResource {
 
 export function useCourseResources(courseId: string | null) {
   const [resources, setResources] = useState<CourseResource[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
 
   // Fetch resources for the active course
   const fetchResources = useCallback(async () => {
@@ -32,7 +30,6 @@ export function useCourseResources(courseId: string | null) {
       return;
     }
 
-    setIsLoading(true);
     try {
       const { data, error } = await supabase
         .from("course_resources")
@@ -48,8 +45,6 @@ export function useCourseResources(courseId: string | null) {
       setResources(data ?? []);
     } catch (err) {
       console.error("[useCourseResources] Unexpected error:", err);
-    } finally {
-      setIsLoading(false);
     }
   }, [courseId]);
 
@@ -68,7 +63,6 @@ export function useCourseResources(courseId: string | null) {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      setIsUploading(true);
       try {
         // Build the storage path: userId/courseId/fileName
         const filePath = `${user.id}/${courseId}/${file.name}`;
@@ -111,8 +105,6 @@ export function useCourseResources(courseId: string | null) {
         setResources((prev) => [data, ...prev]);
       } catch (err) {
         console.error("[useCourseResources] Upload unexpected error:", err);
-      } finally {
-        setIsUploading(false);
       }
     },
     [courseId]
@@ -153,8 +145,6 @@ export function useCourseResources(courseId: string | null) {
 
   return {
     resources,
-    isLoading,
-    isUploading,
     uploadFile,
     deleteResource,
     refetch: fetchResources,

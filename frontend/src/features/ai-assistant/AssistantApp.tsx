@@ -7,10 +7,11 @@ import { useChatHistory, ChatHistoryProvider } from "../../hooks/useChatHistory"
 import { useCourses, type AcademicCourse } from "../../hooks/useCourses";
 import { useScrollPreservation } from "../../hooks/useScrollPreservation";
 import { useTitle } from "@/context/TitleContext";
-import { useState, useCallback, useEffect, useRef, useLayoutEffect } from "react";
+import { useState, useCallback, useEffect, useRef, useLayoutEffect, useTransition } from "react";
 import { Toaster } from "sonner";
 import { RAGProvider } from "../../context/RAGContext";
 import { TopLoadingBar } from "@/components/ui/TopLoadingBar";
+import { ThreadSwitchSkeleton } from "@/components/ui/LoadingStates";
 import { motion } from "framer-motion";
 
 import { SidebarView } from "./shadcn/components/Sidebar/SidebarView";
@@ -103,7 +104,9 @@ const DraftRestorer = ({ draftText }: { draftText: string }) => {
 interface AssistantChatInnerProps {
   activeCourse: AcademicCourse | null;
   isOnboarded: boolean;
-  coursesLoading: boolean;
+  isCoursesLoading: boolean;
+  coursesError: string | null;
+  retryCourses: () => void;
   localOnboarded: boolean;
   handleCompleteOnboarding: (courses: { course_name: string; credit_hours: number }[]) => Promise<void>;
   handleSkipOnboarding: () => void;
@@ -124,7 +127,9 @@ interface AssistantChatInnerProps {
 const AssistantChatInner = ({
   activeCourse,
   isOnboarded,
-  coursesLoading,
+  isCoursesLoading,
+  coursesError,
+  retryCourses,
   localOnboarded,
   handleCompleteOnboarding,
   handleSkipOnboarding,
@@ -154,7 +159,9 @@ const AssistantChatInner = ({
         <DraftRestorer draftText={draftText} />
         <Shadcn
           isOnboarded={isOnboarded}
-          showLoading={coursesLoading && !localOnboarded}
+          isCoursesLoadingVisible={isCoursesLoading && !localOnboarded}
+          coursesError={coursesError}
+          retryCourses={retryCourses}
           onActiveCourseChange={setActiveCourse}
           onCompleteOnboarding={handleCompleteOnboarding}
           onSkipOnboarding={handleSkipOnboarding}
@@ -175,16 +182,19 @@ const AssistantAppContent = () => {
   const { setBaseTitle } = useTitle();
   const [activeCourse, setActiveCourse] = useState<AcademicCourse | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeView, setActiveView] = useState<'chat' | 'calendar'>('chat');
-  const [artifactPanelOpen, setArtifactPanelOpen] = useState(false);
-  const [emailHistoryOpen, setEmailHistoryOpen] = useState(false);
+  const [activeView, _setActiveView] = useState<'chat' | 'calendar'>('chat');
+  const [artifactPanelOpen, _setArtifactPanelOpen] = useState(false);
+  const [emailHistoryOpen, _setEmailHistoryOpen] = useState(false);
+  const [, startTransition] = useTransition();
 
   const {
     courses: dbCourses,
     isOnboarded: dbOnboarded,
-    isLoading: coursesLoading,
+    isCoursesLoading,
+    coursesError,
     replaceCourses,
     refetch: refetchCourses,
+    retryCourses,
   } = useCourses();
 
   const [localCourses, setLocalCourses] = useState<AcademicCourse[]>([]);
@@ -192,6 +202,17 @@ const AssistantAppContent = () => {
 
   const courses = localOnboarded ? localCourses : dbCourses;
   const isOnboarded = localOnboarded || dbOnboarded;
+
+  // Transition-wrapped setters for heavy UI updates (lazy-loaded panels, view switches)
+  const setActiveView = useCallback((view: 'chat' | 'calendar') => {
+    startTransition(() => { _setActiveView(view); });
+  }, []);
+  const setArtifactPanelOpen = useCallback((open: boolean) => {
+    startTransition(() => { _setArtifactPanelOpen(open); });
+  }, []);
+  const setEmailHistoryOpen = useCallback((open: boolean) => {
+    startTransition(() => { _setEmailHistoryOpen(open); });
+  }, []);
 
   useEffect(() => {
     if (activeThreadId && threads.length) {
@@ -296,6 +317,11 @@ const AssistantAppContent = () => {
           />
           <div className="relative flex-1 min-h-0 overflow-hidden">
             {isLoadingMessages && <TopLoadingBar />}
+            {isLoadingMessages && (
+              <div className="absolute inset-0 z-20 flex flex-1 flex-col bg-background">
+                <ThreadSwitchSkeleton />
+              </div>
+            )}
             <motion.div
               key={chatKey}
               initial={{ opacity: 0 }}
@@ -303,10 +329,11 @@ const AssistantAppContent = () => {
               className="flex flex-1 h-full w-full overflow-hidden"
             >
               <AssistantChatInner
-                key={chatKey}
                 activeCourse={activeCourse}
                 isOnboarded={isOnboarded}
-                coursesLoading={coursesLoading}
+                isCoursesLoading={isCoursesLoading}
+                coursesError={coursesError}
+                retryCourses={retryCourses}
                 localOnboarded={localOnboarded}
                 handleCompleteOnboarding={handleCompleteOnboarding}
                 handleSkipOnboarding={handleSkipOnboarding}

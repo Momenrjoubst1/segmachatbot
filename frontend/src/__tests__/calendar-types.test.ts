@@ -80,7 +80,7 @@ describe('Calendar Types', () => {
         events: [],
         selectedDate: new Date(),
         view: 'week',
-        isLoading: false,
+        isCalendarLoading: false,
       };
       expect(state.events).toHaveLength(0);
     });

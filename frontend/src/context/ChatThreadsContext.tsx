@@ -15,7 +15,9 @@ export interface ChatThread {
 interface ChatThreadsContextType {
   threads: ChatThread[];
   isLoadingThreads: boolean;
+  threadsError: string | null;
   fetchThreads: () => Promise<void>;
+  retryFetchThreads: () => Promise<void>;
   deleteThread: (threadId: string) => Promise<void>;
   loadThread: (id: string | null) => void;
   getThreadsByCourse: (courseId: string | null) => ChatThread[];
@@ -44,6 +46,7 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
   const [isLoadingThreads, setIsLoadingThreads] = useState(false);
+  const [threadsError, setThreadsError] = useState<string | null>(null);
   // Ref to read latest messages without adding them to useEffect deps
   const activeMessagesRef = useRef<typeof _activeThreadMessages>([]);
   activeMessagesRef.current = _activeThreadMessages;
@@ -81,12 +84,14 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
   }, [setSearchParams, urlThreadId]);
 
   const fetchThreads = useCallback(async () => {
+    setThreadsError(null);
     setIsLoadingThreads(true);
     try {
       const res = await authFetch(`${backendUrl}/api/chat/threads`);
       if (res.ok) {
         const data: ChatThread[] = await res.json();
         setThreadsSafe(data);
+        setThreadsError(null);
       } else if (res.status === 401) {
         setThreadsSafe([]);
       }
@@ -101,8 +106,10 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
             `→ Or run both together from the project root: \`npm run dev\`\n` +
             `Original error: ${err.message}`,
         );
+        setThreadsError("Cannot reach the server. Please check your connection.");
       } else {
         console.error("Failed to fetch threads", err);
+        setThreadsError("Failed to load conversations. Please try again.");
       }
     } finally {
       setIsLoadingThreads(false);
@@ -218,7 +225,9 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
   const contextValue = useMemo(() => ({
     threads,
     isLoadingThreads,
+    threadsError,
     fetchThreads,
+    retryFetchThreads: fetchThreads,
     deleteThread,
     loadThread,
     getThreadsByCourse,
@@ -229,6 +238,7 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
   }), [
     threads,
     isLoadingThreads,
+    threadsError,
     fetchThreads,
     deleteThread,
     loadThread,

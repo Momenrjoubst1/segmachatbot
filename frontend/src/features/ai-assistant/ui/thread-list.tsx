@@ -351,7 +351,7 @@ const ThreadListItem: FC<{
   const isActive = activeThreadId === thread.id || (activeThreadId === null && thread.id === "new-chat-virtual");
 
   const isNavigating = isActive && isLoadingMessages;
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeletingThread, setIsDeletingThread] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -381,7 +381,7 @@ const ThreadListItem: FC<{
   };
 
   const handleClick = () => {
-    if (isActive || isDeleting) return;
+    if (isActive || isDeletingThread) return;
     onSelect(thread.id);
   };
 
@@ -391,14 +391,14 @@ const ThreadListItem: FC<{
   };
 
   const handleConfirmDelete = async () => {
-    setIsDeleting(true);
+    setIsDeletingThread(true);
     try {
       await deleteThread(thread.id);
       setShowDeleteDialog(false);
       toast.success("Chat deleted", { duration: 2500 });
     } catch {
       toast.error("Failed to delete", { duration: 2500 });
-      setIsDeleting(false);
+      setIsDeletingThread(false);
     }
   };
 
@@ -411,7 +411,7 @@ const ThreadListItem: FC<{
         className={`group relative flex items-center gap-2 rounded-xl text-foreground/80 transition-all duration-150 cursor-pointer hover:bg-accent hover:text-foreground px-3
           ${isActive ? "bg-accent text-foreground" : ""}
           ${compact ? "h-8 text-xs" : "h-9"}
-          ${isDeleting || isNavigating ? "opacity-50 pointer-events-none" : ""}`}
+          ${isDeletingThread || isNavigating ? "opacity-50 pointer-events-none" : ""}`}
       >
         {/* Fix #9 — spinner while navigating, icon otherwise */}
         {isNavigating ? (
@@ -428,7 +428,7 @@ const ThreadListItem: FC<{
         {thread.id !== "new-chat-virtual" && (
           <button
             onClick={handleDeleteClick}
-            disabled={isDeleting}
+            disabled={isDeletingThread}
             className="shrink-0 md:opacity-0 md:group-hover:opacity-100 opacity-70 transition-opacity duration-200 p-1 rounded-md hover:bg-red-500/20 text-foreground/50 hover:text-red-400 disabled:opacity-50"
             title="Delete chat"
           >
@@ -456,17 +456,17 @@ const ThreadListItem: FC<{
             <Button
               variant="ghost"
               onClick={() => setShowDeleteDialog(false)}
-              disabled={isDeleting}
+              disabled={isDeletingThread}
               className="flex-1 h-9 bg-transparent text-white hover:bg-white/10 transition-colors rounded-lg"
             >
               Cancel
             </Button>
             <Button
               onClick={handleConfirmDelete}
-              disabled={isDeleting}
+              disabled={isDeletingThread}
               className="flex-1 h-9 bg-[#dc2626] text-white hover:bg-[#b91c1c] transition-colors disabled:opacity-50 rounded-lg"
             >
-              {isDeleting ? "Deleting…" : "Delete"}
+              {isDeletingThread ? "Deleting…" : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>
