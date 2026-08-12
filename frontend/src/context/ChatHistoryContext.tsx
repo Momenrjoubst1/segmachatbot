@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode, useCallback, useMemo } from "react";
+import { createContext, useContext, ReactNode, useCallback, useMemo } from "react";
 import { ChatDraftsProvider, useChatDrafts } from "@/context/ChatDraftsContext";
 import { ChatMessagesProvider, useChatMessages, ChatMessage } from "@/context/ChatMessagesContext";
 import { ChatThreadsProvider, useChatThreads, ChatThread } from "@/context/ChatThreadsContext";
@@ -14,8 +14,6 @@ interface ChatHistoryContextType {
   threadsError: string | null;
   retryFetchThreads: () => Promise<void>;
   activeThreadMessages: ChatMessage[];
-  /** Streaming-only: used by WebSocket/runtime hooks to append messages during stream */
-  setActiveThreadMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   isLoadingMessages: boolean;
   messagesError: string | null;
   retryFetchMessages: () => Promise<void>;
@@ -34,13 +32,19 @@ interface ChatHistoryContextType {
   getDraft: (threadId: string | null) => string;
   clearDraft: (threadId: string | null) => void;
   newChatCount: number;
+  appendMessage: (msg: ChatMessage) => void;
+  upsertMessage: (messageId: string, updater: (msg: ChatMessage) => ChatMessage) => void;
+  markStreamInterrupted: () => void;
+  markLastAssistantInterrupted: () => void;
+  updateApprovalStatus: (toolCallId: string, status: "approved" | "denied") => void;
+  removeInterruptedMessages: () => void;
 }
 
 const ChatHistoryContext = createContext<ChatHistoryContextType | undefined>(undefined);
 
 const ChatHistoryInner = ({ children }: { children: ReactNode }) => {
   const { saveDraft, getDraft, clearDraft } = useChatDrafts();
-  const { activeThreadMessages, setActiveThreadMessages, isLoadingMessages, messagesError, retryFetchMessages, loadMessagesForThread, removeFromCache, prefetchThread, setActiveThreadId: _setActiveThreadId, incrementFetchRequestSeq: _incrementFetchRequestSeq, getFetchRequestSeq: _getFetchRequestSeq } = useChatMessages();
+  const { activeThreadMessages, isLoadingMessages, messagesError, retryFetchMessages, loadMessagesForThread, removeFromCache, prefetchThread, setActiveThreadId: _setActiveThreadId, incrementFetchRequestSeq: _incrementFetchRequestSeq, getFetchRequestSeq: _getFetchRequestSeq, appendMessage, upsertMessage, markStreamInterrupted, markLastAssistantInterrupted, updateApprovalStatus, removeInterruptedMessages } = useChatMessages();
   const { threads, activeThreadId, setActiveThreadId, loadThread, isLoadingThreads, threadsError, retryFetchThreads, fetchThreads, deleteThread: rawDeleteThread, getThreadsByCourse, createNewThread, newChatCount } = useChatThreads();
 
   const deleteThread = useCallback(async (threadId: string) => {
@@ -58,7 +62,6 @@ const ChatHistoryInner = ({ children }: { children: ReactNode }) => {
     threadsError,
     retryFetchThreads,
     activeThreadMessages,
-    setActiveThreadMessages,
     isLoadingMessages,
     messagesError,
     retryFetchMessages,
@@ -73,7 +76,13 @@ const ChatHistoryInner = ({ children }: { children: ReactNode }) => {
     getDraft,
     clearDraft,
     newChatCount,
-  }), [threads, activeThreadId, setActiveThreadId, loadThread, isLoadingThreads, threadsError, retryFetchThreads, activeThreadMessages, setActiveThreadMessages, isLoadingMessages, messagesError, retryFetchMessages, loadMessagesForThread, removeFromCache, prefetchThread, fetchThreads, createNewThread, deleteThread, getThreadsByCourse, saveDraft, getDraft, clearDraft, newChatCount]);
+    appendMessage,
+    upsertMessage,
+    markStreamInterrupted,
+    markLastAssistantInterrupted,
+    updateApprovalStatus,
+    removeInterruptedMessages,
+  }), [threads, activeThreadId, setActiveThreadId, loadThread, isLoadingThreads, threadsError, retryFetchThreads, activeThreadMessages, isLoadingMessages, messagesError, retryFetchMessages, loadMessagesForThread, removeFromCache, prefetchThread, fetchThreads, createNewThread, deleteThread, getThreadsByCourse, saveDraft, getDraft, clearDraft, newChatCount, appendMessage, upsertMessage, markStreamInterrupted, markLastAssistantInterrupted, updateApprovalStatus, removeInterruptedMessages]);
 
   return (
     <ChatHistoryContext.Provider value={contextValue}>

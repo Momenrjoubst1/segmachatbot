@@ -60,8 +60,8 @@ export const useAgentWebSocket = ({
   const socketRef = useRef<WebSocket | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>("disconnected");
 
-  // Exposing setActiveThreadMessages from context
-  const { setActiveThreadMessages } = useChatHistory();
+  // Streaming methods from context
+  const { activeThreadMessages, upsertMessage, markStreamInterrupted, appendMessage, removeInterruptedMessages, updateApprovalStatus } = useChatHistory();
 
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const retryCountRef = useRef(0);
@@ -141,7 +141,7 @@ export const useAgentWebSocket = ({
       setConnectionState("disconnected");
       socketRef.current = null;
       // If a stream was in-flight, mark it interrupted so the user can retry
-      markStreamInterrupted();
+      onStreamInterrupted();
 
       // Exponential backoff with jitter: start at 1s, double each attempt, max 30s
       retryCountRef.current++;
@@ -213,31 +213,24 @@ export const useAgentWebSocket = ({
       return;
     }
 
-    setActiveThreadMessages((prev: AgentChatMessage[]) => {
-      const msgIndex = prev.findIndex((m) => m.id === messageId);
-      const updatedMessages = [...prev];
+    const msgId = messageId ?? `msg-${Date.now()}`;
 
-      const targetMessage: AgentChatMessage = msgIndex > -1
-        ? { ...updatedMessages[msgIndex] }
-        : {
-            id: messageId ?? `msg-${Date.now()}`,
-            role: "assistant",
-            content: "",
-            is_pinned: false,
-            created_at: new Date().toISOString(),
-            agent_steps: [],
-            task_progress: { percentage: 0 },
-            require_approval: null,
-            approval_status: "pending",
-          };
+    upsertMessage(msgId, (existing) => {
+      const target = { ...existing } as AgentChatMessage;
+
+      // Initialize agent fields if not present
+      if (!target.agent_steps) target.agent_steps = [];
+      if (!target.task_progress) target.task_progress = { percentage: 0 };
+      if (target.require_approval === undefined) target.require_approval = null;
+      if (!target.approval_status) target.approval_status = "pending";
 
       switch (type) {
         case "text_chunk":
-          targetMessage.content += (data?.text as string) ?? "";
+          target.content += (data?.text as string) ?? "";
           break;
 
-        case "agent_step":
-          const steps = targetMessage.agent_steps ? [...targetMessage.agent_steps] : [];
+        case "agent_step": {
+          const steps = [...target.agent_steps!];
           const stepIndex = steps.findIndex((s) => s.id === data?.stepId);
           if (stepIndex > -1) {
             steps[stepIndex] = { ...steps[stepIndex], ...(data as Partial<AgentStep>) };
@@ -249,53 +242,42 @@ export const useAgentWebSocket = ({
               logs: data?.logs as string | undefined,
             });
           }
-          targetMessage.agent_steps = steps;
+          target.agent_steps = steps;
           break;
+        }
 
         case "task_progress":
-          targetMessage.task_progress = {
+          target.task_progress = {
             percentage: (data?.percentage as number) ?? 0,
             message: data?.message as string | undefined,
           };
           break;
 
         case "require_approval":
-          targetMessage.require_approval = {
+          target.require_approval = {
             toolCallId: (data?.toolCallId as string) ?? "",
             toolName: (data?.toolName as string) ?? "",
             args: (data?.args as Record<string, unknown>) ?? {},
           };
-          targetMessage.approval_status = "pending";
+          target.approval_status = "pending";
           break;
 
         case "error":
-          targetMessage.role = "system";
-          targetMessage.content = `${(data?.title as string) || "Error"}: ${(data?.logs as string) || "An error occurred"}`;
+          target.role = "system";
+          target.content = `${(data?.title as string) || "Error"}: ${(data?.logs as string) || "An error occurred"}`;
           break;
 
         default:
           break;
       }
 
-      if (msgIndex > -1) {
-        updatedMessages[msgIndex] = targetMessage;
-      } else {
-        updatedMessages.push(targetMessage);
-      }
-
-      return updatedMessages;
+      return target;
     });
   };
 
   // Mark any in-flight assistant message as interrupted on WS drop
-  const markStreamInterrupted = () => {
-    setActiveThreadMessages((prev: AgentChatMessage[]) =>
-      prev.map((msg) =>
-        msg.role === "assistant" && !msg.interrupted
-          ? { ...msg, interrupted: true }
-          : msg
-      )
-    );
+  const onStreamInterrupted = () => {
+    markStreamInterrupted();
   };
 
   // Send message with text + optional attachments (Optimistic UI)
@@ -315,7 +297,7 @@ export const useAgentWebSocket = ({
       };
 
       // Optimistically update the UI messages store
-      setActiveThreadMessages((prev: AgentChatMessage[]) => [...prev, userMessage]);
+      appendMessage(userMessage);
 
       socketRef.current.send(
         JSON.stringify({
@@ -325,37 +307,34 @@ export const useAgentWebSocket = ({
         })
       );
     },
-    [setActiveThreadMessages]
+    [appendMessage]
   );
 
   // Retry: resend the text of the last user message that preceded an interrupted response
   const retryMessage = useCallback(() => {
-    setActiveThreadMessages((prev: AgentChatMessage[]) => {
-      const interruptedIdx = prev.findIndex((m) => m.interrupted);
-      if (interruptedIdx === -1) return prev;
+    // Find user text before the interrupted message
+    const msgs = activeThreadMessages;
+    const interruptedIdx = msgs.findIndex((m) => (m as any).interrupted);
+    if (interruptedIdx === -1) return;
 
-      // Walk backwards to find the user message before the interrupted one
-      let userText = "";
-      for (let i = interruptedIdx - 1; i >= 0; i--) {
-        if (prev[i].role === "user") {
-          userText = prev[i].content;
-          break;
-        }
+    let userText = "";
+    for (let i = interruptedIdx - 1; i >= 0; i--) {
+      if (msgs[i].role === "user") {
+        userText = msgs[i].content;
+        break;
       }
+    }
 
-      // Remove the interrupted assistant message
-      const filtered = prev.filter((m) => !m.interrupted);
+    // Remove interrupted messages
+    removeInterruptedMessages();
 
-      // Re-send if we found text
-      if (userText && socketRef.current?.readyState === WebSocket.OPEN) {
-        socketRef.current.send(
-          JSON.stringify({ type: "user_message", content: userText, attachments: [] })
-        );
-      }
-
-      return filtered;
-    });
-  }, [setActiveThreadMessages]);
+    // Re-send if we found text
+    if (userText && socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(
+        JSON.stringify({ type: "user_message", content: userText, attachments: [] })
+      );
+    }
+  }, [activeThreadMessages, removeInterruptedMessages]);
 
   const sendApprovalDecision = useCallback((toolCallId: string, approved: boolean, feedback?: string) => {
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return;
@@ -368,14 +347,8 @@ export const useAgentWebSocket = ({
       })
     );
 
-    setActiveThreadMessages((prev: AgentChatMessage[]) =>
-      prev.map((msg) =>
-        msg.require_approval?.toolCallId === toolCallId
-          ? { ...msg, approval_status: approved ? "approved" : "denied" }
-          : msg
-      )
-    );
-  }, [setActiveThreadMessages]);
+    updateApprovalStatus(toolCallId, approved ? "approved" : "denied");
+  }, [updateApprovalStatus]);
 
   // Establish connection on mount and disconnect on unmount
   useEffect(() => {

@@ -155,7 +155,7 @@ export const MessageSyncer = () => {
 export const useRuntime = (activeCourse: AcademicCourse | null) => {
   // Because AssistantChatInner is mounted with key=chatKey (from URL),
   // this hook is fully recreated on every thread switch / new chat.
-  const { activeThreadId, activeThreadMessages, setActiveThreadId, refreshThreads, saveDraft: _saveDraft, getDraft, clearDraft, setActiveThreadMessages } = useChatHistory();
+  const { activeThreadId, activeThreadMessages, setActiveThreadId, refreshThreads, saveDraft: _saveDraft, getDraft, clearDraft, markLastAssistantInterrupted } = useChatHistory();
   const { ragEnabled } = useRAGContext();
   const threadCreatedRef = useRef(false);
 
@@ -325,17 +325,7 @@ export const useRuntime = (activeCourse: AcademicCourse | null) => {
 
                 // Find the last assistant message that doesn't already have
                 // content — this is the one that was being streamed.
-                setActiveThreadMessages((prev) => {
-                  for (let i = prev.length - 1; i >= 0; i--) {
-                    const msg = prev[i];
-                    if (msg.role === "assistant" && !(msg as any).interrupted) {
-                      const updated = [...prev];
-                      updated[i] = { ...msg, interrupted: true } as typeof msg;
-                      return updated;
-                    }
-                  }
-                  return prev;
-                });
+                markLastAssistantInterrupted();
               } else {
                 // Request failed before any data arrived — propagate so the
                 // library surfaces a full error banner.
@@ -368,7 +358,7 @@ export const useRuntime = (activeCourse: AcademicCourse | null) => {
 
       return res;
     },
-    [activeThreadId, activeCourse, chatKey, setActiveThreadId, refreshThreads, ragEnabled, clearDraft, setActiveThreadMessages],
+    [activeThreadId, activeCourse, chatKey, setActiveThreadId, refreshThreads, ragEnabled, clearDraft, markLastAssistantInterrupted],
   );
 
   const transport = useMemo(

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useMemo, useRef, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, useRef, ReactNode } from "react";
 import { authFetch } from "@/lib/auth";
 
 export interface ChatMessage {
@@ -47,8 +47,6 @@ function useLRUCache<K, V>(maxSize: number) {
 
 interface ChatMessagesContextType {
   activeThreadMessages: ChatMessage[];
-  /** Streaming-only: used by WebSocket/runtime hooks to append messages during stream */
-  setActiveThreadMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   isLoadingMessages: boolean;
   messagesError: string | null;
   retryFetchMessages: () => Promise<void>;
@@ -62,6 +60,18 @@ interface ChatMessagesContextType {
   setActiveThreadId: (id: string | null) => void;
   incrementFetchRequestSeq: () => number;
   getFetchRequestSeq: () => number;
+  /** Streaming: append a message to the list */
+  appendMessage: (msg: ChatMessage) => void;
+  /** Streaming: find message by ID (or create if not found), then apply updater */
+  upsertMessage: (messageId: string, updater: (msg: ChatMessage) => ChatMessage) => void;
+  /** Streaming: mark all non-interrupted assistant messages as interrupted */
+  markStreamInterrupted: () => void;
+  /** Streaming: mark last non-interrupted assistant message as interrupted */
+  markLastAssistantInterrupted: () => void;
+  /** Streaming: update approval status for a tool call */
+  updateApprovalStatus: (toolCallId: string, status: "approved" | "denied") => void;
+  /** Streaming: remove all interrupted messages */
+  removeInterruptedMessages: () => void;
 }
 
 const ChatMessagesContext = createContext<ChatMessagesContextType | undefined>(undefined);
@@ -163,6 +173,68 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
     messagesCache.remove(threadId);
   }, [messagesCache]);
 
+  const appendMessage = useCallback((msg: ChatMessage) => {
+    setActiveThreadMessages((prev) => [...prev, msg]);
+  }, []);
+
+  const upsertMessage = useCallback((messageId: string, updater: (msg: ChatMessage) => ChatMessage) => {
+    setActiveThreadMessages((prev) => {
+      const idx = prev.findIndex((m) => m.id === messageId);
+      if (idx > -1) {
+        const updated = [...prev];
+        updated[idx] = updater(updated[idx]);
+        return updated;
+      }
+      // Not found — create a base message and apply updater
+      const base: ChatMessage = {
+        id: messageId,
+        role: "assistant",
+        content: "",
+        is_pinned: false,
+        created_at: new Date().toISOString(),
+      };
+      return [...prev, updater(base)];
+    });
+  }, []);
+
+  const markStreamInterrupted = useCallback(() => {
+    setActiveThreadMessages((prev) =>
+      prev.map((msg) =>
+        msg.role === "assistant" && !(msg as any).interrupted
+          ? { ...msg, interrupted: true }
+          : msg
+      )
+    );
+  }, []);
+
+  const markLastAssistantInterrupted = useCallback(() => {
+    setActiveThreadMessages((prev) => {
+      for (let i = prev.length - 1; i >= 0; i--) {
+        const msg = prev[i];
+        if (msg.role === "assistant" && !(msg as any).interrupted) {
+          const updated = [...prev];
+          updated[i] = { ...msg, interrupted: true } as typeof msg;
+          return updated;
+        }
+      }
+      return prev;
+    });
+  }, []);
+
+  const updateApprovalStatus = useCallback((toolCallId: string, status: "approved" | "denied") => {
+    setActiveThreadMessages((prev) =>
+      prev.map((msg) =>
+        (msg as any).require_approval?.toolCallId === toolCallId
+          ? { ...msg, approval_status: status }
+          : msg
+      )
+    );
+  }, []);
+
+  const removeInterruptedMessages = useCallback(() => {
+    setActiveThreadMessages((prev) => prev.filter((msg) => !(msg as any).interrupted));
+  }, []);
+
   const prefetchThread = useCallback(async (threadId: string) => {
     if (!threadId || threadId === "new-chat-virtual" || messagesCache.get(threadId)) return;
     try {
@@ -190,7 +262,6 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
 
   const contextValue = useMemo(() => ({
     activeThreadMessages,
-    setActiveThreadMessages,
     isLoadingMessages,
     messagesError,
     retryFetchMessages,
@@ -200,6 +271,12 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
     setActiveThreadId,
     incrementFetchRequestSeq,
     getFetchRequestSeq,
+    appendMessage,
+    upsertMessage,
+    markStreamInterrupted,
+    markLastAssistantInterrupted,
+    updateApprovalStatus,
+    removeInterruptedMessages,
   }), [
     activeThreadMessages,
     isLoadingMessages,
@@ -211,6 +288,12 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
     setActiveThreadId,
     incrementFetchRequestSeq,
     getFetchRequestSeq,
+    appendMessage,
+    upsertMessage,
+    markStreamInterrupted,
+    markLastAssistantInterrupted,
+    updateApprovalStatus,
+    removeInterruptedMessages,
   ]);
 
   return (
