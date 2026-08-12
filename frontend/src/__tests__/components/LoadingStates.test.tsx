@@ -1,22 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import React from 'react';
+import { describe, it, expect } from 'vitest';
+import { render } from '@testing-library/react';
 import {
   LoadingSpinner,
-  LoadingOverlay,
-  LoadingCard,
-  MessageSkeleton,
-  ChatSkeleton,
-  CompactSkeleton,
+  ThreadSwitchSkeleton,
 } from '@/components/ui/LoadingStates';
-
-vi.mock('framer-motion', () => ({
-  motion: {
-    div: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement> & Record<string, unknown>) => (
-      <div {...props}>{children}</div>
-    ),
-  },
-}));
 
 describe('LoadingStates', () => {
   describe('LoadingSpinner', () => {
@@ -44,91 +31,41 @@ describe('LoadingStates', () => {
       const { container } = render(<LoadingSpinner className="my-custom-class" />);
       expect(container.firstChild).toHaveClass('my-custom-class');
     });
-  });
 
-  describe('LoadingOverlay', () => {
-    it('renders spinner', () => {
-      const { container } = render(<LoadingOverlay />);
-      expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+    it('has role=status for accessibility', () => {
+      const { container } = render(<LoadingSpinner />);
+      expect(container.firstChild).toHaveAttribute('role', 'status');
     });
 
-    it('renders message when provided', () => {
-      render(<LoadingOverlay message="Please wait..." />);
-      expect(screen.getByText('Please wait...')).toBeInTheDocument();
-    });
-
-    it('does not render message when not provided', () => {
-      const { container } = render(<LoadingOverlay />);
-      const p = container.querySelector('p');
-      expect(p).toBeNull();
-    });
-
-    it('applies custom className', () => {
-      const { container } = render(<LoadingOverlay className="custom-overlay" />);
-      expect(container.firstChild).toHaveClass('custom-overlay');
+    it('accepts aria-label', () => {
+      const { container } = render(<LoadingSpinner aria-label="Loading content" />);
+      expect(container.firstChild).toHaveAttribute('aria-label', 'Loading content');
     });
   });
 
-  describe('LoadingCard', () => {
-    it('renders default message', () => {
-      render(<LoadingCard />);
-      expect(screen.getByText('Loading...')).toBeInTheDocument();
-    });
-
-    it('renders custom message', () => {
-      render(<LoadingCard message="Fetching data..." />);
-      expect(screen.getByText('Fetching data...')).toBeInTheDocument();
-    });
-
-    it('applies custom className', () => {
-      const { container } = render(<LoadingCard className="custom-card" />);
-      expect(container.firstChild).toHaveClass('custom-card');
-    });
-  });
-
-  describe('MessageSkeleton', () => {
-    it('renders the skeleton layout', () => {
-      const { container } = render(<MessageSkeleton />);
-      expect(container.querySelector('[dir="ltr"]')).toBeInTheDocument();
-    });
-
-    it('renders user and assistant skeleton sections', () => {
-      const { container } = render(<MessageSkeleton />);
-      const divs = container.querySelectorAll('.animate-pulse');
-      expect(divs.length).toBeGreaterThan(0);
-    });
-
-    it('renders thinking text', () => {
-      render(<MessageSkeleton />);
-      expect(screen.getByText('Thinking...')).toBeInTheDocument();
-    });
-  });
-
-  describe('ChatSkeleton', () => {
-    it('renders three message skeletons', () => {
-      const { container } = render(<ChatSkeleton />);
-      const avatars = container.querySelectorAll('.h-10.w-10.rounded-full');
-      expect(avatars).toHaveLength(3);
-    });
-
-    it('renders alternating alignment', () => {
-      const { container } = render(<ChatSkeleton />);
-      const reversed = container.querySelectorAll('.flex-row-reverse');
-      expect(reversed.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe('CompactSkeleton', () => {
-    it('renders message bubbles', () => {
-      const { container } = render(<CompactSkeleton />);
+  describe('ThreadSwitchSkeleton', () => {
+    it('renders bubble skeletons', () => {
+      const { container } = render(<ThreadSwitchSkeleton />);
       const bubbles = container.querySelectorAll('.h-9.rounded-2xl');
       expect(bubbles).toHaveLength(5);
     });
 
-    it('renders composer skeleton', () => {
-      const { container } = render(<CompactSkeleton />);
-      const composer = container.querySelector('.rounded-3xl');
-      expect(composer).toBeInTheDocument();
+    it('has role=status for accessibility', () => {
+      const { container } = render(<ThreadSwitchSkeleton />);
+      expect(container.firstChild).toHaveAttribute('role', 'status');
+    });
+
+    it('has aria-busy=true', () => {
+      const { container } = render(<ThreadSwitchSkeleton />);
+      expect(container.firstChild).toHaveAttribute('aria-busy', 'true');
+    });
+
+    it('marks decorative bubbles as aria-hidden', () => {
+      const { container } = render(<ThreadSwitchSkeleton />);
+      const bubbles = container.querySelectorAll('.h-9.rounded-2xl');
+      bubbles.forEach((bubble) => {
+        expect(bubble).toHaveAttribute('aria-hidden', 'true');
+      });
     });
   });
 });

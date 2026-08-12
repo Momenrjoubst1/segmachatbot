@@ -2,6 +2,7 @@ import { createContext, useContext, ReactNode, useCallback, useMemo } from "reac
 import { ChatDraftsProvider, useChatDrafts } from "@/context/ChatDraftsContext";
 import { ChatMessagesProvider, useChatMessages, ChatMessage } from "@/context/ChatMessagesContext";
 import { ChatThreadsProvider, useChatThreads, ChatThread } from "@/context/ChatThreadsContext";
+import type { LoadErrorCode } from "@/lib/load-errors";
 
 export type { ChatThread, ChatMessage };
 
@@ -11,11 +12,11 @@ interface ChatHistoryContextType {
   setActiveThreadId: (id: string | null) => void;
   loadThread: (id: string | null) => void;
   isLoadingThreads: boolean;
-  threadsError: string | null;
+  threadsError: LoadErrorCode | null;
   retryFetchThreads: () => Promise<void>;
   activeThreadMessages: ChatMessage[];
   isLoadingMessages: boolean;
-  messagesError: string | null;
+  messagesError: LoadErrorCode | null;
   retryFetchMessages: () => Promise<void>;
   loadMessagesForThread: (threadId: string | null, options?: {
     seedMessages?: ChatMessage[];

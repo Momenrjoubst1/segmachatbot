@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import type { LoadErrorCode } from "@/lib/load-errors";
 
 export interface AcademicCourse {
   id: string;
@@ -22,7 +23,7 @@ export function useCourses() {
   const [courses, setCourses] = useState<AcademicCourse[]>([]);
   const [isOnboarded, setIsOnboarded] = useState(false);
   const [isCoursesLoading, setIsCoursesLoading] = useState(true);
-  const [coursesError, setCoursesError] = useState<string | null>(null);
+  const [coursesError, setCoursesError] = useState<LoadErrorCode | null>(null);
 
   // Fetch courses from Supabase
   const fetchCourses = useCallback(async () => {
@@ -46,7 +47,7 @@ export function useCourses() {
 
       if (error) {
         console.error("[useCourses] Fetch error:", error);
-        setCoursesError("Failed to load courses. Please try again.");
+        setCoursesError("courses_load_failed");
         return;
       }
 
@@ -55,7 +56,7 @@ export function useCourses() {
       setCoursesError(null);
     } catch (err) {
       console.error("[useCourses] Unexpected error:", err);
-      setCoursesError("An unexpected error occurred while loading courses.");
+      setCoursesError("courses_unexpected");
     } finally {
       setIsCoursesLoading(false);
     }

@@ -1,6 +1,10 @@
 {
   "appName": "JUST Social",
   "loading": "Loading...",
+  "retry": "Retry",
+  "loadingMessages": "Loading messages...",
+  "loadingConversations": "Loading conversations...",
+  "loadingCourses": "Loading courses...",
   "close": "Close",
   "cancel": "Cancel",
   "accept": "Accept",

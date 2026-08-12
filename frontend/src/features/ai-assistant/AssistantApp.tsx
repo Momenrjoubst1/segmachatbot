@@ -13,6 +13,10 @@ import { RAGProvider } from "../../context/RAGContext";
 import { TopLoadingBar } from "@/components/ui/TopLoadingBar";
 import { ThreadSwitchSkeleton } from "@/components/ui/LoadingStates";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
+import { LOAD_ERROR_I18N } from "@/lib/load-errors";
+import { LoadErrorPanel } from "@/components/ui/LoadErrorPanel";
+import { LoadingAnnouncer } from "@/components/ui/LoadingAnnouncer";
 
 import { SidebarView } from "./shadcn/components/Sidebar/SidebarView";
 import { MobileSidebarView } from "./shadcn/components/Sidebar/MobileSidebarView";
@@ -179,6 +183,7 @@ const AssistantChatInner = ({
 
 const AssistantAppContent = () => {
   const { threads, activeThreadId, isLoadingMessages, messagesError, retryFetchMessages, saveDraft, getDraft, newChatCount } = useChatHistory();
+  const { t } = useTranslation(["errors", "common"]);
   const { setBaseTitle } = useTitle();
   const [activeCourse, setActiveCourse] = useState<AcademicCourse | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -307,6 +312,10 @@ const AssistantAppContent = () => {
           />
         </div>
         <div className="flex-1 min-w-0 h-full flex flex-col">
+          <LoadingAnnouncer
+            busy={isLoadingMessages}
+            label={t("common:loadingMessages", { ns: "common" })}
+          />
           <Header
             sidebarCollapsed={sidebarCollapsed}
             onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -315,24 +324,20 @@ const AssistantAppContent = () => {
             onToggleArtifacts={() => setArtifactPanelOpen(!artifactPanelOpen)}
             onToggleEmailHistory={() => setEmailHistoryOpen(!emailHistoryOpen)}
           />
-          <div className="relative flex-1 min-h-0 overflow-hidden">
+          <div
+            className="relative flex-1 min-h-0 overflow-hidden"
+            aria-busy={isLoadingMessages}
+            aria-live="polite"
+          >
             {isLoadingMessages && !messagesError && <TopLoadingBar />}
             {isLoadingMessages && !messagesError && (
-              <div className="absolute inset-0 z-20 flex flex-1 flex-col bg-background">
+              <div className="absolute inset-0 z-20 flex flex-1 flex-col bg-background/80 backdrop-blur-[2px]">
                 <ThreadSwitchSkeleton />
               </div>
             )}
             {messagesError && !isLoadingMessages && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-background">
-                <div className="flex flex-col items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-center">
-                  <p className="text-xs text-destructive">{messagesError}</p>
-                  <button
-                    onClick={retryFetchMessages}
-                    className="text-xs font-medium text-destructive underline underline-offset-2 hover:text-destructive/80"
-                  >
-                    Retry
-                  </button>
-                </div>
+                <LoadErrorPanel errorCode={messagesError} onRetry={retryFetchMessages} />
               </div>
             )}
             <motion.div

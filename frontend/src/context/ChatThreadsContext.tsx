@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { authFetch } from "@/lib/auth";
 import { useAuthContext } from "@/context/AuthContext";
 import { useChatMessages } from "@/context/ChatMessagesContext";
+import type { LoadErrorCode } from "@/lib/load-errors";
 
 export interface ChatThread {
   id: string;
@@ -15,7 +16,7 @@ export interface ChatThread {
 interface ChatThreadsContextType {
   threads: ChatThread[];
   isLoadingThreads: boolean;
-  threadsError: string | null;
+  threadsError: LoadErrorCode | null;
   fetchThreads: () => Promise<void>;
   retryFetchThreads: () => Promise<void>;
   deleteThread: (threadId: string) => Promise<void>;
@@ -46,7 +47,7 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
   const [isLoadingThreads, setIsLoadingThreads] = useState(false);
-  const [threadsError, setThreadsError] = useState<string | null>(null);
+  const [threadsError, setThreadsError] = useState<LoadErrorCode | null>(null);
   // Ref to read latest messages without adding them to useEffect deps
   const activeMessagesRef = useRef(activeThreadMessages);
   activeMessagesRef.current = activeThreadMessages;
@@ -96,10 +97,10 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
             `→ Or run both together from the project root: \`npm run dev\`\n` +
             `Original error: ${err.message}`,
         );
-        setThreadsError("Cannot reach the server. Please check your connection.");
+        setThreadsError("network_unreachable");
       } else {
         console.error("Failed to fetch threads", err);
-        setThreadsError("Failed to load conversations. Please try again.");
+        setThreadsError("threads_load_failed");
       }
     } finally {
       setIsLoadingThreads(false);

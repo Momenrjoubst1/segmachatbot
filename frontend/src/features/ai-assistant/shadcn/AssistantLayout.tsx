@@ -9,6 +9,7 @@ import useCalendarSync from "@/features/calendar/hooks/useCalendarSync";
 import { Thread } from "./components/Thread/ThreadWelcome";
 import { useAgenticAction } from "../../../context/AgenticUIBus";
 import { BarsSpinner } from "@/components/ui/BarsSpinner";
+import { LoadingSpinner } from "@/components/ui/LoadingStates";
 import { ErrorBoundary } from "@/components/ui/core/ErrorBoundary";
 
 // Lazy load heavy components
@@ -23,7 +24,7 @@ export { Thread } from "./components/Thread/ThreadWelcome";
 
 const PanelLoading = () => (
   <div className="flex items-center justify-center h-32">
-    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    <LoadingSpinner size="sm" />
   </div>
 );
 
@@ -262,7 +263,7 @@ export const Shadcn: FC<{
               )}
               {isCoursesLoadingVisible && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
-                  <BarsSpinner size={60} className="text-primary" />
+                  <BarsSpinner size={60} className="text-primary" aria-label="Loading courses" />
                 </div>
               )}
               {coursesError && !isCoursesLoadingVisible && (

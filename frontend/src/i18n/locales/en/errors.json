@@ -18,5 +18,10 @@
   "emailFailed": "Failed to send email",
   "emailRateLimited": "Email rate limit exceeded",
   "emailConfirmRequired": "Please confirm sending the email",
-  "codeExecutionFailed": "Failed to execute code"
+  "codeExecutionFailed": "Failed to execute code",
+  "messages_load_failed": "Failed to load messages. Please try again.",
+  "threads_load_failed": "Failed to load conversations. Please try again.",
+  "courses_load_failed": "Failed to load courses. Please try again.",
+  "courses_unexpected": "An unexpected error occurred while loading courses.",
+  "network_unreachable": "Cannot reach the server. Please check your connection."
 }

@@ -18,5 +18,10 @@
   "emailFailed": "فشل إرسال البريد الإلكتروني",
   "emailRateLimited": "تم تجاوز الحد المسموح بإرسال البريد",
   "emailConfirmRequired": "يرجى تأكيد إرسال البريد الإلكتروني",
-  "codeExecutionFailed": "فشل في تنفيذ الكود"
+  "codeExecutionFailed": "فشل في تنفيذ الكود",
+  "messages_load_failed": "فشل تحميل الرسائل. حاول مرة أخرى.",
+  "threads_load_failed": "فشل تحميل المحادثات. حاول مرة أخرى.",
+  "courses_load_failed": "فشل تحميل المقررات. حاول مرة أخرى.",
+  "courses_unexpected": "حدث خطأ غير متوقع أثناء تحميل المقررات.",
+  "network_unreachable": "لا يمكن الوصول إلى السيرفر. يرجى التحقق من الاتصال."
 }

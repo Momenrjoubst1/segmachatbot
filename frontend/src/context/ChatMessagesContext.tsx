@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useMemo, useRef, ReactNode } from "react";
 import { authFetch } from "@/lib/auth";
+import type { LoadErrorCode } from "@/lib/load-errors";
 
 export interface ChatMessage {
   id: string;
@@ -48,7 +49,7 @@ function useLRUCache<K, V>(maxSize: number) {
 interface ChatMessagesContextType {
   activeThreadMessages: ChatMessage[];
   isLoadingMessages: boolean;
-  messagesError: string | null;
+  messagesError: LoadErrorCode | null;
   retryFetchMessages: () => Promise<void>;
   loadMessagesForThread: (threadId: string | null, options?: {
     seedMessages?: ChatMessage[];
@@ -79,7 +80,7 @@ const ChatMessagesContext = createContext<ChatMessagesContextType | undefined>(u
 export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
   const [activeThreadMessages, setActiveThreadMessages] = useState<ChatMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-  const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [messagesError, setMessagesError] = useState<LoadErrorCode | null>(null);
   const messagesCache = useLRUCache<string, ChatMessage[]>(MESSAGES_CACHE_MAX);
   const activeThreadIdRef = useRef<string | null>(null);
   const fetchRequestSeq = useRef(0);
@@ -104,13 +105,13 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
         if (activeThreadIdRef.current === threadId) setActiveThreadMessages([]);
       } else {
         if (requestId === fetchRequestSeq.current) {
-          setMessagesError("Failed to load messages. Please try again.");
+          setMessagesError("messages_load_failed");
         }
       }
     } catch (err) {
       console.error("[ChatHistory] fetchMessages error:", err);
       if (requestId === fetchRequestSeq.current) {
-        setMessagesError("Cannot reach the server. Please check your connection.");
+        setMessagesError("network_unreachable");
       }
     } finally {
       if (requestId === fetchRequestSeq.current) {

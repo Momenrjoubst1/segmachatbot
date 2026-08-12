@@ -1,6 +1,11 @@
 export function AppSkeleton() {
   return (
-    <div className="flex h-screen h-[100dvh] w-full bg-background text-foreground">
+    <div
+      role="status"
+      aria-busy="true"
+      aria-label="Loading"
+      className="flex h-screen h-[100dvh] w-full bg-background text-foreground"
+    >
       {/* Sidebar skeleton — matches w-65 (260px) */}
       <div className="hidden md:flex w-65 shrink-0 flex-col border-r border-border bg-background p-4 gap-4">
         <div className="h-7 w-24 rounded-md bg-muted animate-pulse" />
