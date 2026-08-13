@@ -1,3 +1,11 @@
+const APP_SKELETON_BUBBLES: { side: "left" | "right"; w: number }[] = [
+  { side: "right", w: 55 },
+  { side: "left", w: 75 },
+  { side: "right", w: 40 },
+  { side: "left", w: 85 },
+  { side: "left", w: 60 },
+];
+
 export function AppSkeleton() {
   return (
     <div
@@ -29,16 +37,17 @@ export function AppSkeleton() {
           <div className="h-4 w-32 rounded bg-muted animate-pulse" />
         </div>
 
-        {/* Messages area */}
-        <div className="flex flex-1 flex-col justify-end gap-4 p-6 pb-4">
-          {[65, 45, 80, 55].map((w, i) => (
+        {/* Messages area — aligned with ThreadSwitchSkeleton presets */}
+        <div className="flex flex-1 flex-col justify-end gap-3 p-6 pb-4">
+          {APP_SKELETON_BUBBLES.map(({ side, w }, i) => (
             <div
               key={i}
-              className={`flex ${i % 2 === 0 ? "justify-end" : "justify-start"}`}
+              className={`flex ${side === "right" ? "justify-end" : "justify-start"}`}
             >
               <div
+                aria-hidden="true"
                 className="h-9 rounded-2xl bg-muted animate-pulse"
-                style={{ width: `${w}%`, maxWidth: "360px", animationDelay: `${i * 80}ms` }}
+                style={{ width: `${w}%`, maxWidth: "360px", animationDelay: `${i * 60}ms` }}
               />
             </div>
           ))}

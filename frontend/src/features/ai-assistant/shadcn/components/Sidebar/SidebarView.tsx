@@ -60,7 +60,8 @@ const SidebarCollapsedView: FC<{
             alt={profile.name}
             className="size-7 rounded-full object-cover ring-1 ring-white/20 cursor-pointer"
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = getUserAvatarUrl(null, profile.name, 28);
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = getUserAvatarUrl(null, profile.name, 28);
             }}
           />
         ) : (

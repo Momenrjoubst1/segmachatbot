@@ -82,7 +82,8 @@ export const UserProfileCard: FC = () => {
         alt={profile.name}
         className="size-8 shrink-0 rounded-full object-cover ring-1 ring-white/10"
         onError={(e) => {
-          (e.currentTarget as HTMLImageElement).src = getUserAvatarUrl(null, profile.name, 32);
+          e.currentTarget.onerror = null;
+          e.currentTarget.src = getUserAvatarUrl(null, profile.name, 32);
         }}
       />
       <div className="min-w-0 flex-1">

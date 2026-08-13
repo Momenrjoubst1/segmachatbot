@@ -134,7 +134,7 @@ app.use(globalLimiter);
 app.use("/api/chat", authMiddleware, chatRoutes);
 app.use("/api/feedback", authMiddleware, feedbackRoutes);
 app.use("/api/moderation", authMiddleware, moderationRoutes);
-app.use("/api/proxy", authMiddleware, proxyLimiter, proxyRoutes);
+app.use("/api/proxy", proxyLimiter, proxyRoutes);
 app.use("/api/memory", authMiddleware, memoryRoutes);
 app.use("/api/artifacts", authMiddleware, artifactsRoutes);
 app.use("/api/analytics", authMiddleware, analyticsRoutes);

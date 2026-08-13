@@ -17,7 +17,25 @@ export function proxyImage(url: string): string {
     return url;
   }
 
-  // For external URLs (ui-avatars.com, dicebear.com, etc.), proxy them
+  // Public avatar CDNs — no SSRF risk, serve directly to avoid proxy bottleneck
+  const parsed = tryParseUrl(url);
+  if (parsed && isPublicAvatarCdn(parsed.hostname)) {
+    return url;
+  }
+
+  // For other external URLs, proxy them
   const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3004';
   return `${backendUrl}/api/proxy/image?url=${encodeURIComponent(url)}`;
+}
+
+function tryParseUrl(url: string): URL | null {
+  try { return new URL(url); } catch { return null; }
+}
+
+function isPublicAvatarCdn(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return (
+    h === 'ui-avatars.com' || h.endsWith('.ui-avatars.com') ||
+    h === 'api.dicebear.com' || h.endsWith('.dicebear.com')
+  );
 }

@@ -47,4 +47,18 @@ describe('Image Proxy', () => {
     const result = proxyImage(undefined as any);
     expect(result).toBeUndefined();
   });
+
+  it('should not proxy ui-avatars.com URLs (public CDN)', () => {
+    const url = 'https://ui-avatars.com/api/?name=Test&size=30';
+    const result = proxyImage(url);
+    expect(result).toBe(url);
+    expect(result).not.toContain('/api/proxy/image');
+  });
+
+  it('should not proxy dicebear.com URLs (public CDN)', () => {
+    const url = 'https://api.dicebear.com/7.x/avataaars/svg?seed=test';
+    const result = proxyImage(url);
+    expect(result).toBe(url);
+    expect(result).not.toContain('/api/proxy/image');
+  });
 });

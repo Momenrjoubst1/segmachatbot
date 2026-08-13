@@ -14,9 +14,9 @@ import { TopLoadingBar } from "@/components/ui/TopLoadingBar";
 import { ThreadSwitchSkeleton } from "@/components/ui/LoadingStates";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { LOAD_ERROR_I18N } from "@/lib/load-errors";
 import { LoadErrorPanel } from "@/components/ui/LoadErrorPanel";
 import { LoadingAnnouncer } from "@/components/ui/LoadingAnnouncer";
+import type { LoadErrorCode } from "@/lib/load-errors";
 
 import { SidebarView } from "./shadcn/components/Sidebar/SidebarView";
 import { MobileSidebarView } from "./shadcn/components/Sidebar/MobileSidebarView";
@@ -109,7 +109,7 @@ interface AssistantChatInnerProps {
   activeCourse: AcademicCourse | null;
   isOnboarded: boolean;
   isCoursesLoading: boolean;
-  coursesError: string | null;
+  coursesError: LoadErrorCode | null;
   retryCourses: () => void;
   localOnboarded: boolean;
   handleCompleteOnboarding: (courses: { course_name: string; credit_hours: number }[]) => Promise<void>;

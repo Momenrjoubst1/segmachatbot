@@ -1,6 +1,8 @@
 import { type AcademicCourse } from "../../../hooks/useCourses";
 import { useState, useEffect, useCallback, useMemo, type FC, lazy, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useTranslation } from "react-i18next";
+import { LOAD_ERROR_I18N, type LoadErrorCode } from "@/lib/load-errors";
 
 import { useKeyboardShortcuts } from "../../../hooks/useKeyboardShortcuts";
 import { toast } from "sonner";
@@ -31,7 +33,7 @@ const PanelLoading = () => (
 export const Shadcn: FC<{
   isOnboarded: boolean;
   isCoursesLoadingVisible?: boolean;
-  coursesError?: string | null;
+  coursesError?: LoadErrorCode | null;
   retryCourses?: () => void;
   onActiveCourseChange: (course: AcademicCourse | null) => void;
   onCompleteOnboarding: (draftCourses: { course_name: string; credit_hours: number }[]) => Promise<void>;
@@ -43,6 +45,7 @@ export const Shadcn: FC<{
   emailHistoryOpen: boolean;
   setEmailHistoryOpen: (open: boolean) => void;
 }> = ({ isOnboarded, isCoursesLoadingVisible, coursesError, retryCourses, onActiveCourseChange, onCompleteOnboarding, onSkipOnboarding, activeView, onToggleView, artifactPanelOpen, setArtifactPanelOpen, emailHistoryOpen, setEmailHistoryOpen }) => {
+  const { t } = useTranslation("errors");
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
 
   // Calendar state
@@ -269,7 +272,7 @@ export const Shadcn: FC<{
               {coursesError && !isCoursesLoadingVisible && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
                   <div className="flex flex-col items-center gap-4 rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center max-w-md">
-                    <div className="text-destructive text-sm font-medium">{coursesError}</div>
+                    <div className="text-destructive text-sm font-medium">{t(LOAD_ERROR_I18N[coursesError as LoadErrorCode])}</div>
                     {retryCourses && (
                       <button
                         onClick={retryCourses}
