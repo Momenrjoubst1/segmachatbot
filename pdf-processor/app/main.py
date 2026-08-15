@@ -5,7 +5,9 @@ import os
 import re
 import tempfile
 
+import boto3
 import fitz
+from botocore.config import Config
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -15,7 +17,7 @@ from .figures import pair_figures
 from .models import BBox, ProcessResult, ProcessedPage, TextBlock, TextChunk
 from .structure import build_structure_tree
 
-app = FastAPI(title="PDF Processor", version="0.2.0")
+app = FastAPI(title="PDF Processor", version="0.3.0")
 
 ALLOWED_DIRS = {tempfile.gettempdir(), "/tmp"}
 
@@ -26,6 +28,25 @@ VERTICAL_GAP_THRESHOLD = 20.0
 FONT_SIZE_TOLERANCE = 1.5
 SENTENCE_END = re.compile(r"(?<=[.!?؟])\s+")
 
+# Cloudflare R2 config
+R2_ACCOUNT_ID = os.environ.get("R2_ACCOUNT_ID", "")
+R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "")
+R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "")
+R2_BUCKET_NAME = os.environ.get("R2_BUCKET_NAME", "textbook-images")
+R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "")
+
+# Create R2 client (S3-compatible)
+r2_client = None
+if R2_ACCOUNT_ID and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY:
+    r2_client = boto3.client(
+        "s3",
+        endpoint_url=f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
+        aws_access_key_id=R2_ACCESS_KEY_ID,
+        aws_secret_access_key=R2_SECRET_ACCESS_KEY,
+        config=Config(signature_version="s3v4"),
+        region_name="auto",
+    )
+
 
 async def upload_image_to_storage(
     image_base64: str,
@@ -33,31 +54,27 @@ async def upload_image_to_storage(
     textbook_id: str,
     figure_id: str,
 ) -> str:
-    """Upload image to Supabase Storage and return public URL."""
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+    """Upload image to Cloudflare R2 and return public URL."""
+    if not r2_client or not R2_BUCKET_NAME:
         return ""
-
-    import httpx
 
     img_bytes = base64.b64decode(image_base64)
-    img_path = f"textbooks/{user_id}/{textbook_id}/{figure_id}.png"
+    key = f"textbooks/{user_id}/{textbook_id}/{figure_id}.png"
 
-    url = f"{SUPABASE_URL}/storage/v1/object/textbook-images/{img_path}"
-    headers = {
-        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
-        "Content-Type": "image/png",
-        "x-upsert": "true",
-    }
-
-    async with httpx.AsyncClient() as client:
-        resp = await client.put(url, content=img_bytes, headers=headers, timeout=30)
-        if resp.status_code in (200, 201):
-            return f"{SUPABASE_URL}/storage/v1/object/public/textbook-images/{img_path}"
+    try:
+        r2_client.put_object(
+            Bucket=R2_BUCKET_NAME,
+            Key=key,
+            Body=img_bytes,
+            ContentType="image/png",
+        )
+        # Return public URL
+        if R2_PUBLIC_URL:
+            return f"{R2_PUBLIC_URL}/{key}"
         return ""
-
-# Supabase config (for direct image upload)
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    except Exception as e:
+        print(f"Failed to upload to R2: {e}")
+        return ""
 
 
 @app.get("/health")
