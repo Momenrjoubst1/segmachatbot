@@ -554,3 +554,374 @@ CREATE POLICY "Users can upload email bodies" ON storage.objects FOR INSERT WITH
 CREATE POLICY "Users can view own email bodies" ON storage.objects FOR SELECT USING (bucket_id = 'email-bodies' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Users can upload course attachments" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'course-attachments' AND auth.uid()::text = (storage.foldername(name))[1]);
 CREATE POLICY "Anyone can view course attachments" ON storage.objects FOR SELECT USING (bucket_id = 'course-attachments');
+
+-- ==========================================
+-- TEXTBOOK UNDERSTANDING PIPELINE
+-- ==========================================
+-- Tables for BYOC (Bring Your Own Content) textbook feature:
+--   textbooks        — uploaded book metadata, processing status, structure tree
+--   textbook_chunks  — per-page text chunks with embeddings for hybrid search
+--   textbook_figures — extracted figures with captions and bounding boxes
+-- ==========================================
+
+-- TEXTBOOKS (uploaded book metadata + processing status)
+CREATE TABLE IF NOT EXISTS textbooks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  course_id UUID REFERENCES student_courses(id) ON DELETE SET NULL,
+  file_name TEXT NOT NULL,
+  file_url TEXT NOT NULL,
+  file_hash TEXT NOT NULL,
+  file_size_bytes BIGINT,
+  total_pages INTEGER,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+  progress JSONB DEFAULT '{}',
+  error TEXT,
+  structure_tree JSONB,
+  processing_started_at TIMESTAMPTZ,
+  processing_completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- TEXTBOOK CHUNKS (per-page text with embeddings)
+CREATE TABLE IF NOT EXISTS textbook_chunks (
+  id BIGSERIAL PRIMARY KEY,
+  textbook_id UUID NOT NULL REFERENCES textbooks(id) ON DELETE CASCADE,
+  page_number INTEGER NOT NULL,
+  structure_path TEXT,
+  content TEXT NOT NULL,
+  embedding VECTOR(768),
+  figure_refs JSONB DEFAULT '[]'::jsonb,
+  content_tsv tsvector GENERATED ALWAYS AS (
+    to_tsvector('simple', normalize_arabic(content))
+  ) STORED,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- TEXTBOOK FIGURES (extracted images with captions)
+CREATE TABLE IF NOT EXISTS textbook_figures (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  textbook_id UUID NOT NULL REFERENCES textbooks(id) ON DELETE CASCADE,
+  figure_id TEXT NOT NULL,
+  page_number INTEGER NOT NULL,
+  caption TEXT,
+  image_url TEXT NOT NULL,
+  bounding_box JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- TEXTBOOK INDEXES
+CREATE INDEX IF NOT EXISTS idx_textbooks_user ON textbooks(user_id);
+CREATE INDEX IF NOT EXISTS idx_textbooks_hash ON textbooks(file_hash);
+CREATE INDEX IF NOT EXISTS idx_textbooks_status ON textbooks(user_id, status);
+-- Per-user unique: only one completed record per file hash per user
+CREATE UNIQUE INDEX IF NOT EXISTS idx_textbooks_user_hash_unique
+ON textbooks(user_id, file_hash) WHERE status = 'completed';
+
+CREATE INDEX IF NOT EXISTS idx_textbook_chunks_textbook ON textbook_chunks(textbook_id, page_number);
+CREATE INDEX IF NOT EXISTS idx_textbook_chunks_structure ON textbook_chunks(textbook_id, structure_path);
+CREATE INDEX IF NOT EXISTS idx_textbook_figures_textbook ON textbook_figures(textbook_id, page_number);
+
+-- HNSW index for vector search
+CREATE INDEX IF NOT EXISTS idx_textbook_chunks_embedding_hnsw
+ON textbook_chunks USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
+
+-- GIN index for BM25/tsvector search
+CREATE INDEX IF NOT EXISTS idx_textbook_chunks_tsv
+ON textbook_chunks USING gin(content_tsv);
+
+-- TEXTBOOK RLS POLICIES
+ALTER TABLE textbooks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE textbook_chunks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE textbook_figures ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own textbooks" ON textbooks
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own textbooks" ON textbooks
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own textbooks" ON textbooks
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete own textbooks" ON textbooks
+  FOR DELETE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view chunks in own textbooks" ON textbook_chunks
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_chunks.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can insert chunks in own textbooks" ON textbook_chunks
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_chunks.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can delete chunks in own textbooks" ON textbook_chunks
+  FOR DELETE USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_chunks.textbook_id AND textbooks.user_id = auth.uid())
+  );
+
+CREATE POLICY "Users can view figures in own textbooks" ON textbook_figures
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_figures.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can insert figures in own textbooks" ON textbook_figures
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_figures.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can delete figures in own textbooks" ON textbook_figures
+  FOR DELETE USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_figures.textbook_id AND textbooks.user_id = auth.uid())
+  );
+
+-- ==========================================
+-- ARABIC NORMALIZATION FUNCTION
+-- ==========================================
+CREATE OR REPLACE FUNCTION normalize_arabic(text TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql IMMUTABLE
+AS $$
+DECLARE
+  result TEXT;
+BEGIN
+  result := text;
+  
+  -- Remove tatweel (kashida)
+  result := regexp_replace(result, '\u0640', '', 'g');
+  
+  -- Normalize alef variants to plain alef
+  result := regexp_replace(result, '[\u0622\u0623\u0625]', '\u0627', 'g');
+  
+  -- Normalize teh marbuta to heh
+  result := regexp_replace(result, '\u0629', '\u0647', 'g');
+  
+  -- Normalize yeh variants
+  result := regexp_replace(result, '\u0649', '\u064A', 'g');
+  
+  -- Remove diacritics (tashkeel)
+  result := regexp_replace(result, '[\u064B-\u065F]', '', 'g');
+  
+  -- Strip "ال" prefix only at word beginnings
+  result := regexp_replace(result, '(^| )ال', '\1', 'g');
+  
+  RETURN result;
+END;
+$$;
+
+-- ==========================================
+-- TEXTBOOK VECTOR SEARCH RPC — match_textbook_chunks
+-- ==========================================
+CREATE OR REPLACE FUNCTION match_textbook_chunks (
+  query_embedding VECTOR(768),
+  p_textbook_id UUID,
+  p_match_threshold FLOAT DEFAULT 0.5,
+  p_match_count INT DEFAULT 10,
+  p_page_start INT DEFAULT NULL,
+  p_page_end INT DEFAULT NULL
+)
+RETURNS TABLE (
+  id BIGINT,
+  textbook_id UUID,
+  page_number INTEGER,
+  structure_path TEXT,
+  content TEXT,
+  figure_refs JSONB,
+  similarity FLOAT
+)
+LANGUAGE sql STABLE
+AS $$
+  SELECT
+    textbook_chunks.id,
+    textbook_chunks.textbook_id,
+    textbook_chunks.page_number,
+    textbook_chunks.structure_path,
+    textbook_chunks.content,
+    textbook_chunks.figure_refs,
+    1 - (textbook_chunks.embedding <=> query_embedding) AS similarity
+  FROM textbook_chunks
+  WHERE textbook_chunks.textbook_id = p_textbook_id
+    AND 1 - (textbook_chunks.embedding <=> query_embedding) > p_match_threshold
+    AND (p_page_start IS NULL OR textbook_chunks.page_number >= p_page_start)
+    AND (p_page_end IS NULL OR textbook_chunks.page_number <= p_page_end)
+  ORDER BY similarity DESC
+  LIMIT p_match_count;
+$$;
+
+-- ==========================================
+-- BATCH EMBEDDING UPDATE RPC (scoped by textbook_id)
+-- ==========================================
+CREATE OR REPLACE FUNCTION batch_update_embeddings(
+  p_updates JSONB,
+  p_textbook_id UUID
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  item JSONB;
+BEGIN
+  FOR item IN SELECT jsonb_array_elements(p_updates)
+  LOOP
+    UPDATE textbook_chunks
+    SET embedding = (item->>'embedding')::vector(768)
+    WHERE id = (item->>'id')::bigint
+      AND textbook_id = p_textbook_id;
+  END LOOP;
+END;
+$$;
+
+-- ==========================================
+-- HYBRID SEARCH (UNION + RRF) with Arabic normalization
+-- ==========================================
+CREATE OR REPLACE FUNCTION hybrid_search_textbook_chunks(
+  query_embedding VECTOR(768),
+  query_text TEXT,
+  p_textbook_id UUID,
+  p_match_threshold FLOAT DEFAULT 0.4,
+  p_match_count INT DEFAULT 10,
+  p_page_start INT DEFAULT NULL,
+  p_page_end INT DEFAULT NULL
+)
+RETURNS TABLE (
+  id BIGINT,
+  textbook_id UUID,
+  page_number INTEGER,
+  structure_path TEXT,
+  content TEXT,
+  figure_refs JSONB,
+  similarity FLOAT,
+  bm25_score FLOAT,
+  final_score FLOAT
+)
+LANGUAGE sql STABLE
+AS $$
+  WITH normalized_query AS (
+    SELECT normalize_arabic(query_text) AS query_text
+  ),
+  vector_results AS (
+    SELECT
+      textbook_chunks.id,
+      textbook_chunks.textbook_id,
+      textbook_chunks.page_number,
+      textbook_chunks.structure_path,
+      textbook_chunks.content,
+      textbook_chunks.figure_refs,
+      1 - (textbook_chunks.embedding <=> query_embedding) AS similarity,
+      ROW_NUMBER() OVER (ORDER BY 1 - (textbook_chunks.embedding <=> query_embedding) DESC) AS rank
+    FROM textbook_chunks
+    WHERE textbook_chunks.textbook_id = p_textbook_id
+      AND textbook_chunks.embedding IS NOT NULL
+      AND 1 - (textbook_chunks.embedding <=> query_embedding) > p_match_threshold
+      AND (p_page_start IS NULL OR textbook_chunks.page_number >= p_page_start)
+      AND (p_page_end IS NULL OR textbook_chunks.page_number <= p_page_end)
+    ORDER BY similarity DESC
+    LIMIT 20
+  ),
+  bm25_results AS (
+    SELECT
+      textbook_chunks.id,
+      textbook_chunks.textbook_id,
+      textbook_chunks.page_number,
+      textbook_chunks.structure_path,
+      textbook_chunks.content,
+      textbook_chunks.figure_refs,
+      ts_rank_cd(
+        textbook_chunks.content_tsv,
+        plainto_tsquery('simple', nq.query_text)
+      ) AS bm25_score,
+      ROW_NUMBER() OVER (
+        ORDER BY ts_rank_cd(
+          textbook_chunks.content_tsv,
+          plainto_tsquery('simple', nq.query_text)
+        ) DESC
+      ) AS rank
+    FROM textbook_chunks
+    CROSS JOIN normalized_query nq
+    WHERE textbook_chunks.textbook_id = p_textbook_id
+      AND textbook_chunks.content_tsv @@ plainto_tsquery('simple', nq.query_text)
+      AND (p_page_start IS NULL OR textbook_chunks.page_number >= p_page_start)
+      AND (p_page_end IS NULL OR textbook_chunks.page_number <= p_page_end)
+    ORDER BY bm25_score DESC
+    LIMIT 20
+  ),
+  combined AS (
+    SELECT
+      v.id,
+      v.textbook_id,
+      v.page_number,
+      v.structure_path,
+      v.content,
+      v.figure_refs,
+      v.similarity,
+      COALESCE(b.bm25_score, 0) AS bm25_score,
+      (1.0 / (60 + v.rank)) AS rrf_vector,
+      0.0 AS rrf_bm25
+    FROM vector_results v
+    LEFT JOIN bm25_results b ON v.id = b.id
+
+    UNION
+
+    SELECT
+      b.id,
+      b.textbook_id,
+      b.page_number,
+      b.structure_path,
+      b.content,
+      b.figure_refs,
+      COALESCE(v.similarity, 0) AS similarity,
+      b.bm25_score,
+      0.0 AS rrf_vector,
+      (1.0 / (60 + b.rank)) AS rrf_bm25
+    FROM bm25_results b
+    LEFT JOIN vector_results v ON b.id = v.id
+    WHERE v.id IS NULL
+  ),
+  scored AS (
+    SELECT
+      *,
+      -- Normalize vector similarity to 0-1 range
+      GREATEST(0, LEAST(1, similarity)) AS norm_vector,
+      -- Normalize BM25 score using log scaling
+      CASE WHEN bm25_score > 0 THEN LEAST(1, bm25_score / (bm25_score + 1)) ELSE 0 END AS norm_bm25,
+      -- RRF scores
+      (rrf_vector + rrf_bm25) AS rrf_score
+    FROM combined
+  ),
+  final_scored AS (
+    SELECT
+      *,
+      -- Combine normalized components with equal weight for vector and BM25
+      -- Then blend with RRF for diversity
+      (0.5 * norm_vector + 0.5 * norm_bm25) AS combined_score
+    FROM scored
+  )
+  SELECT
+    id,
+    textbook_id,
+    page_number,
+    structure_path,
+    content,
+    figure_refs,
+    similarity,
+    bm25_score,
+    -- Final score: 70% combined similarity + 30% RRF diversity
+    (0.7 * combined_score + 0.3 * rrf_score) AS final_score
+  FROM final_scored
+  ORDER BY final_score DESC
+  LIMIT p_match_count;
+$$;
+
+-- ==========================================
+-- TEXTBOOK STORAGE BUCKET (private)
+-- ==========================================
+INSERT INTO storage.buckets (id, name, public) VALUES ('textbook-images', 'textbook-images', false)
+  ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Users can upload textbook images" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'textbook-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+CREATE POLICY "Users can view own textbook images" ON storage.objects
+  FOR SELECT USING (
+    bucket_id = 'textbook-images'
+    AND auth.uid()::text = (storage.foldername(name))[1]
+  );
+CREATE POLICY "Users can delete own textbook images" ON storage.objects
+  FOR DELETE USING (bucket_id = 'textbook-images' AND auth.uid()::text = (storage.foldername(name))[1]);

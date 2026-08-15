@@ -188,6 +188,7 @@ export async function runRagPipeline(args: {
         matchThreshold,
         initialMatchCount,
         finalMatchCount,
+        userId,
       });
     }
 
@@ -201,16 +202,32 @@ export async function runRagPipeline(args: {
 
     // 5. Build context block
     const sourceNames = uniqueSourceNames(rankedDocs);
+    const hasTextbookChunks = rankedDocs.some(d => d.metadata?.textbook_id);
+    
     const contextText = rankedDocs
-      .map((d, i) =>
-        `[Source ${i + 1}: ${cleanSourceName(typeof d.metadata?.source === 'string' ? d.metadata.source : typeof d.metadata?.source_url === 'string' ? d.metadata.source_url : typeof d.metadata?.file_name === 'string' ? d.metadata.file_name : undefined)}]\n${d.content}`,
-      )
+      .map((d, i) => {
+        const sourceName = cleanSourceName(
+          typeof d.metadata?.source === 'string' ? d.metadata.source : 
+          typeof d.metadata?.source_url === 'string' ? d.metadata.source_url : 
+          typeof d.metadata?.file_name === 'string' ? d.metadata.file_name : undefined
+        );
+        
+        // Add page number for textbook chunks
+        const pageHint = d.metadata?.page_number 
+          ? ` (page ${d.metadata.page_number})` 
+          : '';
+        
+        return `[Source ${i + 1}: ${sourceName}${pageHint}]\n${d.content}`;
+      })
       .join("\n\n");
+
+    // Add educational grounding prompt when textbook chunks are present
+    const textbookPrompt = hasTextbookChunks ? `\n\n${(await import("../../textbook/textbook-prompts.js")).TEXTBOOK_SYSTEM_PROMPT_ADDITION}` : '';
 
     return {
       ragContext: {
         hasContext: true,
-        contextText,
+        contextText: contextText + textbookPrompt,
         sourceNames,
         retrievalMethod: 'hybrid',
       },
@@ -239,12 +256,13 @@ async function retrieveAndRank(args: {
   matchThreshold: number;
   initialMatchCount: number;
   finalMatchCount: number;
+  userId: string;
 }): Promise<RankedDoc[] | null> {
-  const { supabase, queryEmbedding, searchQuery, matchThreshold, initialMatchCount, finalMatchCount } = args;
+  const { supabase, queryEmbedding, searchQuery, matchThreshold, initialMatchCount, finalMatchCount, userId } = args;
   const { getBM25Search } = await import("../../rag/bm25-search.js");
-  const bm25 = getBM25Search();
+  const bm25 = await getBM25Search();
 
-  const [vectorResult, bm25Results] = await Promise.all([
+  const [vectorResult, bm25Results, textbookResults] = await Promise.all([
     Promise.resolve(
       supabase.rpc("match_documents", {
         query_embedding: queryEmbedding,
@@ -260,6 +278,19 @@ async function retrieveAndRank(args: {
     Promise.resolve(
       bm25.getDocCount() > 0 ? bm25.search(searchQuery, initialMatchCount) : [],
     ),
+    import("../../textbook/textbook-search.js")
+      .then((mod) =>
+        mod.searchTextbooksForUser({
+          userId,
+          query: searchQuery,
+          queryEmbedding,
+          matchCount: initialMatchCount,
+        })
+      )
+      .catch((e: Error) => {
+        ragLog.warn("Textbook search failed", { error: e.message });
+        return [];
+      }),
   ]);
 
   const merged: RankedDoc[] = [];
@@ -297,9 +328,29 @@ async function retrieveAndRank(args: {
     }
   }
 
+  for (const textbookChunk of textbookResults) {
+    const hash = crypto.createHash('md5').update(textbookChunk.content).digest('hex').slice(0, 16);
+    if (!seen.has(hash)) {
+      seen.add(hash);
+      merged.push({
+        id: `textbook-${textbookChunk.id}`,
+        content: textbookChunk.content,
+        metadata: {
+          source: `Textbook: ${textbookChunk.file_name}`,
+          textbook_id: textbookChunk.textbook_id,
+          page_number: textbookChunk.page_number,
+          structure_path: textbookChunk.structure_path,
+        },
+        similarity: textbookChunk.similarity,
+        rerankScore: 0,
+      });
+    }
+  }
+
   ragLog.info("Hybrid RAG results", {
     vector: vectorResult.data?.length || 0,
     bm25: bm25Results.length,
+    textbook: textbookResults.length,
     merged: merged.length,
   });
 
@@ -315,7 +366,7 @@ async function retrieveAndRank(args: {
 async function runBM25Fallback(searchQuery: string): Promise<RagStepResult> {
   try {
     const { getBM25Search } = await import("../../rag/bm25-search.js");
-    const bm25 = getBM25Search();
+    const bm25 = await getBM25Search();
     if (bm25.getDocCount() === 0) {
       ragLog.info("BM25 index empty. No documents ingested yet.");
       return {
