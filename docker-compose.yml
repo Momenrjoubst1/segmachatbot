@@ -34,6 +34,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3004
+      - PDF_PROCESSOR_URL=http://pdf-processor:8000
     env_file:
       - ./backend/.env
     networks:
@@ -52,6 +53,36 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  pdf-processor:
+    build:
+      context: ./pdf-processor
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_BUCKET_NAME=${R2_BUCKET_NAME}
+      - R2_PUBLIC_URL=${R2_PUBLIC_URL}
+    networks:
+      - app-network
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 2.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
 networks:
   app-network:
