@@ -224,14 +224,14 @@ const InfoIcon = ({ index }: { index: number }) => {
 };
 
 const buttonVariants = {
-  initial: { x: 0, width: 100 },
+  initial: { x: 0, width: "100%" },
   step1: { x: 0, width: 100 },
-  step2: { x: -30, width: 180 },
+  step2: { x: 0, width: "100%" },
 };
 
 const iconVariants = {
-  hidden: { x: -50, opacity: 0 },
-  visible: { x: 16, opacity: 1 },
+  hidden: { x: 0, opacity: 0 },
+  visible: { x: 0, opacity: 1 },
 };
 
 const useDebounce = (value: string, delay: number) => {
@@ -296,9 +296,10 @@ const getResultItemTransition = (index: number) => ({
 
 export const GooeySearchBar = () => {
   const inputRef = useRef<HTMLInputElement>(null);
+  const isInitialMount = useRef(true);
 
   const [state, setState] = useState({
-    step: 1,
+    step: 2,
     searchData: [] as string[],
     searchText: "",
     isLoading: false,
@@ -308,7 +309,7 @@ export const GooeySearchBar = () => {
   const isUnsupported = useMemo(() => isUnsupportedBrowser(), []);
 
   const handleButtonClick = () => {
-    setState((prevState) => ({ ...prevState, step: 2 }));
+    inputRef.current?.focus();
   };
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -316,6 +317,12 @@ export const GooeySearchBar = () => {
   };
 
   useEffect(() => {
+    // Skip the initial render so the search bar does not auto-focus on mount
+    // and steal focus from other inputs (e.g. the chat composer).
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     if (state.step === 2) {
       inputRef.current?.focus();
     } else {
@@ -439,7 +446,7 @@ export const GooeySearchBar = () => {
                 ref={inputRef}
                 type="text"
                 className="search-input"
-                placeholder="Type R..."
+                placeholder="Search..."
                 aria-label="Search input"
                 onChange={handleSearch}
               />
@@ -447,30 +454,28 @@ export const GooeySearchBar = () => {
           </motion.div>
 
           <AnimatePresence mode="wait">
-            {state.step === 2 && (
-              <motion.div
-                key="icon"
-                className="separate-element"
-                initial="hidden"
-                animate="visible"
-                exit="hidden"
-                variants={iconVariants}
-                transition={{
-                  delay: 0.1,
-                  duration: 0.85,
-                  type: "spring",
-                  bounce: 0.15,
-                }}
-              >
-                <div className="search-icon-circle">
-                  {!state.isLoading ? (
-                    <SearchIcon isUnsupported={isUnsupported} />
-                  ) : (
-                    <LoadingIcon />
-                  )}
-                </div>
-              </motion.div>
-            )}
+            <motion.div
+              key="icon"
+              className="separate-element"
+              initial="hidden"
+              animate="visible"
+              exit="hidden"
+              variants={iconVariants}
+              transition={{
+                delay: 0.1,
+                duration: 0.85,
+                type: "spring",
+                bounce: 0.15,
+              }}
+            >
+              <div className="search-icon-circle">
+                {!state.isLoading ? (
+                  <SearchIcon isUnsupported={isUnsupported} />
+                ) : (
+                  <LoadingIcon />
+                )}
+              </div>
+            </motion.div>
           </AnimatePresence>
         </motion.div>
       </div>

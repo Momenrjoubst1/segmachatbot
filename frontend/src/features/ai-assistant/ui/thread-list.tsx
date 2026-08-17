@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { GooeySearchBar } from "@/components/ui/animated-search-bar";
+import { SidebarSearchBar } from "@/components/ui/sidebar-search-bar";
 import { NewChatButtonFull } from "../shadcn/components/Sidebar/NewChatButton";
 import { TextbookUpload } from "../components/TextbookUpload";
 import { CurriculumPanel } from "../components/CurriculumPanel";
@@ -145,10 +145,8 @@ export const ThreadList: FC<{
       {/* New Chat button — full variant, rendered only while the sidebar is expanded */}
       <NewChatButtonFull onClick={() => handleNewChat(undefined)} />
 
-      {/* Animated Search bar */}
-      <div className="gooey-search-wrapper">
-        <GooeySearchBar />
-      </div>
+      {/* Search bar — matches the New Chat button's pill style */}
+      <SidebarSearchBar onThreadSelected={onThreadSelected} />
 
       {/* Thread list */}
       <div className="mt-1 flex-1 overflow-y-auto pr-1">

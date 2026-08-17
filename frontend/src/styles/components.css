@@ -1,4 +1,4 @@
-.ai-input * {
+﻿.ai-input * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -611,7 +611,7 @@ textarea.text-transparent::-moz-selection {
   animation: shimmer-background 2s ease-in-out infinite;
 }
 
-/* ─── Chat Message Hover Effects (Gemini-style) ──────────────────────────────── */
+/* â”€â”€â”€ Chat Message Hover Effects (Gemini-style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .message-hover-wrapper {
   position: relative;
@@ -661,8 +661,8 @@ textarea.text-transparent::-moz-selection {
   }
 }
 
-/* ─── MD3 State Layer ─────────────────────────────────────────────────────── */
-/* Material Design 3 "State Layer" pattern — consistent hover/press overlay   */
+/* â”€â”€â”€ MD3 State Layer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* Material Design 3 "State Layer" pattern â€” consistent hover/press overlay   */
 /* across ALL interactive elements. Uses currentColor so the overlay always   */
 /* contrasts with the element's background (text color = proven contrast).    */
 
@@ -701,12 +701,12 @@ textarea.text-transparent::-moz-selection {
   z-index: 1;
 }
 
-/* Circle variant — forces perfect circle for icon buttons (Gemini-style halo) */
+/* Circle variant â€” forces perfect circle for icon buttons (Gemini-style halo) */
 .state-layer-circle::before {
   border-radius: 9999px;
 }
 
-/* ─── Composer Hover Avatar (Gemini-style) ───────────────────────────────────── */
+/* â”€â”€â”€ Composer Hover Avatar (Gemini-style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .composer-send-group {
   position: relative;
@@ -730,7 +730,7 @@ textarea.text-transparent::-moz-selection {
   }
 }
 
-/* ─── Interactive Hover & Click Effects (Gemini-style) ──────────────────────── */
+/* â”€â”€â”€ Interactive Hover & Click Effects (Gemini-style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /* Global: all buttons get subtle box-shadow illumination + press effect */
 button:not(:disabled):not([data-state="open"]),
@@ -748,7 +748,7 @@ button:not(:disabled):not([data-state="open"]):active,
   transform: scale(0.97);
 }
 
-/* Send button — prominent hover glow (complements state-layer) */
+/* Send button â€” prominent hover glow (complements state-layer) */
 .aui-composer-send {
   transition: background-color 0.15s ease, box-shadow 0.2s ease, transform 0.1s ease;
 }
@@ -775,7 +775,7 @@ button:not(:disabled):not([data-state="open"]):active,
   inset: 6px;
 }
 
-/* Edit pencil on user messages — scale effect (complements state-layer) */
+/* Edit pencil on user messages â€” scale effect (complements state-layer) */
 .aui-user-action-edit {
   transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -789,13 +789,13 @@ button:not(:disabled):not([data-state="open"]):active,
   transform: scale(0.9);
 }
 
-/* Search input — subtle glow on focus */
+/* Search input â€” subtle glow on focus */
 .aui-thread-list-root input:focus {
   box-shadow: 0 0 0 2px hsl(var(--primary) / 0.15);
   border-color: hsl(var(--primary) / 0.4);
 }
 
-/* Thread item action buttons (rename, delete) — appear + animate */
+/* Thread item action buttons (rename, delete) â€” appear + animate */
 .aui-thread-list-item-root .opacity-0 {
   transition: opacity 0.15s ease, transform 0.15s ease;
 }
@@ -815,7 +815,7 @@ button:active:not(:disabled) {
   animation: btn-press 0.15s ease-out;
 }
 
-/* ─── Disclaimer Text Selectable ─────────────────────────────────────────────── */
+/* â”€â”€â”€ Disclaimer Text Selectable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .disclaimer-text {
   user-select: text !important;
   -webkit-user-select: text !important;
@@ -823,184 +823,3 @@ button:active:not(:disabled) {
   -ms-user-select: text !important;
 }
 
-/* ─── Gooey Animated Search Bar ─────────────────────────────────────────────── */
-.gooey-search-wrapper {
-  --accent-color: hsl(var(--primary));
-  --bg-color: var(--background);
-  --btn-bg: var(--card);
-  --btn-text: var(--foreground);
-  --input-bg: var(--muted);
-  --result-bg: var(--accent);
-  --result-text: var(--foreground);
-  --text-color: var(--foreground);
-}
-
-.gooey-search-wrapper * {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-.gooey-search-wrapper .wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.gooey-search-wrapper svg {
-  position: absolute;
-  width: 0;
-  height: 0;
-}
-
-.gooey-search-wrapper .button-content {
-  position: relative;
-  background: transparent;
-}
-
-.gooey-search-wrapper .button-content-inner {
-  display: flex;
-  align-items: center;
-  position: relative;
-}
-
-.gooey-search-wrapper .search-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 36px;
-  background-color: transparent !important;
-  color: #1a1a1a !important;
-  border: 1px solid #e0e0e0;
-  border-radius: 50px;
-  cursor: pointer;
-  overflow: hidden;
-  position: relative;
-  z-index: 2;
-}
-
-.gooey-search-wrapper .search-text {
-  font-weight: 600;
-  font-size: 12px;
-  letter-spacing: 0.5px;
-  user-select: none;
-}
-
-.gooey-search-wrapper .search-input {
-  width: 100%;
-  height: 100%;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #1a1a1a !important;
-  font-size: 13px;
-  padding: 0 20px;
-  font-family: inherit;
-}
-
-.gooey-search-wrapper .search-input::placeholder {
-  color: #666666 !important;
-}
-
-.gooey-search-wrapper .separate-element {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: -15px;
-  z-index: 1;
-}
-
-.gooey-search-wrapper .search-icon-circle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background-color: transparent !important;
-  border: 1px solid #e0e0e0;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-.gooey-search-wrapper .search-icon-circle:hover {
-  border-color: #1a1a1a;
-  box-shadow: 0 0 0 2px rgba(26, 26, 26, 0.1);
-}
-
-.gooey-search-wrapper .loading-icon {
-  width: 18px;
-  height: 18px;
-  animation: gooey-spin 1s linear infinite;
-  color: #1a1a1a !important;
-}
-
-.gooey-search-wrapper .loading-icon line {
-  stroke: #1a1a1a !important;
-}
-
-.gooey-search-wrapper .info-icon {
-  width: 14px;
-  height: 14px;
-  color: #666666 !important;
-  flex-shrink: 0;
-}
-
-.gooey-search-wrapper .search-icon-circle svg {
-  color: #1a1a1a !important;
-}
-
-.gooey-search-wrapper .search-icon-circle svg path {
-  fill: #1a1a1a !important;
-}
-
-.gooey-search-wrapper .search-results {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  z-index: 1;
-}
-
-.gooey-search-wrapper .search-result {
-  padding: 10px 16px;
-  background-color: #ffffff !important;
-  color: #1a1a1a !important;
-  border-radius: 12px;
-  cursor: pointer;
-  font-size: 13px;
-  min-width: 180px;
-  border: 1px solid #e0e0e0;
-}
-
-.gooey-search-wrapper .search-result:hover {
-  background-color: #f5f5f5 !important;
-}
-
-.gooey-search-wrapper .search-result-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-@keyframes gooey-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.gooey-search-wrapper.no-goo .button-content {
-  filter: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .gooey-search-wrapper .loading-icon {
-    animation: none;
-  }
-}

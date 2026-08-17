@@ -451,28 +451,27 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
         headers = new Headers(init.headers);
         if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
-        // Check for image content - model doesn't support images in guest mode
+        // Check for image content - model doesn't support images in guest mode.
+        // Only flag REAL embedded images (data URLs / <img> markup) — a plain
+        // text mention like "image/logo.png" is not an image attachment.
+        const bodyHasImage = (parsed: any): boolean => {
+          const allText = [
+            parsed.message,
+            ...(parsed.conversationHistory?.map((m: any) => m.content) ?? []),
+          ].join(" ");
+          return allText.includes("<img") || allText.includes("data:image/");
+        };
         let hasImage = false;
         if (typeof body === "string") {
           try {
             const parsed = JSON.parse(body);
-            // Check for data URLs, HTML img tags, or image references in the message
-            const allText = [
-              parsed.message,
-              ...(parsed.conversationHistory?.map((m: any) => m.content) ?? [])
-            ].join(' ');
-            hasImage = allText.includes('<img') || allText.includes('data:image/') || allText.includes('image/');
+            hasImage = bodyHasImage(parsed);
           } catch (e) {
             console.error("[guest customFetch] Failed to parse body:", e);
           }
         } else if (body && typeof body === "object") {
           try {
-            const parsed = body as any;
-            const allText = [
-              parsed.message,
-              ...(parsed.conversationHistory?.map((m: any) => m.content) ?? [])
-            ].join(' ');
-            hasImage = allText.includes('<img') || allText.includes('data:image/') || allText.includes('image/');
+            hasImage = bodyHasImage(body as any);
           } catch (e) {
             console.error("[guest customFetch] Failed to parse object body:", e);
           }

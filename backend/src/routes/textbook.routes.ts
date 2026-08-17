@@ -65,7 +65,21 @@ router.post("/upload-file", upload.single("file"), async (req: Request, res: Res
 
     const file = req.file;
     tmpPath = file.path;
-    const courseId = req.body.course_id || null;
+    let courseId = req.body.course_id || null;
+
+    // Auto-create a course if none was provided (sidebar upload without selecting a course)
+    if (!courseId) {
+      const courseName = file.originalname.replace(/\.pdf$/i, "").substring(0, 80) || "مادة جديدة";
+      const { data: newCourse } = await supabase
+        .from("student_courses")
+        .insert({ user_id: userId, course_name: courseName, credit_hours: 0 })
+        .select("id")
+        .single();
+      courseId = newCourse?.id || null;
+      if (courseId) {
+        log.info("Auto-created course for uploaded textbook", { courseId, courseName });
+      }
+    }
 
     // Compute file hash (streamed — a 500MB upload must not be buffered)
     const fileHash = await hashFileStreaming(file.path);

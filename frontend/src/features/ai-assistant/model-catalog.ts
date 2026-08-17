@@ -1,7 +1,15 @@
 export const MODELS = [
   // ==========================================
-  // 0. BigModel (ZhipuAI) - GLM-5.2
+  // 0. BigModel (ZhipuAI) - GLM Models
   // ==========================================
+  {
+    name: "GLM-4 Flash (BigModel - Fast)",
+    value: "glm-4-flash",
+    icon: "/icons/bigmodel.svg",
+    disabled: false,
+    contextWindow: 128_000,
+    provider: "bigmodel" as const,
+  },
   {
     name: "GLM-5.2 (BigModel)",
     value: "glm-5.2",
@@ -112,7 +120,7 @@ export type Model = (typeof MODELS)[number];
 export type KnownModelId = Model["value"];
 export type ModelProvider = Model["provider"];
 
-const DEFAULT_MODEL = MODELS[0]; // GLM-5.2 (BigModel)
+const DEFAULT_MODEL = MODELS[0]; // GLM-4 Flash (BigModel - Fast)
 export const DEFAULT_MODEL_ID: KnownModelId = DEFAULT_MODEL.value;
 export const DEFAULT_CONTEXT_WINDOW = DEFAULT_MODEL.contextWindow;
 

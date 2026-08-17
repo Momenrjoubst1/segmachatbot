@@ -101,25 +101,25 @@ export function createTimeoutWrapper(defaultTimeoutMs: number) {
 // Common timeout configurations
 export const TIMEOUTS = {
   // AI operations
-  LLM_RESPONSE: 60_000,      // 1 minute for LLM response
-  EMBEDDING: 30_000,         // 30 seconds for embedding generation
-  MODERATION: 10_000,        // 10 seconds for content moderation
+  LLM_RESPONSE: 120_000,      // 2 minutes for LLM response
+  EMBEDDING: 60_000,          // 60 seconds for embedding generation
+  MODERATION: 15_000,         // 15 seconds for content moderation
   
   // Database operations
-  DB_QUERY: 5_000,            // 5 seconds for database queries
-  DB_WRITE: 10_000,          // 10 seconds for database writes
+  DB_QUERY: 10_000,           // 10 seconds for database queries
+  DB_WRITE: 15_000,           // 15 seconds for database writes
   
   // External API calls
-  EXTERNAL_API: 15_000,      // 15 seconds for external APIs
-  WEB_SEARCH: 8_000,         // 8 seconds for web search
+  EXTERNAL_API: 30_000,       // 30 seconds for external APIs
+  WEB_SEARCH: 15_000,         // 15 seconds for web search
   
   // Memory operations
-  MEMORY_RETRIEVAL: 3_000,   // 3 seconds for memory retrieval
-  MEMORY_EXTRACTION: 5_000,  // 5 seconds for memory extraction
+  MEMORY_RETRIEVAL: 8_000,    // 8 seconds for memory retrieval
+  MEMORY_EXTRACTION: 10_000,  // 10 seconds for memory extraction
   
   // RAG operations
-  RAG_RETRIEVAL: 5_000,      // 5 seconds for RAG retrieval
-  RAG_RERANKING: 3_000,      // 3 seconds for document reranking
+  RAG_RETRIEVAL: 30_000,      // 30 seconds for RAG retrieval
+  RAG_RERANKING: 10_000,      // 10 seconds for document reranking
   
   // Pipeline steps
   PIPELINE_STEP: 10_000,     // 10 seconds for individual pipeline steps

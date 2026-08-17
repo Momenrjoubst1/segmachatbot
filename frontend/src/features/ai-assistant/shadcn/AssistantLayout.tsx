@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { LOAD_ERROR_I18N, type LoadErrorCode } from "@/lib/load-errors";
 
 import { useKeyboardShortcuts } from "../../../hooks/useKeyboardShortcuts";
+import { useChatHistory } from "@/hooks/useChatHistory";
 import { toast } from "sonner";
 import type { CalendarEvent } from "@/features/calendar/types";
 import useCalendarSync from "@/features/calendar/hooks/useCalendarSync";
@@ -48,6 +49,15 @@ export const Shadcn: FC<{
 }> = ({ isOnboarded, isCoursesLoadingVisible, coursesError, retryCourses, onActiveCourseChange, onCompleteOnboarding, onSkipOnboarding, activeView, onToggleView, artifactPanelOpen, setArtifactPanelOpen, emailHistoryOpen, setEmailHistoryOpen, isGuestMode = false }) => {
   const { t } = useTranslation("errors");
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
+  const { loadThread } = useChatHistory();
+
+  // Same behavior as the sidebar "New Chat" button: clear the active thread
+  // AND reset the active course, so the welcome screen shows immediately.
+  const startNewChat = useCallback(() => {
+    loadThread(null);
+    onActiveCourseChange(null);
+    toast("New chat created");
+  }, [loadThread, onActiveCourseChange]);
 
   // Calendar state
   const [calendarUserId, setCalendarUserId] = useState<string | undefined>();
@@ -134,10 +144,10 @@ export const Shadcn: FC<{
   }, [setArtifactPanelOpen]);
 
   useKeyboardShortcuts({
-    "ctrl+n": () => {
-      onActiveCourseChange(null);
-      toast("New chat created");
-    },
+    // Ctrl+Shift+O matches the label shown in the sidebar (and what other
+    // world-class chat apps use). Ctrl+N is kept as a secondary binding.
+    "ctrl+shift+o": startNewChat,
+    "ctrl+n": startNewChat,
     "ctrl+k": () => {
       const composer = document.querySelector('[data-slot="aui-composer-input"]') as HTMLElement;
       composer?.focus();
@@ -154,8 +164,10 @@ export const Shadcn: FC<{
       }
     },
     "escape": () => {
+      // Use the stable class, not the aria-label — the label is translated
+      // (e.g. Arabic "إيقاف التوليد") and the old selector never matched it.
       const cancelButton = document.querySelector(
-        '[aria-label="Stop generating"]'
+        ".aui-composer-cancel"
       ) as HTMLButtonElement | null;
       cancelButton?.click();
     },

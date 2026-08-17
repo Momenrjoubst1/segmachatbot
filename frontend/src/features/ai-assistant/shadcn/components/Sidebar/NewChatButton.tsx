@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Single source of truth so both variants always show the same label/shortcut.
+// Keep in sync with the binding registered in AssistantLayout.tsx.
 const NEW_CHAT_LABEL = "New Chat";
-const NEW_CHAT_SHORTCUT = "Ctrl+⌘+O";
+const NEW_CHAT_SHORTCUT = "Ctrl+Shift+O";
 
 /**
  * Expanded-sidebar variant: icon + label + keyboard shortcut, each part in its

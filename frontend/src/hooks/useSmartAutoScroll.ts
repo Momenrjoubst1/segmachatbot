@@ -32,6 +32,11 @@ export function useSmartAutoScroll({
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [newMessageCount, setNewMessageCount] = useState(0);
 
+  // Refs mirroring the values the streaming follower needs, so the
+  // MutationObserver isn't re-created on every render.
+  const isNearBottomRef = useRef(true);
+  const isRunningRef = useRef(isRunning);
+
   const checkIfNearBottom = useCallback(() => {
     const el = scrollContainerRef.current;
     if (!el) return true;
@@ -57,6 +62,7 @@ export function useSmartAutoScroll({
 
     const handleScroll = () => {
       const nearBottom = checkIfNearBottom();
+      isNearBottomRef.current = nearBottom;
       setIsNearBottom(nearBottom);
     };
 
@@ -68,6 +74,46 @@ export function useSmartAutoScroll({
       el.removeEventListener("scroll", handleScroll);
     };
   }, [checkIfNearBottom]);
+
+  // ── Streaming follower ────────────────────────────────────────────────────
+  // During streaming the message COUNT doesn't change while a long answer
+  // grows — so the messageCount effect below alone would let the text run
+  // past the bottom of the viewport. Watch the DOM for content growth and,
+  // as long as the user is near the bottom, keep the view pinned there
+  // (the same behavior as world-class chat UIs). One rAF-throttled scroll
+  // per frame, and it stops following the moment the user scrolls up.
+  useEffect(() => {
+    isRunningRef.current = isRunning;
+  }, [isRunning]);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el || typeof MutationObserver === "undefined") return;
+
+    let scrollFrame: number | null = null;
+
+    const observer = new MutationObserver(() => {
+      if (!isRunningRef.current || !isNearBottomRef.current) return;
+      if (scrollFrame !== null) return;
+      scrollFrame = requestAnimationFrame(() => {
+        scrollFrame = null;
+        const node = scrollContainerRef.current;
+        if (!node || !isRunningRef.current || !isNearBottomRef.current) return;
+        node.scrollTo({ top: node.scrollHeight, behavior: "auto" });
+      });
+    });
+
+    observer.observe(el, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => {
+      observer.disconnect();
+      if (scrollFrame !== null) cancelAnimationFrame(scrollFrame);
+    };
+  }, []);
 
   // Detect new messages and auto-scroll if near bottom
   useEffect(() => {

@@ -107,8 +107,8 @@ function pickFirstAvailableProvider(
 }
 
 export function getProviderAndModel(modelId: string): { provider: ProviderName; modelName: string } {
-  if (modelId === "glm-5.2") {
-    return { provider: "bigmodel", modelName: "glm-5.2" };
+  if (modelId === "glm-5.2" || modelId === "glm-4-flash" || modelId.startsWith("glm-")) {
+    return { provider: "bigmodel", modelName: modelId };
   }
   if (modelId === "gpt-5.4") {
     const azureConfigured = process.env.AZURE_API_KEY || process.env.AZURE_OPENAI_API_KEY;
