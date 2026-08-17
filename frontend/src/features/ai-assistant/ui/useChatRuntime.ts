@@ -706,8 +706,33 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
     role: msg.role as "user" | "assistant" | "system",
     parts: [{ type: "text" as const, text: msg.content }],
   }));
+
+  // Thumbs up/down on assistant messages → POST /api/feedback/message.
+  // Fire-and-forget: the optimistic icon fill comes from the runtime; a
+  // failed save is surfaced as a toast without reverting the icon.
+  const feedbackAdapter = useMemo(() => ({
+    submit: ({ message, type }: { message: { id: string; role: string }; type: "positive" | "negative" }) => {
+      if (message.role !== "assistant") return;
+      void (async () => {
+        try {
+          const headers = await getAssistantAuthHeaders();
+          const res = await fetch(`${BACKEND_URL}/api/feedback/message`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ messageId: message.id, isPositive: type === "positive" }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (err) {
+          console.warn("[feedback] failed to save message feedback", err);
+          toast.error("Failed to save feedback. Please try again.");
+        }
+      })();
+    },
+  }), []);
+
   return useChatRuntime({
     transport,
     messages: mappedMessages,
+    adapters: { feedback: feedbackAdapter },
   });
 };

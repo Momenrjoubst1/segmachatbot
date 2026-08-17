@@ -1,7 +1,9 @@
 import express from 'express';
+import { z } from 'zod';
 import { supabase } from '../services/supabase.service.js';
 import { asyncHandler } from '../utils/express-async-wrapper.js';
 import { feedbackSchema } from '../validators/feedback-validation.js';
+import { log } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -34,5 +36,64 @@ router.post('/', asyncHandler(async (req, res) => {
   }
   res.json({ success: true });
 }));
+
+// ── Message-level feedback (thumbs up/down on assistant messages) ──────────
+// Writes to chat_messages.feedback (SMALLINT: 1 = positive, -1 = negative).
+// Ownership is enforced by joining through chat_sessions.user_id — a user
+// can only rate messages inside their own threads.
+const messageFeedbackSchema = z.object({
+  messageId: z.string().uuid(),
+  isPositive: z.boolean(),
+});
+
+router.post(
+  '/message',
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const parsed = messageFeedbackSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid payload', details: parsed.error.flatten().fieldErrors });
+      return;
+    }
+
+    const { messageId, isPositive } = parsed.data;
+
+    // Update only if the message belongs to a session owned by this user.
+    const { data: owned, error: ownershipError } = await supabase
+      .from('chat_messages')
+      .select('id, chat_sessions!inner(user_id)')
+      .eq('id', messageId)
+      .eq('chat_sessions.user_id', userId)
+      .maybeSingle();
+
+    if (ownershipError) {
+      log.error('Message feedback ownership check failed', { error: ownershipError.message });
+      res.status(500).json({ error: 'Internal error' });
+      return;
+    }
+    if (!owned) {
+      res.status(404).json({ error: 'Message not found' });
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from('chat_messages')
+      .update({ feedback: isPositive ? 1 : -1 })
+      .eq('id', messageId);
+
+    if (updateError) {
+      log.error('Message feedback update failed', { error: updateError.message });
+      res.status(500).json({ error: 'Failed to save feedback' });
+      return;
+    }
+
+    res.json({ success: true });
+  }),
+);
 
 export default router;
