@@ -8,21 +8,10 @@ const OVERLAP_CHARS = 100;
 const EMBEDDING_BATCH_SIZE = 20;
 const EMBEDDING_DELAY_MS = 1000;
 const EMBEDDING_MAX_RETRIES = 3;
-const EXPECTED_DIMENSIONS = 768;
+const EXPECTED_DIMENSIONS = 9692;
 
-let cachedEmbedMany: (typeof import("ai"))["embedMany"] | null = null;
-let cachedGoogle: (typeof import("@ai-sdk/google"))["google"] | null = null;
-
-async function loadEmbeddingDeps() {
-  if (!cachedEmbedMany) {
-    const ai = await import("ai");
-    cachedEmbedMany = ai.embedMany;
-  }
-  if (!cachedGoogle) {
-    const googleModule = await import("@ai-sdk/google");
-    cachedGoogle = googleModule.google;
-  }
-  return { embedMany: cachedEmbedMany, google: cachedGoogle };
+function padEmbedding(embedding: number[]): number[] {
+  return embedding.slice(0, EXPECTED_DIMENSIONS);
 }
 
 export function splitTextIntoEmbeddableChunks(
@@ -61,20 +50,15 @@ async function embedWithRetry(
   texts: string[],
   retries: number = EMBEDDING_MAX_RETRIES
 ): Promise<number[][]> {
-  const { embedMany, google } = await loadEmbeddingDeps();
+  const { generateEmbeddings } = await import("../rag/embedding-service.js");
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const model = google.textEmbeddingModel("gemini-embedding-001");
-      const { embeddings } = await embedMany({ model, values: texts });
-      return embeddings.map((e) => {
-        const sliced = e.slice(0, EXPECTED_DIMENSIONS);
-        if (sliced.length < EXPECTED_DIMENSIONS) {
-          const padded = [...sliced, ...new Array(EXPECTED_DIMENSIONS - sliced.length).fill(0)];
-          return padded;
-        }
-        return sliced;
-      });
+      const embeddings = await generateEmbeddings(texts);
+      if (!embeddings) {
+        throw new Error("All embedding providers failed");
+      }
+      return embeddings.map(padEmbedding);
     } catch (err) {
       const isRateLimit = (err as any)?.status === 429 || (err as any)?.message?.includes("rate");
       if (attempt < retries - 1 && isRateLimit) {
@@ -89,7 +73,10 @@ async function embedWithRetry(
   throw new Error("Max retries exceeded");
 }
 
-export async function embedTextbookChunks(textbookId: string): Promise<number> {
+export async function embedTextbookChunks(
+  textbookId: string,
+  onProgress?: (done: number, total: number) => void
+): Promise<number> {
   const { generateEmbedding } = await import("../rag/embedding-service.js");
 
   const { data: chunks, error } = await supabase
@@ -111,6 +98,7 @@ export async function embedTextbookChunks(textbookId: string): Promise<number> {
   log.info("Embedding textbook chunks", { textbookId, count: chunks.length });
 
   let embedded = 0;
+  onProgress?.(0, chunks.length);
 
   for (let i = 0; i < chunks.length; i += EMBEDDING_BATCH_SIZE) {
     const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE);
@@ -174,6 +162,8 @@ export async function embedTextbookChunks(textbookId: string): Promise<number> {
     if (i + EMBEDDING_BATCH_SIZE < chunks.length) {
       await new Promise((r) => setTimeout(r, EMBEDDING_DELAY_MS));
     }
+
+    onProgress?.(Math.min(embedded, chunks.length), chunks.length);
   }
 
   log.info("Embedding complete", { textbookId, embedded, total: chunks.length });

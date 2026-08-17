@@ -21,8 +21,10 @@ import { buildMemoryContext, tryExtractAndStore, resetExtractionCounter } from '
 import { contextCache } from './context-cache.service.js';
 import { enhancedMemory } from './enhanced-memory.service.js';
 import { crossSession } from './cross-session.service.js';
+import { containsDuplicate, deduplicateMemoryContexts } from './text-deduplicator.js';
 
 const log = createLogger('unified-memory');
+const MEMORY_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // ==========================================
 // Memory Tiers
@@ -74,7 +76,21 @@ export interface UnifiedMemoryContext {
 class UnifiedMemoryManager {
   private static instance: UnifiedMemoryManager;
   
-  private constructor() {}
+  private cleanupTimer: NodeJS.Timeout | null = null;
+
+  private constructor() {
+    // Schedule daily memory cleanup
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupOldMemories().catch(err => {
+        log.warn('Scheduled memory cleanup failed', { error: err.message });
+      });
+    }, MEMORY_CLEANUP_INTERVAL_MS);
+    
+    // Unref so it doesn't keep the process alive
+    if (this.cleanupTimer && typeof this.cleanupTimer === 'object' && 'unref' in this.cleanupTimer) {
+      this.cleanupTimer.unref();
+    }
+  }
   
   static getInstance(): UnifiedMemoryManager {
     if (!UnifiedMemoryManager.instance) {
@@ -216,19 +232,41 @@ class UnifiedMemoryManager {
 
     await Promise.all(parallelOps);
 
-    // Deduplicate: if enhancedMemory content overlaps with longTermFacts, skip enhanced
+    // Intelligent deduplication using similarity-based approach
+    const memoryContexts: string[] = [];
+    if (longTermFacts) memoryContexts.push(longTermFacts);
+    if (enhancedContext) memoryContexts.push(enhancedContext);
+    if (crossSessionCtx) memoryContexts.push(crossSessionCtx);
+
+    const deduplicationResult = deduplicateMemoryContexts(memoryContexts, {
+      strategy: 'jaccard',
+      threshold: 0.7,
+      minLength: 30,
+    });
+
+    const uniqueContexts = deduplicationResult.uniqueTexts;
+    
+    // Reconstruct parts with deduplicated content
     const parts: string[] = [];
 
-    if (longTermFacts) {
+    // Add long-term facts (if present in unique contexts)
+    if (longTermFacts && uniqueContexts.includes(longTermFacts)) {
       parts.push(`**About the User (Remembered across sessions):**\n${longTermFacts}\n\nUse these facts to personalize your responses. Do not mention these facts unless relevant.\nIf a fact seems outdated, ignore it - the user will correct you.`);
     }
+    
+    // Add custom instructions (always included as they're distinct)
     if (customInstructions) {
       parts.push(`**User's Custom Instructions:**\n${customInstructions}`);
     }
-    if (enhancedContext && !longTermFacts.includes(enhancedContext.substring(0, 50))) {
+    
+    // Add enhanced memory if it survived deduplication and is different from long-term facts
+    if (enhancedContext && uniqueContexts.includes(enhancedContext) && 
+        !containsDuplicate(enhancedContext, [longTermFacts].filter(Boolean), { threshold: 0.9 })) {
       parts.push(`**معلومات محفوظة عن المستخدم:**\n${enhancedContext}`);
     }
-    if (crossSessionCtx) {
+    
+    // Add cross-session context if it survived deduplication
+    if (crossSessionCtx && uniqueContexts.includes(crossSessionCtx)) {
       parts.push(`**Relevant context from previous conversations:**\n${crossSessionCtx}`);
     }
 
@@ -245,6 +283,14 @@ class UnifiedMemoryManager {
       hasEnhanced: !!enhancedContext,
       hasCrossSession: !!crossSessionCtx,
       totalTimeMs,
+      deduplicationStats: {
+        originalContexts: memoryContexts.length,
+        uniqueContexts: uniqueContexts.length,
+        duplicatesRemoved: deduplicationResult.duplicatesRemoved,
+        avgSimilarity: deduplicationResult.similarityScores.length > 0 
+          ? deduplicationResult.similarityScores.reduce((a, b) => a + b, 0) / deduplicationResult.similarityScores.length 
+          : 0,
+      },
     });
 
     return {
@@ -380,6 +426,52 @@ class UnifiedMemoryManager {
         crossSession: { enabled: MemoryConfig.crossSession.enabled, maxChats: MemoryConfig.crossSession.maxPreviousChats },
       },
     };
+  }
+  
+  /**
+   * Clean up old memories that exceed TTL thresholds
+   * Should be called periodically (e.g., daily cron job)
+   */
+  async cleanupOldMemories(): Promise<{ cleaned: number }> {
+    let cleaned = 0;
+    const now = Date.now();
+    const FACT_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+    const CROSS_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+    try {
+      // Clean enhanced memory facts older than TTL
+      const { supabase } = await import('../rag/rag-supabase-client.js');
+      const cutoffDate = new Date(now - FACT_TTL_MS).toISOString();
+      
+      const { data: oldFacts, error } = await supabase
+        .from('user_memory_facts')
+        .delete()
+        .lt('created_at', cutoffDate)
+        .select('id');
+
+      if (!error && oldFacts) {
+        cleaned += oldFacts.length;
+        log.info('Cleaned old memory facts', { count: oldFacts.length });
+      }
+
+      // Clean cross-session entries older than TTL
+      const crossSessionCutoff = new Date(now - CROSS_SESSION_TTL_MS).toISOString();
+      const { data: oldSessions, error: sessionError } = await supabase
+        .from('cross_session_memory')
+        .delete()
+        .lt('created_at', crossSessionCutoff)
+        .select('id');
+
+      if (!sessionError && oldSessions) {
+        cleaned += oldSessions.length;
+        log.info('Cleaned old cross-session memories', { count: oldSessions.length });
+      }
+    } catch (err) {
+      log.warn('Memory cleanup failed', { error: (err as Error)?.message });
+    }
+
+    log.info('Memory cleanup completed', { cleaned });
+    return { cleaned };
   }
 }
 

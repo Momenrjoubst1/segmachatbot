@@ -71,7 +71,7 @@ function MermaidViewer({ content }: { content: string }) {
         const { default: mermaid } = await import("mermaid");
         mermaid.initialize({
           startOnLoad: false,
-          theme: "dark",
+          theme: "default",
           // 'strict' disables clickable nodes, forces HTML labels to be sanitized
           // by mermaid itself, and rejects inline scripts in diagram source.
           securityLevel: "strict",

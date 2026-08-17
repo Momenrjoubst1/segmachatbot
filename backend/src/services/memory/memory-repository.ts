@@ -1,4 +1,4 @@
-import { knowledgeSupabase as supabase } from "../../config/supabase.config.js";
+import { supabase } from "../../config/supabase.config.js";
 import { createLogger } from "../../utils/logger.js";
 
 const log = createLogger('memory-store');

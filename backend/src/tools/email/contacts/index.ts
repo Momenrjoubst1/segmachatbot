@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { registerTool } from "../../tool-registry.js";
-import { knowledgeSupabase as supabase } from "../../../config/supabase.config.js";
+import { supabase } from "../../../config/supabase.config.js";
 
 // ========================================
 // Helper: Extract name from email

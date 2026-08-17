@@ -1,6 +1,18 @@
 export const MODELS = [
   // ==========================================
-  // 0. Azure OpenAI Models (ChatGPT 5.4)
+  // 0. BigModel (ZhipuAI) - GLM-5.2
+  // ==========================================
+  {
+    name: "GLM-5.2 (BigModel)",
+    value: "glm-5.2",
+    icon: "/icons/bigmodel.svg",
+    disabled: false,
+    contextWindow: 128_000,
+    provider: "bigmodel" as const,
+  },
+
+  // ==========================================
+  // 1. Azure OpenAI Models (ChatGPT 5.4)
   // ==========================================
   {
     name: "ChatGPT 5.4 (Azure OpenAI)",
@@ -12,27 +24,27 @@ export const MODELS = [
   },
 
   // ==========================================
-  // 1. GitHub Models (Free via GITHUB_TOKEN)
+  // 2. GitHub Models (Free via GITHUB_TOKEN)
   // ==========================================
   {
     name: "GPT-4o Mini (GitHub)",
-    value: "gpt-4o-mini", // GitHub Models routes this correctly
+    value: "gpt-4o-mini",
     icon: "/icons/github.svg",
     disabled: false,
     contextWindow: 128_000,
     provider: "github" as const,
   },
   {
-    name: "GPT-4o (GitHub)",
-    value: "gpt-4o", // Routed to mini in local dev to avoid GitHub rate limits
-    icon: "/icons/github.svg",
+    name: "GPT-4o (OpenRouter)",
+    value: "gpt-4o",
+    icon: "/icons/openrouter.svg",
     disabled: false,
     contextWindow: 128_000,
-    provider: "github" as const,
+    provider: "openrouter" as const,
   },
 
   // ==========================================
-  // 2. Groq Models (Free & Fast via GROQ_API_KEY)
+  // 3. Groq Models (Free & Fast via GROQ_API_KEY)
   // ==========================================
   {
     name: "Llama 3.3 70B (Groq)",
@@ -43,24 +55,16 @@ export const MODELS = [
     provider: "groq" as const,
   },
   {
-    name: "Mixtral 8x7B (Groq)",
-    value: "mixtral-8x7b-32768",
-    icon: "/icons/groq.svg", // Fallback to standard AI icon if this svg doesn't exist
+    name: "Llama 3.1 8B (Groq - Fast)",
+    value: "llama-3.1-8b-instant",
+    icon: "/icons/meta.svg",
     disabled: false,
-    contextWindow: 32_768,
-    provider: "groq" as const,
-  },
-  {
-    name: "Gemma 2 9B (Groq)",
-    value: "gemma2-9b-it",
-    icon: "/icons/google.svg",
-    disabled: false,
-    contextWindow: 8_192,
+    contextWindow: 128_000,
     provider: "groq" as const,
   },
 
   // ==========================================
-  // 3. OpenRouter Models (Free Tier via OPENROUTER_API_KEY)
+  // 4. OpenRouter Models (Free Tier via OPENROUTER_API_KEY)
   // ==========================================
   {
     name: "Gemini 2.0 Flash (Free)",
@@ -80,7 +84,7 @@ export const MODELS = [
   },
 
   // ==========================================
-  // 4. Fireworks Models (via FIREWORKS_API_KEY)
+  // 5. Fireworks Models (via FIREWORKS_API_KEY)
   // ==========================================
   {
     name: "Gemma 4 31B IT (Fireworks)",
@@ -92,7 +96,7 @@ export const MODELS = [
   },
 
   // ==========================================
-  // 5. Novita.ai Models (via NOVITA_API_KEY)
+  // 6. Novita.ai Models (via NOVITA_API_KEY)
   // ==========================================
   {
     name: "Ling 3.0 Tiny (Novita)",
@@ -108,7 +112,7 @@ export type Model = (typeof MODELS)[number];
 export type KnownModelId = Model["value"];
 export type ModelProvider = Model["provider"];
 
-const DEFAULT_MODEL = MODELS[0];
+const DEFAULT_MODEL = MODELS[0]; // GLM-5.2 (BigModel)
 export const DEFAULT_MODEL_ID: KnownModelId = DEFAULT_MODEL.value;
 export const DEFAULT_CONTEXT_WINDOW = DEFAULT_MODEL.contextWindow;
 

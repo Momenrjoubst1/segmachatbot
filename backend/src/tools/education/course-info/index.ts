@@ -8,8 +8,8 @@ registerTool("get_course_info", {
   }),
   execute: async ({ courseName }: { courseName: string }) => {
     try {
-      const { knowledgeSupabase } = await import("../../../config/supabase.config.js");
-      const { data, error } = await knowledgeSupabase
+      const { supabase } = await import("../../../config/supabase.config.js");
+      const { data, error } = await supabase
         .from("documents")
         .select("content, metadata")
         .ilike("metadata->>source", `%${courseName}%`)

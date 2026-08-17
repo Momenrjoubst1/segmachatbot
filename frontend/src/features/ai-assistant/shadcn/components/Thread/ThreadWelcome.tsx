@@ -14,6 +14,7 @@ import { ThreadMessage } from "./MessageComponents";
 import { ThreadComposer, SelectionToolbar } from "./ThreadComposer";
 import { OnboardingFlow } from "../Onboarding/OnboardingFlow";
 import { useSmartAutoScroll } from "@/hooks/useSmartAutoScroll";
+import { useChatHistory } from "@/hooks/useChatHistory";
 
 // ─── Thread Welcome ──────────────────────────────────────────────────────────────
 
@@ -135,7 +136,7 @@ const ThreadSuggestionItem: FC = () => {
         <Button
           variant="outline"
           size="sm"
-          className="aui-thread-welcome-suggestion h-9 rounded-full border-white/10 bg-white/[0.03] px-4 text-sm text-white/80 hover:bg-white/[0.06] hover:text-white transition-colors"
+          className="aui-thread-welcome-suggestion h-9 rounded-full border-border bg-muted/30 px-4 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
         >
           <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" />
         </Button>
@@ -160,7 +161,7 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible dark:border-border dark:bg-background dark:hover:bg-accent"
+        className="aui-thread-scroll-to-bottom absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
       >
         <ArrowDownIcon />
       </TooltipIconButton>
@@ -182,7 +183,7 @@ const NewMessagesPill: FC<{
         onClick={onClick}
         variant="outline"
         size="sm"
-        className="aui-new-messages-pill rounded-full border-white/10 bg-background/95 px-4 py-2 text-sm font-medium shadow-lg backdrop-blur-sm transition-colors hover:bg-accent"
+        className="aui-new-messages-pill rounded-full border-zinc-200 bg-background/95 px-4 py-2 text-sm font-medium shadow-lg backdrop-blur-sm transition-colors hover:bg-accent"
       >
         <ArrowDownIcon className="mr-1.5 size-3.5" />
         New messages ({count})
@@ -200,6 +201,22 @@ export const Thread: FC<{
 }> = ({ isOnboarded, onCompleteOnboarding, onSkipOnboarding }) => {
   const messageCount = useAuiState((s) => s.thread.messages.length);
   const isRunning = useAuiState((s) => s.thread.isRunning);
+  const { isLoadingMessages, activeThreadMessages, activeThreadId } = useChatHistory();
+
+  // Show the welcome screen only when we're SURE the thread is empty.
+  // The flash happens because:
+  //   1. URL changes to ?thread=<id>
+  //   2. Component remounts with empty AI SDK chat
+  //   3. Render: s.thread.isEmpty=true, isLoadingMessages=false (useEffect hasn't run yet)
+  //   4. → welcome flashes for 1 frame
+  //   5. useEffect fires, fetch starts, messages load
+  // We eliminate it by hiding the welcome whenever the URL points at a
+  // thread — that means we have a real thread id, even if its messages
+  // haven't arrived in the chat yet.
+  const hasContextMessages = activeThreadMessages.length > 0;
+  const hasUrlThread = activeThreadId !== null;
+  const shouldShowWelcome =
+    !hasContextMessages && !isLoadingMessages && !hasUrlThread;
 
   const {
     scrollContainerRef,
@@ -235,7 +252,7 @@ export const Thread: FC<{
             style={{ direction: "ltr" }}
           >
             <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pt-4">
-              <AuiIf condition={(s) => s.thread.isEmpty}>
+              <AuiIf condition={(s) => s.thread.isEmpty && shouldShowWelcome}>
                 <div className="flex w-full flex-col items-center gap-6 pt-4">
                   <ThreadWelcome />
                   <ThreadSuggestions />

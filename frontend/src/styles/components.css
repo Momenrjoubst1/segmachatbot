@@ -610,3 +610,397 @@ textarea.text-transparent::-moz-selection {
   background-size: 200% 100%;
   animation: shimmer-background 2s ease-in-out infinite;
 }
+
+/* ─── Chat Message Hover Effects (Gemini-style) ──────────────────────────────── */
+
+.message-hover-wrapper {
+  position: relative;
+  border-radius: 12px;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.message-hover-wrapper:hover {
+  background-color: hsl(var(--foreground) / 0.03);
+}
+
+
+
+.message-hover-wrapper .message-action-bar {
+  opacity: 0;
+  transform: translateY(2px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+}
+
+.message-hover-wrapper:hover .message-action-bar {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.message-hover-wrapper .message-action-bar[data-visible="true"] {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+[dir="rtl"] .message-hover-wrapper .message-action-bar {
+  transform: translateY(2px);
+}
+
+[dir="rtl"] .message-hover-wrapper:hover .message-action-bar {
+  transform: translateY(0);
+}
+
+/* Touch devices: always show action bar */
+@media (pointer: coarse) {
+  .message-hover-wrapper .message-action-bar {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+}
+
+/* ─── MD3 State Layer ─────────────────────────────────────────────────────── */
+/* Material Design 3 "State Layer" pattern — consistent hover/press overlay   */
+/* across ALL interactive elements. Uses currentColor so the overlay always   */
+/* contrasts with the element's background (text color = proven contrast).    */
+
+.state-layer {
+  position: relative;
+  overflow: hidden;
+}
+
+.state-layer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 150ms ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.state-layer:hover::before {
+  opacity: 0.12;
+}
+
+.state-layer:active::before {
+  opacity: 0.16;
+}
+
+.state-layer:focus-visible::before {
+  opacity: 0.14;
+}
+
+/* Content inside state-layer must sit above the ::before overlay */
+.state-layer > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Circle variant — forces perfect circle for icon buttons (Gemini-style halo) */
+.state-layer-circle::before {
+  border-radius: 9999px;
+}
+
+/* ─── Composer Hover Avatar (Gemini-style) ───────────────────────────────────── */
+
+.composer-send-group {
+  position: relative;
+}
+
+.composer-hover-avatar {
+  opacity: 0;
+  transform: scale(0.75) translateX(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+.composer-send-group:hover .composer-hover-avatar {
+  opacity: 1;
+  transform: scale(1) translateX(0);
+}
+
+@media (pointer: coarse) {
+  .composer-hover-avatar {
+    display: none;
+  }
+}
+
+/* ─── Interactive Hover & Click Effects (Gemini-style) ──────────────────────── */
+
+/* Global: all buttons get subtle box-shadow illumination + press effect */
+button:not(:disabled):not([data-state="open"]),
+[role="button"]:not(:disabled) {
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+}
+
+button:not(:disabled):not([data-state="open"]):hover,
+[role="button"]:not(:disabled):hover {
+  box-shadow: 0 0 0 1px hsl(var(--foreground) / 0.06), 0 1px 3px hsl(var(--foreground) / 0.06);
+}
+
+button:not(:disabled):not([data-state="open"]):active,
+[role="button"]:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+/* Send button — prominent hover glow (complements state-layer) */
+.aui-composer-send {
+  transition: background-color 0.15s ease, box-shadow 0.2s ease, transform 0.1s ease;
+}
+
+.aui-composer-send::before {
+  inset: 6px;
+}
+
+.aui-composer-send:hover {
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.2), 0 4px 12px hsl(var(--primary) / 0.25);
+  transform: scale(1.05);
+}
+
+.aui-composer-send:active {
+  transform: scale(0.95);
+  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.3);
+}
+
+.aui-composer-add-attachment::before {
+  inset: 6px;
+}
+
+.aui-sidebar-toggle::before {
+  inset: 6px;
+}
+
+/* Edit pencil on user messages — scale effect (complements state-layer) */
+.aui-user-action-edit {
+  transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.aui-user-action-edit:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px hsl(var(--foreground) / 0.1);
+}
+
+.aui-user-action-edit:active {
+  transform: scale(0.9);
+}
+
+/* Search input — subtle glow on focus */
+.aui-thread-list-root input:focus {
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.15);
+  border-color: hsl(var(--primary) / 0.4);
+}
+
+/* Thread item action buttons (rename, delete) — appear + animate */
+.aui-thread-list-item-root .opacity-0 {
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.aui-thread-list-item-root:hover .opacity-0 {
+  opacity: 1;
+}
+
+/* Ripple-like press effect for main buttons */
+@keyframes btn-press {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+button:active:not(:disabled) {
+  animation: btn-press 0.15s ease-out;
+}
+
+/* ─── Disclaimer Text Selectable ─────────────────────────────────────────────── */
+.disclaimer-text {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+}
+
+/* ─── Gooey Animated Search Bar ─────────────────────────────────────────────── */
+.gooey-search-wrapper {
+  --accent-color: hsl(var(--primary));
+  --bg-color: var(--background);
+  --btn-bg: var(--card);
+  --btn-text: var(--foreground);
+  --input-bg: var(--muted);
+  --result-bg: var(--accent);
+  --result-text: var(--foreground);
+  --text-color: var(--foreground);
+}
+
+.gooey-search-wrapper * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.gooey-search-wrapper .wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.gooey-search-wrapper svg {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.gooey-search-wrapper .button-content {
+  position: relative;
+  background: transparent;
+}
+
+.gooey-search-wrapper .button-content-inner {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.gooey-search-wrapper .search-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  background-color: transparent !important;
+  color: #1a1a1a !important;
+  border: 1px solid #e0e0e0;
+  border-radius: 50px;
+  cursor: pointer;
+  overflow: hidden;
+  position: relative;
+  z-index: 2;
+}
+
+.gooey-search-wrapper .search-text {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  user-select: none;
+}
+
+.gooey-search-wrapper .search-input {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #1a1a1a !important;
+  font-size: 13px;
+  padding: 0 20px;
+  font-family: inherit;
+}
+
+.gooey-search-wrapper .search-input::placeholder {
+  color: #666666 !important;
+}
+
+.gooey-search-wrapper .separate-element {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: -15px;
+  z-index: 1;
+}
+
+.gooey-search-wrapper .search-icon-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: transparent !important;
+  border: 1px solid #e0e0e0;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.gooey-search-wrapper .search-icon-circle:hover {
+  border-color: #1a1a1a;
+  box-shadow: 0 0 0 2px rgba(26, 26, 26, 0.1);
+}
+
+.gooey-search-wrapper .loading-icon {
+  width: 18px;
+  height: 18px;
+  animation: gooey-spin 1s linear infinite;
+  color: #1a1a1a !important;
+}
+
+.gooey-search-wrapper .loading-icon line {
+  stroke: #1a1a1a !important;
+}
+
+.gooey-search-wrapper .info-icon {
+  width: 14px;
+  height: 14px;
+  color: #666666 !important;
+  flex-shrink: 0;
+}
+
+.gooey-search-wrapper .search-icon-circle svg {
+  color: #1a1a1a !important;
+}
+
+.gooey-search-wrapper .search-icon-circle svg path {
+  fill: #1a1a1a !important;
+}
+
+.gooey-search-wrapper .search-results {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 1;
+}
+
+.gooey-search-wrapper .search-result {
+  padding: 10px 16px;
+  background-color: #ffffff !important;
+  color: #1a1a1a !important;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 13px;
+  min-width: 180px;
+  border: 1px solid #e0e0e0;
+}
+
+.gooey-search-wrapper .search-result:hover {
+  background-color: #f5f5f5 !important;
+}
+
+.gooey-search-wrapper .search-result-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@keyframes gooey-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.gooey-search-wrapper.no-goo .button-content {
+  filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gooey-search-wrapper .loading-icon {
+    animation: none;
+  }
+}

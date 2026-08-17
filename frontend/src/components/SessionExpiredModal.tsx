@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 export function SessionExpiredModal() {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -19,7 +21,8 @@ export function SessionExpiredModal() {
   }, []);
 
   const handleLogin = () => {
-    window.location.href = "/login";
+    setOpen(false);
+    navigate("/login", { state: { from: `` } });
   };
 
   return (

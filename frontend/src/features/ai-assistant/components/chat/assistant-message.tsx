@@ -5,7 +5,6 @@ import {
   ActionBarPrimitive,
   ActionBarMorePrimitive,
   BranchPickerPrimitive,
-  AuiIf,
   useAuiState,
 } from "../../shims/assistant-ui-compat-shim";
 import {
@@ -22,6 +21,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { MarkdownText } from "../../ui/markdown-text";
 import { MessageTiming } from "../../ui/message-timing";
 import { TooltipIconButton } from "../../ui/tooltip-icon-button";
@@ -65,11 +69,12 @@ export const AssistantMessage: FC = () => {
       data-role="assistant"
       className="fade-in slide-in-from-bottom-1 relative mx-auto w-full min-w-0 max-w-3xl animate-in duration-150"
     >
-      <div
-        data-slot="aui_assistant-message-content"
-        className="wrap-break-word px-2 text-[15.5px] leading-8 text-foreground md:text-base"
-        dir="auto"
-      >
+      <div className="message-hover-wrapper px-1 py-0.5 -mx-1 -my-0.5">
+        <div
+          data-slot="aui_assistant-message-content"
+          className="wrap-break-word px-2 text-[15.5px] leading-8 text-foreground md:text-base"
+          dir="auto"
+        >
         {/* Dynamic task progress bar */}
         {chatMessage?.task_progress && chatMessage.task_progress.percentage > 0 && chatMessage.task_progress.percentage < 100 && (
           <div className="mb-3 w-full rounded-full bg-muted/40 p-0.5 border border-border/40 backdrop-blur-sm">
@@ -95,9 +100,9 @@ export const AssistantMessage: FC = () => {
                 {step.status === "error" && <AlertTriangleIcon className="h-3.5 w-3.5 text-rose-400" />}
                 <span className={cn(
                   "font-medium transition-colors",
-                  step.status === "running" && "text-blue-400 dark:text-blue-300",
-                  step.status === "success" && "text-emerald-500/90 dark:text-emerald-400/90",
-                  step.status === "error" && "text-rose-500/90 dark:text-rose-400/90"
+                  step.status === "running" && "text-blue-400",
+                  step.status === "success" && "text-emerald-500/90",
+                  step.status === "error" && "text-rose-500/90"
                 )}>
                   {step.title}
                 </span>
@@ -126,7 +131,7 @@ export const AssistantMessage: FC = () => {
             </div>
             <button
               onClick={() => retryMessage()}
-              className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/50 px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+              className="state-layer flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/50 px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors"
             >
               <RefreshCwIcon className="h-3 w-3" />
               Retry
@@ -244,57 +249,77 @@ export const AssistantMessage: FC = () => {
         <BranchPicker />
         <AssistantActionBar />
       </div>
+      </div>
     </MessagePrimitive.Root>
   );
 };
 
+const ActionBarButton: FC<{ tooltip: string; className?: string; children: React.ReactNode }> = ({ tooltip, className, children }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <button className={cn("state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors", className)}>
+        {children}
+      </button>
+    </TooltipTrigger>
+    <TooltipContent side="bottom">{tooltip}</TooltipContent>
+  </Tooltip>
+);
+
 const AssistantActionBar: FC = () => {
+  const isCopied = useAuiState((s) => s.message.isCopied);
+  const isPositive = useAuiState((s) => Boolean((s.message as { feedback?: { isPositive?: boolean } }).feedback?.isPositive));
+  const isNegative = useAuiState((s) => Boolean((s.message as { feedback?: { isNegative?: boolean } }).feedback?.isNegative));
+
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
-      autohide="not-last"
-      className="aui-assistant-action-bar-root col-start-3 row-start-2 -ml-1 flex gap-1 text-muted-foreground"
+      className="message-action-bar aui-assistant-action-bar-root col-start-3 row-start-2 -ml-1 flex gap-1 text-muted-foreground"
     >
       <ActionBarPrimitive.Copy asChild>
-        <TooltipIconButton tooltip="Copy">
-          <AuiIf condition={(s) => s.message.isCopied}>
-            <CheckIcon />
-          </AuiIf>
-          <AuiIf condition={(s) => !s.message.isCopied}>
-            <CopyIcon />
-          </AuiIf>
-        </TooltipIconButton>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors">
+              {isCopied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Copy</TooltipContent>
+        </Tooltip>
       </ActionBarPrimitive.Copy>
       <ActionBarPrimitive.Reload asChild>
-        <TooltipIconButton tooltip="Retry">
-          <RefreshCwIcon />
-        </TooltipIconButton>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors">
+              <RefreshCwIcon className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Retry</TooltipContent>
+        </Tooltip>
       </ActionBarPrimitive.Reload>
       <ActionBarPrimitive.FeedbackPositive asChild>
-        <TooltipIconButton tooltip="Helpful">
-          <AuiIf condition={(s) => Boolean((s.message as { feedback?: { isPositive?: boolean } }).feedback?.isPositive)}>
-            <ThumbsUpIcon className="fill-current" />
-          </AuiIf>
-          <AuiIf condition={(s) => !(s.message as { feedback?: { isPositive?: boolean } }).feedback?.isPositive}>
-            <ThumbsUpIcon />
-          </AuiIf>
-        </TooltipIconButton>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors">
+              <ThumbsUpIcon className={cn("size-4", isPositive && "fill-current")} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Helpful</TooltipContent>
+        </Tooltip>
       </ActionBarPrimitive.FeedbackPositive>
       <ActionBarPrimitive.FeedbackNegative asChild>
-        <TooltipIconButton tooltip="Not helpful">
-          <AuiIf condition={(s) => Boolean((s.message as { feedback?: { isNegative?: boolean } }).feedback?.isNegative)}>
-            <ThumbsDownIcon className="fill-current" />
-          </AuiIf>
-          <AuiIf condition={(s) => !(s.message as { feedback?: { isNegative?: boolean } }).feedback?.isNegative}>
-            <ThumbsDownIcon />
-          </AuiIf>
-        </TooltipIconButton>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors">
+              <ThumbsDownIcon className={cn("size-4", isNegative && "fill-current")} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Not helpful</TooltipContent>
+        </Tooltip>
       </ActionBarPrimitive.FeedbackNegative>
       <ActionBarMorePrimitive.Root>
         <ActionBarMorePrimitive.Trigger asChild>
-          <TooltipIconButton tooltip="More" className="data-[state=open]:bg-accent">
-            <MoreHorizontalIcon />
-          </TooltipIconButton>
+          <ActionBarButton tooltip="More" className="data-[state=open]:bg-accent">
+            <MoreHorizontalIcon className="size-4" />
+          </ActionBarButton>
         </ActionBarMorePrimitive.Trigger>
         <ActionBarMorePrimitive.Content
           side="bottom"

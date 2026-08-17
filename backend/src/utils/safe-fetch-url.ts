@@ -160,8 +160,23 @@ export async function fetchImageForProxy(url: string): Promise<{
       }
 
       const contentType = response.headers.get('content-type') || '';
-      if (contentType && !contentType.startsWith('image/')) {
-        throw new Error('Response is not an image');
+      // Raster formats only by default: SVG can carry scripts, and re-serving
+      // it from our API origin turns the proxy into an XSS/origin-trust
+      // vector. Hosts explicitly trusted for SVG may be allowlisted via env.
+      const baseType = contentType.split(';')[0].trim().toLowerCase();
+      const svgAllowedHosts = (process.env.IMAGE_PROXY_SVG_ALLOWED_HOSTS || '')
+        .split(',')
+        .map((h) => h.trim().toLowerCase())
+        .filter(Boolean);
+      const isRaster = [
+        'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+        'image/avif', 'image/bmp', 'image/x-icon', 'image/vnd.microsoft.icon',
+      ].includes(baseType);
+      const isAllowedSvg =
+        baseType === 'image/svg+xml' &&
+        svgAllowedHosts.includes(safeUrl.hostname.toLowerCase());
+      if (contentType && !isRaster && !isAllowedSvg) {
+        throw new Error('Response is not an allowed image type');
       }
 
       const arrayBuffer = await response.arrayBuffer();

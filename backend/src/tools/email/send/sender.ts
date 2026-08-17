@@ -1,18 +1,13 @@
 import { z } from "zod";
 import * as crypto from "crypto";
-import { knowledgeSupabase as supabase } from "../../../config/supabase.config.js";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "../../../config/supabase.config.js";
 import redis from "../../../config/redis/client.js";
 import { logger } from "../../../utils/logger.js";
 import { findContactsByName, extractNameFromEmail, generateDisplayName } from "../email-contacts/index.js";
 import { getDefaultSignature, formatSignatureForEmail, EmailSignature } from "./signatures.js";
 
-// Supabase Storage client for storing email bodies
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
-const storageClient = supabaseUrl && supabaseServiceKey 
-  ? createClient(supabaseUrl, supabaseServiceKey)
-  : null;
+// Reuse existing Supabase client for storage operations
+const storageClient = supabase;
 
 const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 
@@ -20,11 +15,6 @@ const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-
 // Helper: Save email body to Supabase Storage
 // ========================================
 async function saveEmailBodyToStorage(userId: string, emailId: string, body: string): Promise<string | null> {
-  if (!storageClient) {
-    logger.warn('[Email] Storage client not available, skipping storage save');
-    return null;
-  }
-
   try {
     const fileName = `email_bodies/${userId}/${emailId}.txt`;
     const { data: _data, error } = await storageClient
@@ -51,7 +41,8 @@ async function saveEmailBodyToStorage(userId: string, emailId: string, body: str
 // Helper: Load email body from Supabase Storage
 // ========================================
 async function loadEmailBodyFromStorage(storagePath: string): Promise<string | null> {
-  if (!storageClient || !storagePath) {
+  if (!storagePath) {
+    logger.warn('[Email] Storage path not available, skipping storage load');
     return null;
   }
 
@@ -316,7 +307,7 @@ async function markConfirmationUsedDB(confirmationId: string): Promise<void> {
 // PERSISTENT LOGS (Supabase)
 // ========================================
 
-async function logEmailToDB(log: {
+export async function logEmailToDB(log: {
   userId: string;
   recipients: string[];
   cc?: string[];
@@ -398,7 +389,7 @@ async function createEmailJob(data: {
   return job.id;
 }
 
-async function updateJobStatus(
+export async function updateJobStatus(
   jobId: string,
   status: 'processing' | 'completed' | 'failed',
   error?: string,
@@ -489,10 +480,16 @@ async function getSmtpTransport() {
 async function getSendGrid() {
   const apiKey = process.env.SENDGRID_API_KEY;
   if (!apiKey) return null;
-  const sgMailModule = await import("@sendgrid/mail");
-  const sgMail = (sgMailModule as any).default || sgMailModule;
-  sgMail.setApiKey(apiKey);
-  return sgMail;
+  try {
+    // @ts-ignore - Optional runtime dependency
+    const sgMailModule = await import("@sendgrid/mail");
+    const sgMail = (sgMailModule as any).default || sgMailModule;
+    sgMail.setApiKey(apiKey);
+    return sgMail;
+  } catch (error) {
+    console.error(`[Email] Failed to load @sendgrid/mail: ${error}`);
+    return null;
+  }
 }
 
 // ========================================
@@ -503,7 +500,7 @@ const SENDER_NAME = process.env.EMAIL_SENDER_NAME || "Sigma";
 const DEFAULT_FROM = process.env.SMTP_USER || process.env.SENDGRID_FROM_EMAIL || "noreply@sigma.ai";
 const getFromAddress = () => `${SENDER_NAME} <${DEFAULT_FROM}>`;
 
-async function sendEmailViaProvider(
+export async function sendEmailViaProvider(
   to: string,
   subject: string,
   body: string,
@@ -586,18 +583,33 @@ const defaultTemplate: EmailTemplate = {
   footerText: `Sent by ${SENDER_NAME} AI`,
 };
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function buildHtmlEmail(
   body: string,
   subject: string,
   template?: Partial<EmailTemplate>
 ): string {
   const t = { ...defaultTemplate, ...template };
+  const safeSubject = escapeHtml(subject);
+  const safeTitle = t.title ? escapeHtml(t.title) : '';
+  const safeHeaderText = escapeHtml(t.headerText || SENDER_NAME);
+  const safeFooterText = escapeHtml(t.footerText || `Sent by ${SENDER_NAME} AI`);
+  const safeBody = escapeHtml(body).replace(/\n/g, "<br>");
+
   return `<!DOCTYPE html>
 <html lang="en" dir="ltr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${subject}</title>
+  <title>${safeSubject}</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:40px 0;">
@@ -609,7 +621,7 @@ function buildHtmlEmail(
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td>
-                    <span style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">${t.headerText}</span>
+                    <span style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">${safeHeaderText}</span>
                   </td>
                   <td align="right" style="color:rgba(255,255,255,0.7);font-size:12px;">
                     ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
@@ -618,17 +630,17 @@ function buildHtmlEmail(
               </table>
             </td>
           </tr>
-          ${t.title ? `<tr><td style="padding:16px 32px;background:#f9fafb;border-bottom:1px solid #e5e7eb;">
-              <p style="margin:0;font-size:14px;color:#6b7280;font-weight:500;">${t.title}</p>
+          ${safeTitle ? `<tr><td style="padding:16px 32px;background:#f9fafb;border-bottom:1px solid #e5e7eb;">
+              <p style="margin:0;font-size:14px;color:#6b7280;font-weight:500;">${safeTitle}</p>
             </td></tr>` : ''}
           <tr>
             <td style="padding:32px;color:#374151;font-size:15px;line-height:1.7;">
-              ${body.replace(/\n/g, "<br>")}
+              ${safeBody}
             </td>
           </tr>
           <tr>
             <td style="padding:16px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
-              <span style="font-size:12px;color:#9ca3af;">${t.footerText}</span>
+              <span style="font-size:12px;color:#9ca3af;">${safeFooterText}</span>
             </td>
           </tr>
         </table>
@@ -754,11 +766,17 @@ export async function executeSendEmail(args: z.infer<typeof sendEmailSchema>, us
   }
 
   // Handle confirmation flow
-  if (confirm && confirmationId) {
+  if (confirm) {
+    if (!confirmationId) {
+      return JSON.stringify({
+        status: "error",
+        message: "Confirmation ID is required to confirm and send an email.",
+      });
+    }
+
     const pending = userUuid ? await getConfirmationDB(confirmationId, userUuid) : null;
 
     if (!pending) {
-      // Fallback to in-memory for backwards compatibility
       return JSON.stringify({ status: "error", message: "Confirmation expired or invalid. Please request a new email." });
     }
 
@@ -916,47 +934,9 @@ export async function executeSendEmail(args: z.infer<typeof sendEmailSchema>, us
   const priorityHeader = priority === 'high' ? '[HIGH] ' : priority === 'low' ? '[LOW] ' : '';
   const finalSubject = priorityHeader + subject;
 
-  // No confirmation needed - send directly
-  if (confirm === true) {
-    if (userUuid) {
-      const ropts = await checkRedisRateLimit(userUuid);
-      if (!ropts.allowed) {
-        return JSON.stringify({ status: "rate_limited", message: `Email rate limit exceeded. Try again in ${Math.ceil((ropts.retryAfterMs || 0) / 1000)}s.` });
-      }
-    }
-
-    // Filter attachments to only include complete ones
-    const validAttachments = attachments?.filter(
-      (att): att is { filename: string; content: string; contentType: string } =>
-        !!att.filename && !!att.content && !!att.contentType
-    );
-
-    const result = await sendEmailViaProvider(to, finalSubject, finalBody, finalHtml, cc, bcc, validAttachments);
-
-    if (result.success) {
-      if (userUuid) {
-        await logEmailToDB({
-          userId: userUuid,
-          recipients: [to],
-          cc,
-          bcc,
-          subject: finalSubject,
-          bodyPreview: finalBody.substring(0, 100),
-          fullBody: finalBody,
-          provider: result.provider,
-          status: 'sent',
-        });
-        // Auto-save contact
-        await autoSaveContact(userUuid, to);
-      }
-      return JSON.stringify({ status: "success", message: "Email sent successfully.", to, subject: finalSubject, provider: result.provider });
-    }
-    return JSON.stringify({ status: "error", message: result.error || "Failed to send email." });
-  }
-
-  // Confirmation required
+  // Confirmation is mandatory for sending emails - never send directly without valid confirmation
   if (!userUuid) {
-    return JSON.stringify({ status: "error", message: "Confirmation requires valid user ID." });
+    return JSON.stringify({ status: "error", message: "Sending email requires a valid authenticated user ID." });
   }
 
   const cid = `email_${crypto.randomUUID().substring(0, 8)}`;
@@ -1024,8 +1004,13 @@ export async function getEmailHistory(
   }
 
   if (options?.searchQuery) {
-    const escapedSearch = options.searchQuery.replace(/%/g, '\\%').replace(/_/g, '\\_');
-    query = query.or(`subject.ilike.%${escapedSearch}%,body_preview.ilike.%${escapedSearch}%`);
+    // Sanitize query to prevent PostgREST .or() filter injection
+    const sanitizedSearch = options.searchQuery
+      .replace(/[,()\\%_]/g, ' ')
+      .trim();
+    if (sanitizedSearch) {
+      query = query.or(`subject.ilike.%${sanitizedSearch}%,body_preview.ilike.%${sanitizedSearch}%`);
+    }
   }
 
   query = query.order('created_at', { ascending: false }).limit(limit);

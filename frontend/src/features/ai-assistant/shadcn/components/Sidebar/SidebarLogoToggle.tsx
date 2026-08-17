@@ -44,7 +44,7 @@ export const SidebarLogoToggle: FC<{ onToggle?: () => void }> = ({ onToggle }) =
       </svg>
       {/* PanelLeftClose — fades in on hover, replacing the logo */}
       <PanelLeftClose
-        className="size-4.5 text-white/80 transition-all duration-150"
+        className="size-4.5 text-zinc-600 transition-all duration-150"
         style={{
           opacity: hovered ? 1 : 0,
           transform: hovered ? 'scale(1)' : 'scale(0.6)',

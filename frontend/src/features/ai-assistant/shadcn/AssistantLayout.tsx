@@ -44,7 +44,8 @@ export const Shadcn: FC<{
   setArtifactPanelOpen: (open: boolean) => void;
   emailHistoryOpen: boolean;
   setEmailHistoryOpen: (open: boolean) => void;
-}> = ({ isOnboarded, isCoursesLoadingVisible, coursesError, retryCourses, onActiveCourseChange, onCompleteOnboarding, onSkipOnboarding, activeView, onToggleView, artifactPanelOpen, setArtifactPanelOpen, emailHistoryOpen, setEmailHistoryOpen }) => {
+  isGuestMode?: boolean;
+}> = ({ isOnboarded, isCoursesLoadingVisible, coursesError, retryCourses, onActiveCourseChange, onCompleteOnboarding, onSkipOnboarding, activeView, onToggleView, artifactPanelOpen, setArtifactPanelOpen, emailHistoryOpen, setEmailHistoryOpen, isGuestMode = false }) => {
   const { t } = useTranslation("errors");
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
 
@@ -55,22 +56,24 @@ export const Shadcn: FC<{
 
   // Get user ID for calendar
   useEffect(() => {
+    if (isGuestMode) return;
     supabase.auth.getUser().then(({ data }) => {
       if (data?.user) setCalendarUserId(data.user.id);
     }).catch(console.error);
-  }, []);
+  }, [isGuestMode]);
 
-  const calendar = useCalendarSync({ userId: calendarUserId });
+  const calendar = useCalendarSync({ userId: isGuestMode ? undefined : calendarUserId });
 
   // Fetch events on mount and when calendar view opens
   useEffect(() => {
-    if (calendarUserId && activeView === 'calendar') {
+    if (!isGuestMode && calendarUserId && activeView === 'calendar') {
       calendar.fetchEvents('this_month');
     }
   }, [calendarUserId, activeView]);
 
   // Listen for AI-triggered calendar refresh
   useEffect(() => {
+    if (isGuestMode) return;
     const handleRefresh = () => {
       if (calendarUserId) calendar.fetchEvents('this_month');
     };
@@ -217,11 +220,11 @@ export const Shadcn: FC<{
             <main
               className="relative flex flex-1 overflow-hidden min-w-0"
             >
-              {activeView === 'calendar' ? (
+              {!isGuestMode && activeView === 'calendar' ? (
                 <div className="flex-1 h-full overflow-y-auto custom-scrollbar bg-background">
                   {calendar.isCalendarLoading ? (
                     <div className="flex items-center justify-center h-full">
-                      <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                      <LoadingSpinner size="md" />
                     </div>
                   ) : (
                     <Suspense fallback={<PanelLoading />}>
@@ -285,16 +288,18 @@ export const Shadcn: FC<{
                 </div>
               )}
             </main>
-            <Suspense fallback={<PanelLoading />}>
-              <ErrorBoundary componentName="ArtifactPanel">
-                <ArtifactPanel
-                  open={artifactPanelOpen}
-                  onClose={() => setArtifactPanelOpen(false)}
-                  activeArtifactId={activeArtifactId}
-                />
-              </ErrorBoundary>
-            </Suspense>
-            {emailHistoryOpen && (
+            {!isGuestMode && (
+              <Suspense fallback={<PanelLoading />}>
+                <ErrorBoundary componentName="ArtifactPanel">
+                  <ArtifactPanel
+                    open={artifactPanelOpen}
+                    onClose={() => setArtifactPanelOpen(false)}
+                    activeArtifactId={activeArtifactId}
+                  />
+                </ErrorBoundary>
+              </Suspense>
+            )}
+            {!isGuestMode && emailHistoryOpen && (
               <div className="absolute right-0 top-0 h-full w-96 border-l bg-background z-30 shadow-xl">
                 <Suspense fallback={<PanelLoading />}>
                   <ErrorBoundary componentName="EmailHistoryPanel">

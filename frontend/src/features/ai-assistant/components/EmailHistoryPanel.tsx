@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuthContext } from '../../../context/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { Trash2, RefreshCw, Mail, Search, X, ChevronRight } from 'lucide-react';
+import { LoadingSpinner } from '@/components/ui/LoadingStates';
 
 interface Email {
   id: string;
@@ -237,7 +238,7 @@ export function EmailHistoryPanel({ onClose, onAskBot }: EmailHistoryPanelProps)
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center h-full">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <LoadingSpinner size="md" />
           </div>
         ) : filteredEmails.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
@@ -257,8 +258,8 @@ export function EmailHistoryPanel({ onClose, onAskBot }: EmailHistoryPanelProps)
                   <span
                     className={`px-2 py-0.5 text-xs rounded-full ml-2 ${
                       email.status === 'sent'
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
                     }`}
                   >
                     {email.status === 'sent' ? '✓' : '✗'}

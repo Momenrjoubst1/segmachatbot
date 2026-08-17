@@ -52,9 +52,6 @@ export const chatLimiter = rateLimit({
   message: { error: "لقد تجاوزت الحد المسموح به من الرسائل. يرجى الانتظار قليلاً." },
   standardHeaders: true,
   legacyHeaders: false,
-  // FIX-12: Always use userId for per-user rate limiting — no IP fallback.
-  // Unauthenticated requests skip the limiter and are handled by auth middleware (401).
-  skip: (req: Request) => !req.user?.id,
   keyGenerator: (req: Request) => {
     const userId = req.user?.id;
     if (userId) return userId;
@@ -82,12 +79,13 @@ export const DEFAULT_MODEL =
   "gpt-5.4";
 
 export const ALLOWED_MODELS = [
+  "glm-5.2",
   "gpt-5.4",
   "gpt-4o",
   "gpt-4o-mini",
   "llama-3.3-70b-versatile",
+  "llama-3.1-8b-instant",
   "mixtral-8x7b-32768",
-  "gemma2-9b-it",
   "google/gemini-2.0-flash-exp:free",
   "qwen/qwen-2.5-72b-instruct:free",
   "anthropic/claude-3.5-haiku",
@@ -95,7 +93,7 @@ export const ALLOWED_MODELS = [
   "inclusionai/ling-3.0-tiny",
 ];
 
-export type ProviderName = "openrouter" | "github" | "groq" | "fireworks" | "azure" | "novita";
+export type ProviderName = "openrouter" | "github" | "groq" | "fireworks" | "azure" | "novita" | "bigmodel";
 
 function pickFirstAvailableProvider(
   preferred: Array<{ provider: ProviderName; envKey: string }>,
@@ -109,6 +107,9 @@ function pickFirstAvailableProvider(
 }
 
 export function getProviderAndModel(modelId: string): { provider: ProviderName; modelName: string } {
+  if (modelId === "glm-5.2") {
+    return { provider: "bigmodel", modelName: "glm-5.2" };
+  }
   if (modelId === "gpt-5.4") {
     const azureConfigured = process.env.AZURE_API_KEY || process.env.AZURE_OPENAI_API_KEY;
     if (azureConfigured) {
@@ -131,7 +132,7 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
   if (modelId === "gpt-4o-mini") {
     return { provider: "github", modelName: "openai/gpt-4o-mini" };
   }
-  if (modelId.includes("llama-") || modelId.includes("mixtral") || modelId.includes("gemma2")) {
+  if (modelId.includes("llama-") || modelId.includes("mixtral")) {
     return { provider: "groq", modelName: modelId };
   }
   if (modelId.startsWith("accounts/fireworks/models/")) {
@@ -144,14 +145,24 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
 }
 
 export function createProviderClient(provider: ProviderName) {
+  if (provider === "bigmodel") {
+    const bigmodelKey = process.env.BIGMODEL_API_KEY;
+    if (!bigmodelKey) throw new Error("Missing BIGMODEL_API_KEY in environment");
+    return createOpenAI({
+      baseURL: "https://open.bigmodel.cn/api/paas/v4",
+      apiKey: bigmodelKey,
+    });
+  }
+
   if (provider === "azure") {
     const azureKey = process.env.AZURE_API_KEY || process.env.AZURE_OPENAI_API_KEY;
     const azureEndpoint = process.env.AZURE_ENDPOINT || process.env.AZURE_OPENAI_ENDPOINT;
     if (!azureKey) throw new Error("Missing AZURE_API_KEY / AZURE_OPENAI_API_KEY in environment");
+    if (!azureEndpoint) throw new Error("Missing AZURE_ENDPOINT / AZURE_OPENAI_ENDPOINT in environment");
     
-    const cleanEndpoint = azureEndpoint ? azureEndpoint.replace(/\/$/, '') : undefined;
+    const cleanEndpoint = azureEndpoint.replace(/\/$/, '');
     return createOpenAI({
-      baseURL: cleanEndpoint || "https://msalrjoub25-2561-resource.openai.azure.com/openai/v1",
+      baseURL: `${cleanEndpoint}/openai/v1`,
       apiKey: azureKey,
       headers: {
         "api-key": azureKey,
@@ -226,6 +237,43 @@ export async function ensureThreadOwnership(req: Request, threadId: string) {
   }
 
   return { supabase, userId };
+}
+
+const THREAD_OWNER_CACHE_TTL_S = 300; // 5 minutes
+const THREAD_OWNER_NEGATIVE_TTL_S = 60; // short TTL for "does not exist"
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Cheap ownership check for rate-limit decisions (Redis-cached, 5-min TTL).
+ * Returns false for non-UUID / nonexistent / non-owned threadIds. Errors are
+ * swallowed and returned as `false` so callers can fail safe.
+ */
+export async function isThreadOwnedByUser(userId: string, threadId: string): Promise<boolean> {
+  if (!UUID_SHAPE.test(threadId) || !userId) return false;
+  const cacheKey = `thread:owner:${threadId}`;
+  try {
+    const { default: redis } = await import("../../config/redis/client.js");
+    const cached = await redis.get(cacheKey).catch(() => null);
+    if (cached === userId) return true;
+    if (cached === "none") return false;
+    if (cached && cached !== userId) return false;
+
+    const { supabase } = await import("../../services/rag/rag-supabase-client.js");
+    const { data } = await supabase
+      .from("chat_sessions")
+      .select("user_id")
+      .eq("id", threadId)
+      .maybeSingle();
+
+    if (!data) {
+      await redis.set(cacheKey, "none", "EX", THREAD_OWNER_NEGATIVE_TTL_S).catch(() => {});
+      return false;
+    }
+    await redis.set(cacheKey, data.user_id, "EX", THREAD_OWNER_CACHE_TTL_S).catch(() => {});
+    return data.user_id === userId;
+  } catch {
+    return false;
+  }
 }
 
 // MAIN_AGENT_SYSTEM_PROMPT and CRITIC_AGENT_SYSTEM_PROMPT were removed

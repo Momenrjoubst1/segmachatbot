@@ -597,7 +597,7 @@ export const CodeIDEArtifact = ({
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-5 p-0 px-2 text-xs hover:bg-zinc-800"
+                className="h-5 p-0 px-2 text-xs hover:bg-zinc-100"
                 onClick={() => setTerminalLines([])}
               >
                 مسح

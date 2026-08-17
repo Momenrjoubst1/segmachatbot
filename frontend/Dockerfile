@@ -1,15 +1,12 @@
 FROM node:20-alpine AS base
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
 # Frontend build stage
 FROM base AS frontend-builder
 WORKDIR /app/frontend
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY . .
-RUN pnpm run build
+RUN npm run build
 
 # Frontend production stage with nginx
 FROM nginx:alpine AS frontend-production

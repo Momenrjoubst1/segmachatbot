@@ -26,5 +26,13 @@
   "user": "User",
   "you": "You",
   "them": "Them",
-  "underDevelopment": "🔒 Under Development"
+  "underDevelopment": "🔒 Under Development",
+  "guestPersistenceHint": "Guest chats aren't saved — sign in to keep your conversations.",
+  "moderationRefusal": "I can't help with that request. Could you try rephrasing?",
+  "composerPlaceholder": "Ask Sigma",
+  "composerSend": "Send message",
+  "composerStop": "Stop generating",
+  "composerDisclaimer": "Sigma is an AI assistant — responses may contain inaccuracies. Please verify important information.",
+  "guestLimitTitle": "You have used all your free messages",
+  "guestLimitSignIn": "Sign in to continue"
 }

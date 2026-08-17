@@ -129,12 +129,13 @@ class RAGQueryCache {
   // Search Results Cache (async — Redis)
   // ==========================================
   
-  async getResults(query: string, matchCount: number): Promise<RankedDocument[] | null> {
+  async getResults(query: string, matchCount: number, userId?: string): Promise<RankedDocument[] | null> {
     if (!DEFAULT_CONFIG.enabled) return null;
     if (query.length < DEFAULT_CONFIG.minQueryLength) return null;
     
     try {
-      const key = `${KEY_PREFIX}results:${this.hashQuery(query)}:${matchCount}`;
+      const userScope = userId ? `user:${userId}:` : 'global:';
+      const key = `${KEY_PREFIX}results:${userScope}${this.hashQuery(query)}:${matchCount}`;
       const raw = await redis.get(key);
       
       if (!raw) {
@@ -149,6 +150,7 @@ class RAGQueryCache {
         log.debug('Results cache hit (Redis)', { 
           query: query.substring(0, 50), 
           docCount: value.length,
+          userId,
         });
       }
       
@@ -160,13 +162,14 @@ class RAGQueryCache {
     }
   }
   
-  async setResults(query: string, matchCount: number, results: RankedDocument[]): Promise<void> {
+  async setResults(query: string, matchCount: number, results: RankedDocument[], userId?: string): Promise<void> {
     if (!DEFAULT_CONFIG.enabled) return;
     if (query.length < DEFAULT_CONFIG.minQueryLength) return;
     if (!results || results.length === 0) return;
     
     try {
-      const key = `${KEY_PREFIX}results:${this.hashQuery(query)}:${matchCount}`;
+      const userScope = userId ? `user:${userId}:` : 'global:';
+      const key = `${KEY_PREFIX}results:${userScope}${this.hashQuery(query)}:${matchCount}`;
       await redis.set(key, JSON.stringify(results), 'EX', DEFAULT_CONFIG.resultsTTL);
     } catch (err) {
       log.warn('Redis setResults error', { error: (err as Error)?.message });

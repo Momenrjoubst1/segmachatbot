@@ -27,6 +27,8 @@ import { TOOL_DEFINITIONS } from "../../tools/tool-definitions-aggregator.js";
 import { isWebSearchAvailable } from "../../tools/web/search/index.js";
 import { isEmailAvailable } from "../../tools/email/send/index.js";
 import type { ToolDefinition } from "../../tools/shared/types.js";
+import { getToolsRequiringUserId } from "../../tools/tool-metadata.js";
+import { withTimeout, TIMEOUTS } from "../../utils/timeout-wrapper.js";
 
 import { validateAndPrepareRequest } from "./pipeline/validation.js";
 import { processAndModerate } from "./pipeline/input-processing.js";
@@ -41,26 +43,8 @@ import { manageContextWindow } from "./pipeline/summarization.js";
 import { runUIFastPasses } from "./pipeline/ui-fastpass.js";
 import type { CoreMessage } from "./moderation.service.js";
 
-/** Tools that receive `__userId` in their execute args. */
-const TOOLS_NEEDING_USER_ID: ReadonlySet<string> = new Set([
-  "send_email",
-  "get_email_history",
-  "get_email_details",
-  "delete_email",
-  "resend_email",
-  "get_email_stats",
-  "save_email_contact",
-  "get_email_contacts",
-  "delete_email_contact",
-  "create_calendar_event",
-  "get_upcoming_events",
-  "find_free_slots",
-  "get_calendar_insights",
-  "delete_calendar_event",
-  "update_calendar_event",
-  "find_optimal_time",
-  "email_to_meeting",
-]);
+/** Tools that receive `__userId` in their execute args - now from metadata system */
+const TOOLS_NEEDING_USER_ID: ReadonlySet<string> = new Set(getToolsRequiringUserId());
 
 /** Builds the `enabledTools` map for the response generator. Filtered by intent to prevent token overflows. */
 function buildEnabledTools(userId: string, intent?: string): Record<string, ToolDefinition> {
@@ -136,7 +120,14 @@ export async function executeChatPipeline(
     const client = createProviderClient(provider as Parameters<typeof createProviderClient>[0]);
 
     // ---- Step 2+3: Process & moderate ----
-    const processed = await processAndModerate(messages, selectedModel, metrics);
+    const processed = await withTimeout(
+      processAndModerate(messages, selectedModel, metrics),
+      {
+        timeoutMs: TIMEOUTS.MODERATION,
+        operationName: 'moderation',
+        errorMessage: 'Content moderation timed out',
+      }
+    );
     if (processed.blocked) {
       res.status(400).json({ error: processed.blockError });
       return;
@@ -144,27 +135,56 @@ export async function executeChatPipeline(
     const { coreMessages, hasImages: _hasImages } = processed;
 
     // ---- Step 4: User courses ----
-    const userCoursesContext = await fetchUserCoursesContext(userId);
+    const userCoursesContext = await withTimeout(
+      fetchUserCoursesContext(userId),
+      {
+        timeoutMs: TIMEOUTS.DB_QUERY,
+        operationName: 'fetch_user_courses',
+        errorMessage: 'User courses fetch timed out',
+      }
+    );
+
+    // ---- Step 4c: thread-scoped regular-file context (chat attachments
+    // the user declined to promote to materials) ----
+    let threadFileContext = "";
+    try {
+      const { getThreadFileContext } = await import("./chat-file-router.js");
+      threadFileContext = await getThreadFileContext(threadId);
+    } catch { /* non-fatal */ }
 
     // ---- Step 4b: Intent ----
     const lastUserMsg = [...coreMessages].reverse().find((m) => m.role === "user");
     const lastUserText = lastUserMsg ? extractText(lastUserMsg.content) : "";
-    const intentResult = await detectUserIntent(coreMessages, userId);
+    const intentResult = await withTimeout(
+      detectUserIntent(coreMessages, userId),
+      {
+        timeoutMs: TIMEOUTS.INTENT_DETECTION,
+        operationName: 'intent_detection',
+        errorMessage: 'Intent detection timed out',
+      }
+    );
     metrics.intent = intentResult.intent;
     metrics.intentConfidence = intentResult.confidence;
 
     // ---- Step 5: RAG ----
-    const ragResult = await runRagPipeline({
-      coreMessages,
-      lastUserText,
-      userId,
-      selectedModel,
-      intentResult,
-      userCoursesContext,
-      ragEnabled,
-      threadId,
-      res,
-    });
+    const ragResult = await withTimeout(
+      runRagPipeline({
+        coreMessages,
+        lastUserText,
+        userId,
+        selectedModel,
+        intentResult,
+        userCoursesContext,
+        ragEnabled,
+        threadId,
+        res,
+      }),
+      {
+        timeoutMs: TIMEOUTS.RAG_RETRIEVAL + TIMEOUTS.RAG_RERANKING,
+        operationName: 'rag_pipeline',
+        errorMessage: 'RAG pipeline timed out',
+      }
+    );
 
     if (ragResult.responseCacheHit) {
       // Cache hit was already streamed by the RAG step
@@ -176,30 +196,60 @@ export async function executeChatPipeline(
     metrics.ragSources = ragResult.ragSources;
 
     // ---- Step 6: Memory context ----
-    const memResult = await buildMemoryContext({ userId, lastUserText, threadId });
+    const memResult = await withTimeout(
+      buildMemoryContext({ userId, lastUserText, threadId }),
+      {
+        timeoutMs: TIMEOUTS.MEMORY_RETRIEVAL,
+        operationName: 'memory_context',
+        errorMessage: 'Memory context building timed out',
+      }
+    );
     const memoryPrompt = memResult.prompt;
 
     // ---- Step 6b: System prompt ----
     const { systemPrompt: augmentedSystemPrompt, basePersona } = assembleSystemPrompt({
       ragContext: ragResult.ragContext,
-      userCoursesContext,
+      userCoursesContext: userCoursesContext + threadFileContext,
       memoryPrompt,
     });
 
     // ---- Step 7: Thread management ----
-    const threadResult = await resolveThread({
-      req,
-      threadId,
-      clientChatGuid,
-      courseId,
-      userId,
-    });
+    const threadResult = await withTimeout(
+      resolveThread({
+        req,
+        threadId,
+        clientChatGuid,
+        courseId,
+        userId,
+      }),
+      {
+        timeoutMs: TIMEOUTS.DB_WRITE,
+        operationName: 'thread_resolution',
+        errorMessage: 'Thread resolution timed out',
+      }
+    );
     if (!threadResult.ok) {
       res.status(threadResult.status).json({ error: threadResult.error });
       return;
     }
     const { activeThreadId, reused } = threadResult;
     metrics.threadReused = reused;
+
+    // ---- Step 7b: chat file routing (material vs regular file) ----
+    // Intercepts PDF attachments: asks the user, promotes to the material
+    // pipeline, or binds the text to this thread. Streams a canned reply.
+    try {
+      const { handleChatFileFlow } = await import("./chat-file-router.js");
+      const handled = await handleChatFileFlow({ userId, threadId: activeThreadId, messages, res });
+      if (handled) {
+        metrics.chatFileRouted = true;
+        return;
+      }
+    } catch (fileErr) {
+      log.warn("chat file routing failed (non-fatal)", {
+        error: (fileErr as Error).message,
+      });
+    }
 
     // Stream headers
     if (activeThreadId && !threadId) {
@@ -209,23 +259,55 @@ export async function executeChatPipeline(
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    
+    // Include model fallback information in response headers
+    if (validation.modelFallback) {
+      res.setHeader("X-Model-Fallback", JSON.stringify(validation.modelFallback));
+    }
 
     // ---- Step 8: Persist user message ----
-    await persistLastUserMessage({ activeThreadId, coreMessages });
+    await withTimeout(
+      persistLastUserMessage({ activeThreadId, coreMessages }),
+      {
+        timeoutMs: TIMEOUTS.DB_WRITE,
+        operationName: 'persist_message',
+        errorMessage: 'Message persistence timed out',
+      }
+    );
 
     // ---- Step 9: Manage context window ----
-    const { finalMessages, conversationSummary } = await manageContextWindow({
-      coreMessages,
-      userId,
-    });
+    const { finalMessages, conversationSummary } = await withTimeout(
+      manageContextWindow({
+        coreMessages,
+        userId,
+      }),
+      {
+        timeoutMs: TIMEOUTS.PIPELINE_STEP,
+        operationName: 'context_window',
+        errorMessage: 'Context window management timed out',
+      }
+    );
 
     // ---- Step 10: UI fast-passes ----
-    const fastPass = await runUIFastPasses({ res, coreMessages, userId });
+    const fastPass = await withTimeout(
+      runUIFastPasses({ res, coreMessages, userId }),
+      {
+        timeoutMs: TIMEOUTS.PIPELINE_STEP,
+        operationName: 'ui_fastpass',
+        errorMessage: 'UI fast-pass timed out',
+      }
+    );
     if (fastPass.terminal) return;
     metrics.uiActionInjected = fastPass.injected;
 
     // ---- Step 10: Stream final response ----
     const enabledTools = buildEnabledTools(userId, intentResult.intent);
+    
+    // Include model fallback information in the response
+    const responseMetadata = validation.modelFallback 
+      ? { modelFallback: validation.modelFallback }
+      : {};
+    
     await generateAndStreamResponse({
       client,
       modelName,
@@ -242,20 +324,30 @@ export async function executeChatPipeline(
       res,
       cacheMetadata: ragResult.cacheMetadata,
       retrievedDocsForGrounding: ragResult.rankedDocs,
+      metadata: responseMetadata,
     });
   } catch (error) {
+    const err = error as Error;
+    const isTimeout = (err as any)?.code === 'TIMEOUT';
+    const errorMessage = isTimeout
+      ? 'Operation timed out. Please try again.'
+      : 'Internal Stream Error';
+    
     log.error("Stream Error", {
-      error: (error as Error)?.message,
-      stack: (error as Error)?.stack,
+      error: err.message,
+      stack: err.stack,
+      isTimeout,
+      operationName: (err as any)?.operationName,
     });
+    
     if (!res.headersSent) {
-      res.status(500).json({
-        error: "Internal Stream Error",
+      res.status(isTimeout ? 504 : 500).json({
+        error: errorMessage,
       });
     } else {
       try {
         res.write(
-          `3:${JSON.stringify({ error: "Internal Stream Error" })}\n`,
+          `3:${JSON.stringify({ error: errorMessage })}\n`,
         );
         res.end();
       } catch (writeErr) {

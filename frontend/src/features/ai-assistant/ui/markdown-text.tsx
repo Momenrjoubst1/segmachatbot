@@ -22,7 +22,7 @@ import { NotebookPaper } from "./NotebookPaper";
 // @ts-expect-error - react-syntax-highlighter module interop
 import { Prism } from "react-syntax-highlighter";
 // @ts-expect-error - react-syntax-highlighter CJS style interop
-import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
+import { vs } from "react-syntax-highlighter/dist/cjs/styles/prism";
 import { toast } from "sonner";
 import {
   Artifact,
@@ -158,7 +158,7 @@ const CustomSyntaxHighlighter: FC<{ language: string; code: string }> = memo(({ 
   };
 
   return (
-    <Artifact className="my-4 border-zinc-800 bg-[#1e1e1e] text-white shadow-md" dir="ltr" style={{ direction: "ltr", textAlign: "left" }}>
+    <Artifact className="my-4 border-zinc-200 bg-[#f5f5f5] text-zinc-900 shadow-md" dir="ltr" style={{ direction: "ltr", textAlign: "left" }}>
       <ArtifactHeader className="border-zinc-800 bg-zinc-900/80 px-4 py-2" dir="ltr" style={{ direction: "ltr" }}>
         <div className="flex flex-col gap-0.5" style={{ direction: "ltr", textAlign: "left" }}>
           <ArtifactTitle className="text-xs font-semibold capitalize text-zinc-200" style={{ direction: "ltr", textAlign: "left" }}>
@@ -173,43 +173,43 @@ const CustomSyntaxHighlighter: FC<{ language: string; code: string }> = memo(({ 
             icon={PlayIcon}
             tooltip="Run code"
             onClick={handleRun}
-            className="size-7 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+            className="size-7 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900"
           />
           <ArtifactAction
             icon={CopyIcon}
             tooltip="Copy to clipboard"
             onClick={handleCopy}
-            className="size-7 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+            className="size-7 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900"
           />
           <ArtifactAction
             icon={RefreshCwIcon}
             tooltip="Regenerate"
             onClick={handleRegenerate}
-            className="size-7 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+            className="size-7 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900"
           />
           <ArtifactAction
             icon={DownloadIcon}
             tooltip="Download"
             onClick={handleDownload}
-            className="size-7 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+            className="size-7 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900"
           />
           <ArtifactAction
             icon={ShareIcon}
             tooltip="Share"
             onClick={handleShare}
-            className="size-7 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+            className="size-7 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900"
           />
         </ArtifactActions>
       </ArtifactHeader>
-      <ArtifactContent className="p-0 overflow-hidden bg-[#1e1e1e]" dir="ltr" style={{ direction: "ltr", textAlign: "left" }}>
+      <ArtifactContent className="p-0 overflow-hidden bg-[#f5f5f5]" dir="ltr" style={{ direction: "ltr", textAlign: "left" }}>
         <CodeBlockScrollFade>
           <Prism
             language={language}
-            style={vscDarkPlus}
+            style={vs}
             showLineNumbers={true}
             wrapLines={true}
             lineNumberStyle={{
-              color: "#858585",
+              color: "#999999",
               minWidth: "2.25rem",
               textAlign: "right",
               paddingRight: "1rem",

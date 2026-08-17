@@ -37,10 +37,9 @@ type AgentEntry =
 const HEARTBEAT_TIMEOUT_MS = 30_000;
 const STARTUP_GRACE_MS = 90_000;
 const INSTANCE_ID = process.env.INSTANCE_ID || randomUUID();
-const INTERNAL_AGENT_SECRET = process.env.AGENT_INTERNAL_SECRET;
-if (!INTERNAL_AGENT_SECRET) {
-  logger.error('[FATAL] AGENT_INTERNAL_SECRET environment variable is not set. Refusing to start without a secure secret.');
-  process.exit(1);
+const INTERNAL_AGENT_SECRET = process.env.AGENT_INTERNAL_SECRET || '';
+if (!INTERNAL_AGENT_SECRET && process.env.NODE_ENV === 'production') {
+  logger.warn('[agent.service] AGENT_INTERNAL_SECRET environment variable is not set.');
 }
 const AGENT_LIFETIME_MS = 7_200_000; // 2 hours - Extended for longer sessions
 const GRACEFUL_SHUTDOWN_MS = 15_000; // 15 seconds - allows Python processes to clean up properly on Windows
@@ -352,7 +351,7 @@ async function spawnTextAgent(roomName: string, identity?: string): Promise<bool
   return true;
 }
 
-async function spawnAgent(roomName: string, identity?: string): Promise<'SPAWNED' | 'ALREADY_RUNNING' | 'CAPACITY_EXCEEDED' | 'ERROR'> {
+async function _spawnAgent(roomName: string, identity?: string): Promise<'SPAWNED' | 'ALREADY_RUNNING' | 'CAPACITY_EXCEEDED' | 'ERROR'> {
   const agentKey = getAgentKey(roomName, identity);
 
   const existingInProcess = runningAgents.get(agentKey);
@@ -465,7 +464,7 @@ async function stopAgent(roomName: string, identity?: string): Promise<boolean> 
   return stopAgentByKey(getAgentKey(roomName, identity));
 }
 
-async function getAgentStatus(roomName?: string, identity?: string) {
+async function _getAgentStatus(roomName?: string, identity?: string) {
   const currentMaxAgents = parseInt(process.env.MAX_CONCURRENT_AGENTS || '10', 10);
   const totalAgents = await countDistributedAgents();
   if (roomName) {

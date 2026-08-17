@@ -55,6 +55,22 @@ class MockRedis {
     return 'OK';
   }
 
+  async incr(key: string): Promise<number> {
+    if (this.checkExpiry(key)) this.data.delete(key);
+    const current = parseInt(this.data.get(key) || '0', 10);
+    const next = current + 1;
+    this.data.set(key, String(next));
+    return next;
+  }
+
+  async decr(key: string): Promise<number> {
+    if (this.checkExpiry(key)) this.data.delete(key);
+    const current = parseInt(this.data.get(key) || '0', 10);
+    const next = Math.max(0, current - 1);
+    this.data.set(key, String(next));
+    return next;
+  }
+
   async del(...keys: string[]): Promise<number> {
     let count = 0;
     for (const key of keys) {
@@ -172,6 +188,15 @@ class MockRedis {
     if (!list) return [];
     const realStop = stop < 0 ? list.length + stop + 1 : stop + 1;
     return list.slice(start, realStop);
+  }
+
+  async rpoplpush(source: string, destination: string): Promise<string | null> {
+    const srcList = this.lists.get(source);
+    if (!srcList || srcList.length === 0) return null;
+    const value = srcList.pop()!;
+    if (!this.lists.has(destination)) this.lists.set(destination, []);
+    this.lists.get(destination)!.unshift(value);
+    return value;
   }
 
   async lrem(key: string, count: number, value: string): Promise<number> {

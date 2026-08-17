@@ -4,5 +4,8 @@ dist/
 .env.local
 .env.*.local
 *.log
+*.log.*
 .DS_Store
 coverage/
+backend-dev.log
+backend-dev-error.log

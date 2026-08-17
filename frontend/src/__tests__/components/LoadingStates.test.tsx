@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
-import {
-  LoadingSpinner,
-  ThreadSwitchSkeleton,
-} from '@/components/ui/LoadingStates';
+import { LoadingSpinner } from '@/components/ui/LoadingStates';
 
 describe('LoadingStates', () => {
   describe('LoadingSpinner', () => {
@@ -40,32 +37,6 @@ describe('LoadingStates', () => {
     it('accepts aria-label', () => {
       const { container } = render(<LoadingSpinner aria-label="Loading content" />);
       expect(container.firstChild).toHaveAttribute('aria-label', 'Loading content');
-    });
-  });
-
-  describe('ThreadSwitchSkeleton', () => {
-    it('renders bubble skeletons', () => {
-      const { container } = render(<ThreadSwitchSkeleton />);
-      const bubbles = container.querySelectorAll('.h-9.rounded-2xl');
-      expect(bubbles).toHaveLength(5);
-    });
-
-    it('has role=status for accessibility', () => {
-      const { container } = render(<ThreadSwitchSkeleton />);
-      expect(container.firstChild).toHaveAttribute('role', 'status');
-    });
-
-    it('has aria-busy=true', () => {
-      const { container } = render(<ThreadSwitchSkeleton />);
-      expect(container.firstChild).toHaveAttribute('aria-busy', 'true');
-    });
-
-    it('marks decorative bubbles as aria-hidden', () => {
-      const { container } = render(<ThreadSwitchSkeleton />);
-      const bubbles = container.querySelectorAll('.h-9.rounded-2xl');
-      bubbles.forEach((bubble) => {
-        expect(bubble).toHaveAttribute('aria-hidden', 'true');
-      });
     });
   });
 });

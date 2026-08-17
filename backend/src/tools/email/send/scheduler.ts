@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { knowledgeSupabase as supabase } from "../../../config/supabase.config.js";
+import { supabase } from "../../../config/supabase.config.js";
 import { logger } from "../../../utils/logger.js";
 
 // ========================================

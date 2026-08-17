@@ -5,6 +5,9 @@ import os
 import sys
 import tempfile
 
+# Ensure the pdf-processor root is on sys.path so `app` package resolves
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import fitz
 
 

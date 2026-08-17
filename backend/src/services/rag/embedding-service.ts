@@ -4,6 +4,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import dotenv from "dotenv";
 import path from "path";
 import { createLogger } from '../../utils/logger.js';
+import { AppError, ErrorCode } from '../../utils/error-handler.js';
 
 const log = createLogger('embedding');
 
@@ -20,7 +21,7 @@ if (process.env.GOOGLE_API_KEY && !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
   process.env.GOOGLE_GENERATIVE_AI_API_KEY = process.env.GOOGLE_API_KEY;
 }
 
-const TARGET_DIM = 768;
+const TARGET_DIM = 9692;
 
 function fitToTargetDim(vector: number[]): number[] {
   if (vector.length === TARGET_DIM) return vector;
@@ -47,6 +48,27 @@ const googleProvider: EmbeddingProvider = {
     return embeddings.map(fitToTargetDim);
   },
 };
+
+function createBigModelProvider(): EmbeddingProvider | null {
+  if (!process.env.BIGMODEL_API_KEY) return null;
+  const client = createOpenAI({
+    baseURL: "https://open.bigmodel.cn/api/paas/v4",
+    apiKey: process.env.BIGMODEL_API_KEY,
+  });
+  return {
+    name: "bigmodel",
+    embed: async (text: string) => {
+      const model = client.textEmbeddingModel("embedding-3");
+      const { embedding } = await embed({ model, value: text });
+      return fitToTargetDim(embedding);
+    },
+    embedMany: async (texts: string[]) => {
+      const model = client.textEmbeddingModel("embedding-3");
+      const { embeddings } = await embedMany({ model, values: texts });
+      return embeddings.map(fitToTargetDim);
+    },
+  };
+}
 
 function createGitHubProvider(): EmbeddingProvider | null {
   if (!process.env.GITHUB_TOKEN) return null;
@@ -140,9 +162,19 @@ function createLocalProvider(): EmbeddingProvider | null {
   let extractorPromise: Promise<any> | null = null;
   const getExtractor = async () => {
     if (!extractorPromise) {
-      const { pipeline } = await import("@xenova/transformers");
-      extractorPromise = pipeline("feature-extraction", modelId);
-      log.info(`[Embedding] Loading local model: ${modelId}`);
+      try {
+        // @ts-ignore - Optional runtime dependency
+        const { pipeline } = await import("@xenova/transformers");
+        extractorPromise = pipeline("feature-extraction", modelId);
+        log.info(`[Embedding] Loading local model: ${modelId}`);
+      } catch (error) {
+        log.error(`[Embedding] Failed to load @xenova/transformers: ${error}`);
+        throw new AppError(
+          "Failed to load local embedding model. The package may not be installed.",
+          ErrorCode.EMBEDDING_MODEL_LOAD_FAILED,
+          500
+        );
+      }
     }
     return extractorPromise;
   };
@@ -180,12 +212,14 @@ function createLocalProvider(): EmbeddingProvider | null {
   };
 }
 
+const bigmodelProvider = createBigModelProvider();
 const githubProvider = createGitHubProvider();
 const azureProvider = createAzureProvider();
 const localProvider = createLocalProvider();
 
 const providers: EmbeddingProvider[] = [
   googleProvider,
+  ...(bigmodelProvider ? [bigmodelProvider] : []),
   ...(githubProvider ? [githubProvider] : []),
   ...(azureProvider ? [azureProvider] : []),
   ...(localProvider ? [localProvider] : []),

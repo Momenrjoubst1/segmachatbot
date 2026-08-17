@@ -1,5 +1,6 @@
 import { supabase } from "../../config/supabase.config.js";
 import { createLogger } from "../../utils/logger.js";
+import { presignR2Get, extractR2KeyFromUrl, isR2Configured } from "./r2-client.js";
 
 const log = createLogger("textbook-search");
 
@@ -48,9 +49,11 @@ class LRUCache<K, V> {
 }
 
 const structureCache = new LRUCache<string, any[]>(CACHE_MAX_SIZE, CACHE_TTL_MS);
+const curriculumCache = new LRUCache<string, Array<{ id: string; level: string; title: string; page_start: number; page_end: number }>>(CACHE_MAX_SIZE, CACHE_TTL_MS);
 
 export function invalidateStructureCache(userId: string): void {
   structureCache.delete(`structure:${userId}`);
+  curriculumCache.delete(`curriculum:${userId}`);
 }
 
 interface StructureNode {
@@ -181,6 +184,80 @@ export async function matchStructureTree(
   return bestMatch;
 }
 
+/**
+ * Match the query against the inferred CURRICULUM map (textbook_sections:
+ * units and lessons with exact page ranges). Preferred over the raw
+ * structure tree — lesson boundaries come from merged evidence, not font
+ * sizes alone.
+ */
+export async function matchCurriculumSection(
+  userId: string,
+  question: string
+): Promise<MatchResult | null> {
+  const cacheKey = `curriculum:${userId}`;
+  let sections = curriculumCache.get(cacheKey);
+
+  if (!sections) {
+    const { data } = await supabase
+      .from("textbook_sections")
+      .select(
+        `id, level, title, page_start, page_end, textbooks!inner (id, user_id, status)`
+      )
+      .eq("level", "lesson")
+      .eq("textbooks.user_id", userId)
+      .eq("textbooks.status", "completed")
+      .order("order_index");
+    sections = (data || []).map((row: any) => ({
+      id: row.id,
+      level: row.level,
+      title: row.title,
+      page_start: row.page_start,
+      page_end: row.page_end,
+      textbook_id: (row.textbooks as any)?.id || "",
+    })) as any;
+    curriculumCache.set(cacheKey, sections as NonNullable<typeof sections>);
+  }
+
+  if (!sections || sections.length === 0) return null;
+
+  let bestMatch: MatchResult | null = null;
+  let bestScore = 0;
+
+  for (const section of sections) {
+    const score = fuzzyMatch(question, section.title);
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = {
+        matched: true,
+        textbook_id: (section as any).textbook_id || "",
+        section_title: section.title,
+        page_start: section.page_start,
+        page_end: section.page_end,
+        ambiguous: false,
+      };
+    } else if (score === bestScore && score > 0.3 && bestMatch) {
+      if (!bestMatch.candidates) {
+        bestMatch.candidates = [bestMatch.section_title];
+      }
+      bestMatch.candidates.push(section.title);
+      bestMatch.ambiguous = true;
+    }
+  }
+
+  if (bestScore < 0.3) {
+    return {
+      matched: false,
+      textbook_id: "",
+      section_title: "",
+      page_start: 0,
+      page_end: 0,
+      ambiguous: false,
+    };
+  }
+
+  return bestMatch;
+}
+
 export async function searchTextbookChunks(args: {
   userId: string;
   textbookId: string;
@@ -197,8 +274,8 @@ export async function searchTextbookChunks(args: {
   figure_refs: any[];
   similarity: number;
 }>> {
-  const { textbookId, query, queryEmbedding, pageStart, pageEnd, matchCount = 10 } = args;
-  const matchThreshold = parseFloat(process.env.TEXTBOOK_MATCH_THRESHOLD || "0.4");
+  const { userId, textbookId, query, queryEmbedding, pageStart, pageEnd, matchCount = 10 } = args;
+  const matchThreshold = parseFloat(process.env.TEXTBOOK_MATCH_THRESHOLD || "0.05");
 
   const { data: hybridData, error: hybridError } = await supabase.rpc(
     "hybrid_search_textbook_chunks",
@@ -206,6 +283,7 @@ export async function searchTextbookChunks(args: {
       query_embedding: queryEmbedding,
       query_text: query,
       p_textbook_id: textbookId,
+      p_user_id: userId,
       p_match_threshold: matchThreshold,
       p_match_count: matchCount,
       p_page_start: pageStart || null,
@@ -238,6 +316,7 @@ export async function searchTextbookChunks(args: {
     {
       query_embedding: queryEmbedding,
       p_textbook_id: textbookId,
+      p_user_id: userId,
       p_match_threshold: matchThreshold,
       p_match_count: matchCount,
       p_page_start: pageStart || null,
@@ -281,6 +360,20 @@ export async function getFiguresForChunks(
   const figuresWithSignedUrls = await Promise.all(
     data.map(async (fig: any) => {
       const imageUrl: string = fig.image_url || "";
+
+      // R2 figures: stored either as a bare object key ("textbooks/…") or as
+      // a legacy public URL — always served via a short-lived presigned URL.
+      const r2Key = imageUrl.startsWith("textbooks/")
+        ? imageUrl
+        : extractR2KeyFromUrl(imageUrl);
+      if (r2Key && isR2Configured()) {
+        const signedR2 = presignR2Get(r2Key, 3600);
+        if (signedR2) {
+          return { ...fig, image_url: signedR2 };
+        }
+      }
+
+      // Supabase storage figures: 1-hour signed URL (private bucket).
       const storageMatch = imageUrl.match(/textbook-images\/(.+)$/);
       if (storageMatch) {
         const storagePath = decodeURIComponent(storageMatch[1]);
@@ -303,6 +396,8 @@ export async function searchTextbooksForUser(args: {
   query: string;
   queryEmbedding: number[];
   matchCount?: number;
+  pageStart?: number;
+  pageEnd?: number;
 }): Promise<Array<{
   id: string;
   content: string;
@@ -312,7 +407,7 @@ export async function searchTextbooksForUser(args: {
   file_name: string;
   similarity: number;
 }>> {
-  const { userId, query, queryEmbedding, matchCount = 10 } = args;
+  const { userId, query, queryEmbedding, matchCount = 10, pageStart, pageEnd } = args;
 
   const { data: textbooks, error: fetchError } = await supabase
     .from("textbooks")
@@ -343,40 +438,27 @@ export async function searchTextbooksForUser(args: {
         .select("id", { count: "exact", head: true })
         .eq("textbook_id", textbook.id);
 
-      let searchId = textbook.id;
-      
-      // If no chunks, find the canonical textbook with same hash
+      // Note: no cross-user "canonical copy" lookup anymore — the search RPCs
+      // are user-scoped (migration 013), so searching another user's textbook
+      // id would always return empty. Books without chunks are simply skipped.
       if (!chunkCheck || chunkCheck.length === 0) {
-        const { data: canonical } = await supabase
-          .from("textbooks")
-          .select("id")
-          .eq("file_hash", textbook.file_hash)
-          .eq("status", "completed")
-          .neq("id", textbook.id)
-          .limit(1)
-          .maybeSingle();
-        
-        if (canonical) {
-          searchId = canonical.id;
-          log.info("Using canonical textbook for dedup", {
-            userId,
-            dedupedId: textbook.id,
-            canonicalId: searchId,
-          });
-        }
+        continue;
       }
 
       const results = await searchTextbookChunks({
         userId,
-        textbookId: searchId,
+        textbookId: textbook.id,
         query,
         queryEmbedding,
         matchCount: Math.ceil(matchCount / textbooks.length),
+        pageStart,
+        pageEnd,
       });
 
       for (const result of results) {
         allResults.push({
           ...result,
+          id: String(result.id),
           textbook_id: textbook.id,
           file_name: textbook.file_name,
         });

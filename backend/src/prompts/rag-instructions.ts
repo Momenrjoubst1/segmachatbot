@@ -13,7 +13,7 @@ export interface RAGOptions {
   /** Cleaned source document names */
   sourceNames: string[];
   /** Which retrieval method was used */
-  retrievalMethod: 'vector' | 'bm25' | 'hybrid';
+  retrievalMethod: 'vector' | 'bm25' | 'hybrid' | 'structure_scope' | 'curriculum';
 }
 
 /**

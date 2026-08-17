@@ -1,11 +1,12 @@
 import { Router } from 'express';
-import { fetchImageForProxy } from '../utils/safe-fetch-url.js';
+import { fetchImageForProxy, assertSafeImageProxyUrl } from '../utils/safe-fetch-url.js';
 import { asyncHandler } from '../utils/express-async-wrapper.js';
 import { logger } from '../utils/logger.js';
+import { authMiddleware } from '../middleware/auth.middleware.js';
 
 const router = Router();
 
-router.get('/image', asyncHandler(async (req, res) => {
+router.get('/image', authMiddleware, asyncHandler(async (req, res) => {
   const { url } = req.query;
 
   if (!url || typeof url !== 'string') {
@@ -14,14 +15,17 @@ router.get('/image', asyncHandler(async (req, res) => {
   }
 
   try {
+    await assertSafeImageProxyUrl(url);
     const { buffer, contentType } = await fetchImageForProxy(url);
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
     res.send(buffer);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     logger.warn('[proxy] Image fetch failed', { url, error: msg });
-    res.status(502).json({ error: 'Failed to fetch image', detail: msg });
+    res.status(502).json({ error: 'Failed to fetch image' });
   }
 }));
 

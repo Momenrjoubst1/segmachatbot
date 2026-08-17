@@ -24,7 +24,7 @@ export interface ThreadLookupResult {
 }
 
 // ---------------------------------------------------------------------------
-// Arabic Intent Detection â€” Broad Verb Patterns
+// Arabic Intent Detection — Broad Verb Patterns
 // ---------------------------------------------------------------------------
 
 /**
@@ -32,40 +32,40 @@ export interface ThreadLookupResult {
  * directional verb phrases used to express "navigate to / open a chat".
  *
  * Covered verbs:
- *   Ø§ÙØªØ­ (open) Â· Ø§Ø°Ù‡Ø¨/Ø±ÙˆØ­/Ø±ÙˆÙ‘Ø­ (go) Â· Ø¬ÙŠØ¨ (bring) Â· ÙˆØ±ÙŠÙ†ÙŠ (show me)
- *   Ø®Ø°Ù†ÙŠ/ÙˆØ¯Ù‘Ù†ÙŠ (take me) Â· Ø§Ù†Ù‚Ù„Ù†ÙŠ (move me) Â· Ø±Ø¬Ù‘Ø¹Ù†ÙŠ (take me back)
- *   Ø¯ÙˆØ±/Ø§Ø¨Ø­Ø« (find/search)
+ *   افتح (open) · اذهب/روح/روّح (go) · جيب (bring) · وريني (show me)
+ *   خذني/ودّني (take me) · انقلني (move me) · رجّعني (take me back)
+ *   دور/ابحث (find/search)
  *
- * Optionally followed by directional connectors: Ø¥Ù„Ù‰ØŒ Ø§Ù„Ù‰ØŒ Ù„Ù€ØŒ Ù„ØŒ Ø¹Ù„Ù‰ØŒ Ù„ÙŠ
+ * Optionally followed by directional connectors: إلى، الى، لـ، ل، على، لي
  */
 const THREAD_INTENT_VERB_REGEX = new RegExp(
   "^(?:" +
-    // "Ø§ÙØªØ­" â€” open
-    "Ø§ÙØªØ­" +
-    // "Ø§Ø°Ù‡Ø¨" (+ optional Ø¥Ù„Ù‰/Ø§Ù„Ù‰/Ù„) â€” go
-    "|Ø§Ø°Ù‡Ø¨(?:\\s+(?:Ø§Ù„Ù‰|Ø¥Ù„Ù‰|Ù„[Ù€]?))?" +
-    // "Ø±ÙˆØ­" / "Ø±ÙˆÙ‘Ø­" (+ optional Ø¹Ù„Ù‰/Ø¥Ù„Ù‰/Ø§Ù„Ù‰)
-    "|Ø±Ùˆ\\s*[Ù‘Ø­]?(?:\\s+(?:Ø¹Ù„Ù‰|Ø§Ù„Ù‰|Ø¥Ù„Ù‰))?" +
-    // "Ø¬ÙŠØ¨" (+ optional Ù„ÙŠ) â€” bring (me)
-    "|Ø¬ÙŠØ¨(?:\\s+Ù„ÙŠ)?" +
-    // "ÙˆØ±ÙŠÙ†ÙŠ" â€” show me
-    "|ÙˆØ±ÙŠÙ†ÙŠ" +
-    // "Ø®Ø°Ù†ÙŠ" â€” take me
-    "|Ø®Ø°Ù†ÙŠ(?:\\s+(?:Ø¹Ù„Ù‰|Ø§Ù„Ù‰|Ø¥Ù„Ù‰))?" +
-    // "ÙˆØ¯Ù‘Ù†ÙŠ" / "ÙˆØ¯Ù†ÙŠ" â€” take me (Gulf dialect)
-    "|ÙˆØ¯\\s*[Ù‘]Ù†ÙŠ(?:\\s+(?:Ø¹Ù„Ù‰|Ø§Ù„Ù‰|Ø¥Ù„Ù‰))?" +
-    // "Ø§Ù†Ù‚Ù„Ù†ÙŠ" â€” move/transfer me
-    "|Ø§Ù†Ù‚Ù„Ù†ÙŠ(?:\\s+(?:Ø§Ù„Ù‰|Ø¥Ù„Ù‰|Ø¹Ù„Ù‰))?" +
-    // "Ø±Ø¬Ù‘Ø¹Ù†ÙŠ" / "Ø±Ø¬Ø¹Ù†ÙŠ" â€” take me back
-    "|Ø±Ø¬\\s*[Ù‘]?\\s*Ø¹\\s*[Ù‘]?Ù†ÙŠ(?:\\s+(?:Ø¹Ù„Ù‰|Ø§Ù„Ù‰|Ø¥Ù„Ù‰))?" +
-    // "Ø¯ÙˆØ±" / "Ø§Ø¨Ø­Ø«" â€” find / search
-    "|Ø¯ÙˆØ±(?:\\s+Ù„ÙŠ)?" +
-    "|Ø§Ø¨Ø­Ø«(?:\\s+Ù„ÙŠ)?" +
+    // "افتح" — open
+    "افتح" +
+    // "اذهب" (+ optional إلى/الى/ل) — go
+    "|اذهب(?:\\s+(?:الى|إلى|ل[ـ]?))?" +
+    // "روح" / "روّح" (+ optional على/إلى/الى)
+    "|رو\\s*[ّح]?(?:\\s+(?:على|الى|إلى))?" +
+    // "جيب" (+ optional لي) — bring (me)
+    "|جيب(?:\\s+لي)?" +
+    // "وريني" — show me
+    "|وريني" +
+    // "خذني" — take me
+    "|خذني(?:\\s+(?:على|الى|إلى))?" +
+    // "ودّني" / "ودني" — take me (Gulf dialect)
+    "|ود\\s*[ّ]?ني(?:\\s+(?:على|الى|إلى))?" +
+    // "انقلني" — move/transfer me
+    "|انقلني(?:\\s+(?:الى|إلى|على))?" +
+    // "رجّعني" / "رجعني" — take me back
+    "|رج\\s*[ّ]?\\s*ع\\s*[ّ]?ني(?:\\s+(?:على|الى|إلى))?" +
+    // "دور" / "ابحث" — find / search
+    "|دور(?:\\s+لي)?" +
+    "|ابحث(?:\\s+لي)?" +
   ")(?:\\s+|$)",
 );
 
 // ---------------------------------------------------------------------------
-// Title Sanitization â€” Filler Word Stripping
+// Title Sanitization — Filler Word Stripping
 // ---------------------------------------------------------------------------
 
 /**
@@ -74,40 +74,40 @@ const THREAD_INTENT_VERB_REGEX = new RegExp(
  * extracted text until no more filler remains.
  *
  * Examples of what this removes:
- *   "Ø´Ø§Øª Ø§Ø³Ù…Ù‡ X"  â†’  "X"
- *   "Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø© ØªØ¨Ø¹ X"  â†’  "X"
- *   "Ù…ÙˆØ¶ÙˆØ¹ Ø¨Ø§Ø³Ù… X"  â†’  "X"
+ *   "شات اسمه X"  →  "X"
+ *   "المحادثة تبع X"  →  "X"
+ *   "موضوع باسم X"  →  "X"
  */
 const TITLE_FILLER_WORDS: readonly string[] = [
-  "Ø´Ø§Øª",
-  "Ù…Ø­Ø§Ø¯Ø«Ù‡",
-  "Ù…Ø­Ø§Ø¯Ø«Ø©",
-  "Ù…ÙˆØ¶ÙˆØ¹",
-  "ØªØ´Ø§Ø±Øª",
-  "Ø§Ø³Ù…Ù‡",
-  "Ø¨Ø§Ø³Ù…",
-  "Ø¨Ø¹Ù†ÙˆØ§Ù†",
-  "ØªØ¨Ø¹",
-  "ØªØ¨Ø¹Øª",
-  "Ø­Ù‚",
-  "Ø­Ù‚Øª",
-  "Ù…ØªØ§Ø¹",
-  "Ø§Ù„Ù„ÙŠ",
-  "Ø§Ù„ÙŠ",
+  "شات",
+  "محادثه",
+  "محادثة",
+  "موضوع",
+  "تشارت",
+  "اسمه",
+  "باسم",
+  "بعنوان",
+  "تبع",
+  "تبعت",
+  "حق",
+  "حقت",
+  "متاع",
+  "اللي",
+  "الي",
 ] as const;
 
 /**
  * Directional connector particles that may appear at the start of the
  * extracted text (either standalone or attached to the next word).
  *
- * In Arabic, prepositions like "Ù„Ù€" (to/for) and "Ø¨Ù€" (with/by) attach
- * directly to the following noun without a space, e.g. "Ù„Ø´Ø§Øª" = "to chat".
+ * In Arabic, prepositions like "لـ" (to/for) and "بـ" (with/by) attach
+ * directly to the following noun without a space, e.g. "لشات" = "to chat".
  * This regex strips those leading connectors iteratively.
  *
- * Ordered longest-first to prevent partial matches (e.g. "Ø§Ù„Ù‰" before "Ø§").
+ * Ordered longest-first to prevent partial matches (e.g. "الى" before "ا").
  */
 const CONNECTOR_STRIP_REGEX =
-  /^(?:Ø§Ù„Ù‰|Ø¥Ù„Ù‰|Ø¹Ù†|Ø¹Ù„Ù‰|Ù„[Ù€]?|Ø¨[Ù€]?)\s*/i;
+  /^(?:الى|إلى|عن|على|ل[ـ]?|ب[ـ]?)\s*/i;
 
 /**
  * Iteratively strip leading filler words from the raw extracted text
@@ -118,11 +118,11 @@ function sanitizeSearchTitle(raw: string): string {
   let changed = true;
 
   // Keep stripping as long as a filler or connector is found at the start.
-  // Iterative because fillers can stack: "Ù„Ø´Ø§Øª Ø§Ø³Ù…Ù‡ Ø§Ù„Ù…Ø´Ø±ÙˆØ¹" â†’ "Ø§Ù„Ù…Ø´Ø±ÙˆØ¹"
+  // Iterative because fillers can stack: "لشات اسمه المشروع" → "المشروع"
   while (changed && title.length > 0) {
     changed = false;
 
-    // Step A: Strip attached directional connectors (Ù„Ù€, Ø¨Ù€, Ø§Ù„Ù‰, etc.)
+    // Step A: Strip attached directional connectors (لـ, بـ, الى, etc.)
     const connectorStripped = title.replace(CONNECTOR_STRIP_REGEX, "").trim();
     if (connectorStripped !== title) {
       title = connectorStripped;
@@ -166,7 +166,7 @@ export function extractThreadSearchTitle(userMessage: string): {
   const trimmed = userMessage.trim();
   if (!trimmed) return null;
 
-  // Phase 1: Detect imperative verb â†’ this IS a thread-open intent
+  // Phase 1: Detect imperative verb → this IS a thread-open intent
   if (!THREAD_INTENT_VERB_REGEX.test(trimmed)) {
     return null;
   }
@@ -174,10 +174,10 @@ export function extractThreadSearchTitle(userMessage: string): {
   // Phase 2: Strip the verb phrase to get raw title candidate
   const rawTitle = trimmed.replace(THREAD_INTENT_VERB_REGEX, "").trim();
 
-  // Phase 3: Sanitize â€” strip leading filler words iteratively
+  // Phase 3: Sanitize — strip leading filler words iteratively
   const searchTitle = sanitizeSearchTitle(rawTitle);
 
-  // Must have meaningful content left after sanitization (â‰¥ 2 chars)
+  // Must have meaningful content left after sanitization (≥ 2 chars)
   if (searchTitle.length < 2) return null;
 
   return { searchTitle };
@@ -210,11 +210,13 @@ export async function findThreadByTitle(
   try {
     const { supabase } = await import("../rag/rag-supabase-client.js");
 
+    const escapedTitle = searchTitle.replace(/[%_\\]/g, "\\$&");
+
     const { data, error } = await supabase
       .from("chat_sessions")
       .select("id, title")
       .eq("user_id", userId)
-      .ilike("title", `%${searchTitle}%`)
+      .ilike("title", `%${escapedTitle}%`)
       .neq("title", "New Chat")
       .order("updated_at", { ascending: false })
       .limit(1);

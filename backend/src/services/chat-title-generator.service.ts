@@ -31,7 +31,18 @@ function isDefaultSessionTitle(title?: string | null): boolean {
  * إنشاء عميل AI بناءً على النموذج المتاح
  */
 function createAIClient() {
-  // الأولوية 1: Azure OpenAI (إذا كان متاحاً)
+  // الأولوية 1: BigModel (ZhipuAI) - GLM-5.2
+  if (process.env.BIGMODEL_API_KEY) {
+    return {
+      client: createOpenAI({
+        baseURL: "https://open.bigmodel.cn/api/paas/v4",
+        apiKey: process.env.BIGMODEL_API_KEY,
+      }),
+      model: "glm-5.2"
+    };
+  }
+
+  // الأولوية 2: Azure OpenAI (إذا كان متاحاً)
   if (process.env.AZURE_OPENAI_API_KEY && process.env.AZURE_OPENAI_ENDPOINT) {
     const endpoint = process.env.AZURE_OPENAI_ENDPOINT.replace(/\/$/, '');
     const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4o-mini';
@@ -48,7 +59,7 @@ function createAIClient() {
     };
   }
   
-  // الأولوية 2: Gemini Flash (سريع واقتصادي)
+  // الأولوية 3: Gemini Flash (سريع واقتصادي)
   if (process.env.GOOGLE_API_KEY) {
     return {
       client: createOpenAI({
@@ -59,7 +70,7 @@ function createAIClient() {
     };
   }
   
-  // الأولوية 3: GPT-4o-mini من GitHub
+  // الأولوية 4: GPT-4o-mini من GitHub
   if (process.env.GITHUB_TOKEN) {
     return {
       client: createOpenAI({
@@ -70,14 +81,14 @@ function createAIClient() {
     };
   }
   
-  // الأولوية 4: Groq (سريع جداً)
+  // الأولوية 5: Groq (سريع جداً)
   if (process.env.GROQ_API_KEY) {
     return {
       client: createOpenAI({
         baseURL: "https://api.groq.com/openai/v1",
         apiKey: process.env.GROQ_API_KEY,
       }),
-      model: "gemma2-9b-it"
+      model: "llama-3.1-8b-instant"
     };
   }
   
@@ -275,10 +286,11 @@ async function processChatTitling(sessionId: string): Promise<void> {
       return;
     }
 
-    // 4. FIX-16: Titling window — triggers when message count is between minMessagesCount and minMessagesCount+2
-    //    (e.g. 3–5 messages). This prevents missing the trigger when 2 messages are saved at once.
+    // 4. Titling window — triggers when message count is between minMessagesCount and minMessagesCount+6
+    //    (e.g. 2–8 messages). Wide window catches quick Q&A (2 messages) and prevents
+    //    missing the trigger when multiple messages are saved in rapid succession.
     const minCount = ChatTitleConfig.minMessagesCount;
-    const maxCount = ChatTitleConfig.minMessagesCount + 2;
+    const maxCount = ChatTitleConfig.minMessagesCount + 6;
     if (messageCount === null || messageCount === undefined || messageCount < minCount || messageCount > maxCount) {
       if (ChatTitleConfig.verboseLogging) {
         logger.info(`Session ${sessionId} count is ${messageCount ?? 0}, waiting for trigger window [${minCount}–${maxCount}]`);
@@ -302,14 +314,23 @@ async function processChatTitling(sessionId: string): Promise<void> {
 
     // 6. توليد العنوان
     logger.info(`Generating title for session ${sessionId} with ${messages.length} messages`);
-    const newTitle = await generateChatTitle(messages);
+    let newTitle = await generateChatTitle(messages);
 
+    // 7. Smart fallback: if AI failed or returned a default title,
+    //    use the first 50 chars of the first user message as the title.
     if (isDefaultSessionTitle(newTitle)) {
-      logger.warn('Generated title is still default, skipping database update');
-      return;
+      const firstUserMsg = messages.find((m) => m.role === 'user');
+      if (firstUserMsg?.content) {
+        const raw = firstUserMsg.content.replace(/\n/g, ' ').trim();
+        newTitle = raw.length > 50 ? raw.substring(0, 50) + '…' : raw;
+        logger.info(`AI title generation skipped, using fallback from first user message: "${newTitle}"`);
+      } else {
+        logger.warn('Generated title is still default and no user message available, skipping');
+        return;
+      }
     }
 
-    // 7. تحديث قاعدة البيانات
+    // 8. تحديث قاعدة البيانات
     await updateChatTitle(sessionId, newTitle);
 
   } catch (error) {

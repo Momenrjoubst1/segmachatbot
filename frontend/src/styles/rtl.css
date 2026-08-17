@@ -84,6 +84,15 @@
   [dir="rtl"] .aui-assistant-message-root {
     justify-content: flex-start;
   }
+
+  [dir="rtl"] .message-hover-wrapper .message-action-bar {
+    direction: rtl;
+  }
+
+  [dir="rtl"] .aui-user-action-bar-root {
+    right: auto;
+    left: 1px;
+  }
 }
 
 @layer utilities {

@@ -1,4 +1,4 @@
-import { knowledgeSupabase as supabase } from "../../config/supabase.config.js";
+import { supabase } from "../../config/supabase.config.js";
 
 export { supabase };
 

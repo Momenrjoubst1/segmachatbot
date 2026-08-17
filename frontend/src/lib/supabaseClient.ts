@@ -16,6 +16,7 @@ import { createClient, User } from "@supabase/supabase-js";
 // Get environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseStorageBucket = import.meta.env.VITE_SUPABASE_STORAGE_BUCKET || 'chat_media';
 
 // Validate environment variables
 if (!supabaseUrl || !supabaseAnonKey) {
@@ -42,7 +43,6 @@ if (!supabaseUrl || !supabaseAnonKey) {
  */
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    lock: async (_name, _acquireTimeout, fn) => await fn(),
     autoRefreshToken: true,
     persistSession: true,
   },
@@ -257,9 +257,9 @@ export async function uploadImageToStorage(dataUrl: string, userId: string, type
     const fileExt = blob.type.split('/')[1] || 'jpg';
     const filePath = `profiles/${userId}/${type}_${Date.now()}.${fileExt}`;
     
-    // Upload the file to 'chat_media' bucket
+    // Upload the file to configurable storage bucket
     const { error: uploadError } = await supabase.storage
-      .from('chat_media')
+      .from(supabaseStorageBucket)
       .upload(filePath, blob, {
         upsert: true,
         contentType: blob.type
@@ -272,7 +272,7 @@ export async function uploadImageToStorage(dataUrl: string, userId: string, type
 
     // Get public URL
     const { data: { publicUrl } } = supabase.storage
-      .from('chat_media')
+      .from(supabaseStorageBucket)
       .getPublicUrl(filePath);
 
     return publicUrl;
@@ -291,7 +291,7 @@ export async function uploadImageToStorage(dataUrl: string, userId: string, type
  */
 export async function saveUserProfileImage(userId: string, imageUrl: string) {
     return supabase
-      .from("users")
+      .from("public_profiles")
       .update({ avatar_url: imageUrl })
       .eq("id", userId);
 }
@@ -333,7 +333,7 @@ export async function getUserProfileImage(userId: string) {
  */
 export async function saveUserCoverImage(userId: string, imageUrl: string) {
     return supabase
-      .from("users")
+      .from("public_profiles")
       .update({ cover_url: imageUrl })
       .eq("id", userId);
 }

@@ -4,7 +4,7 @@
  * يحفظ معلومات المستخدم بشكل ذكي ومنظم
  */
 
-import { knowledgeSupabase as supabase } from '../../config/supabase.config.js';
+import { supabase } from '../../config/supabase.config.js';
 import { generateText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { MemoryConfig, type MemoryCategory } from '../../config/memory.config.js';

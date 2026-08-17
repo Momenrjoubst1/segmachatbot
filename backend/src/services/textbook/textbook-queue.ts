@@ -1,4 +1,5 @@
-import Redis from "ioredis";
+import { supabase } from "../../config/supabase.config.js";
+import redis from "../../config/redis/client.js";
 import { createLogger } from "../../utils/logger.js";
 
 const log = createLogger("textbook-queue");
@@ -17,7 +18,14 @@ export interface TextbookJobResult {
   error?: string;
   structureTree?: Record<string, unknown>;
   figures?: Array<Record<string, unknown>>;
-  chunks?: Array<{ page_number: number; structure_path: string; content: string }>;
+  chunks?: Array<{
+    page_number: number;
+    structure_path: string;
+    content: string;
+    block_role?: string;
+    text_color?: string;
+    bbox?: Record<string, number>;
+  }>;
   totalPages?: number;
 }
 
@@ -29,26 +37,33 @@ const PROGRESS_PREFIX = "textbook:progress:";
 const JOB_TIMEOUT = 3600; // 1 hour
 const MAX_RETRIES = 3;
 
-let redis: Redis | null = null;
-
-function getRedis(): Redis {
-  if (redis) return redis;
-  redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
-    maxRetriesPerRequest: 3,
-    enableOfflineQueue: true,
-    lazyConnect: false,
-  });
-  redis.on("connect", () => log.info("Textbook queue Redis connected"));
-  redis.on("error", (err: Error) => log.error("Textbook queue Redis error: " + err.message));
-  return redis;
-}
-
 export async function enqueueTextbookJob(data: TextbookJobData): Promise<string> {
-  const r = getRedis();
   const jobId = `${data.textbookId}:${Date.now()}`;
   const payload = JSON.stringify({ ...data, jobId, createdAt: Date.now() });
-  await r.lpush(QUEUE_NAME, payload);
+  await redis.lpush(QUEUE_NAME, payload);
   log.info("Textbook job enqueued", { jobId, textbookId: data.textbookId });
+  return jobId;
+}
+
+/**
+ * Re-enqueue a failed job with an incremented retry_count (worker-driven
+ * retry for transient failures). Fresh jobId/createdAt so stuck-job sweeping
+ * measures from the retry time, not the original enqueue.
+ */
+export async function requeueTextbookJob(data: TextbookJobData): Promise<string> {
+  const jobId = `${data.textbookId}:retry${(data.retry_count || 0) + 1}:${Date.now()}`;
+  const payload = JSON.stringify({
+    ...data,
+    retry_count: (data.retry_count || 0) + 1,
+    jobId,
+    createdAt: Date.now(),
+  });
+  await redis.lpush(QUEUE_NAME, payload);
+  log.warn("Textbook job requeued for retry", {
+    jobId,
+    textbookId: data.textbookId,
+    retry: (data.retry_count || 0) + 1,
+  });
   return jobId;
 }
 
@@ -56,44 +71,36 @@ export async function setTextbookProgress(
   textbookId: string,
   progress: { stage: string; pages_done: number; total_pages: number }
 ): Promise<void> {
-  const r = getRedis();
-  await r.set(`${PROGRESS_PREFIX}${textbookId}`, JSON.stringify(progress), "EX", JOB_TIMEOUT);
+  await redis.set(`${PROGRESS_PREFIX}${textbookId}`, JSON.stringify(progress), "EX", JOB_TIMEOUT);
 }
 
 export async function getTextbookProgress(
   textbookId: string
 ): Promise<{ stage: string; pages_done: number; total_pages: number } | null> {
-  const r = getRedis();
-  const raw = await r.get(`${PROGRESS_PREFIX}${textbookId}`);
+  const raw = await redis.get(`${PROGRESS_PREFIX}${textbookId}`);
   return raw ? JSON.parse(raw) : null;
 }
 
 export async function setJobResult(result: TextbookJobResult): Promise<void> {
-  const r = getRedis();
-  await r.set(`${RESULT_PREFIX}${result.textbookId}`, JSON.stringify(result), "EX", JOB_TIMEOUT);
+  await redis.set(`${RESULT_PREFIX}${result.textbookId}`, JSON.stringify(result), "EX", JOB_TIMEOUT);
 }
 
 export async function getJobResult(
   textbookId: string
 ): Promise<TextbookJobResult | null> {
-  const r = getRedis();
-  const raw = await r.get(`${RESULT_PREFIX}${textbookId}`);
+  const raw = await redis.get(`${RESULT_PREFIX}${textbookId}`);
   return raw ? JSON.parse(raw) : null;
 }
 
 export async function dequeueTextbookJob(): Promise<(TextbookJobData & { jobId: string }) | null> {
-  const r = getRedis();
-  // Use RPOPLUSH to atomically move job to processing list
-  // This prevents job loss on crash
-  const raw = await r.rpoplpush(QUEUE_NAME, PROCESSING_KEY);
+  const raw = await redis.rpoplpush(QUEUE_NAME, PROCESSING_KEY);
   if (!raw) return null;
   try {
     return JSON.parse(raw);
   } catch {
-    // Log malformed job and push to DLQ instead of silently losing it
     log.error("Malformed job in queue, moving to DLQ", { raw: raw?.substring(0, 200) });
-    await r.lrem(PROCESSING_KEY, 1, raw);
-    await r.lpush(DLQ_KEY, JSON.stringify({
+    await redis.lrem(PROCESSING_KEY, 1, raw);
+    await redis.lpush(DLQ_KEY, JSON.stringify({
       raw,
       error: "JSON parse failed",
       failed_at: new Date().toISOString(),
@@ -103,14 +110,12 @@ export async function dequeueTextbookJob(): Promise<(TextbookJobData & { jobId: 
 }
 
 export async function confirmJobComplete(jobId: string): Promise<void> {
-  const r = getRedis();
-  // Remove from processing list after successful completion
-  const jobs = await r.lrange(PROCESSING_KEY, 0, -1);
+  const jobs = await redis.lrange(PROCESSING_KEY, 0, -1);
   for (const jobStr of jobs) {
     try {
       const job = JSON.parse(jobStr);
       if (job.jobId === jobId) {
-        await r.lrem(PROCESSING_KEY, 1, jobStr);
+        await redis.lrem(PROCESSING_KEY, 1, jobStr);
         break;
       }
     } catch {
@@ -120,14 +125,13 @@ export async function confirmJobComplete(jobId: string): Promise<void> {
 }
 
 export async function deadLetterJob(jobData: TextbookJobData & { jobId: string }, error: string): Promise<void> {
-  const r = getRedis();
   const entry = {
     ...jobData,
     error,
     failed_at: new Date().toISOString(),
     retry_count: (jobData.retry_count || 0) + 1,
   };
-  await r.lpush(DLQ_KEY, JSON.stringify(entry));
+  await redis.lpush(DLQ_KEY, JSON.stringify(entry));
   log.warn("Job moved to DLQ", {
     textbookId: jobData.textbookId,
     retry: entry.retry_count,
@@ -136,19 +140,16 @@ export async function deadLetterJob(jobData: TextbookJobData & { jobId: string }
 }
 
 export async function retryDeadLetters(): Promise<number> {
-  const r = getRedis();
   let retried = 0;
 
-  // Use RPOPLPUSH to atomically pop from DLQ and push to processing list
-  // This prevents race conditions between concurrent retry calls
   while (true) {
-    const raw = await r.rpoplpush(DLQ_KEY, "textbook:dlq:processing");
+    const raw = await redis.rpoplpush(DLQ_KEY, "textbook:dlq:processing");
     if (!raw) break;
 
     try {
       const job = JSON.parse(raw);
       if (job.retry_count < MAX_RETRIES) {
-        await r.lpush(QUEUE_NAME, JSON.stringify(job));
+        await redis.lpush(QUEUE_NAME, JSON.stringify(job));
         retried++;
         log.info("Retrying dead letter job", {
           textbookId: job.textbookId,
@@ -160,48 +161,126 @@ export async function retryDeadLetters(): Promise<number> {
           retry: job.retry_count,
         });
       }
-      // Remove from processing list after successful handling
-      await r.lrem("textbook:dlq:processing", 1, raw);
+      await redis.lrem("textbook:dlq:processing", 1, raw);
     } catch {
       log.error("Failed to parse dead letter job", { raw });
-      // Remove from processing list on parse failure
-      await r.lrem("textbook:dlq:processing", 1, raw);
+      await redis.lrem("textbook:dlq:processing", 1, raw);
     }
   }
 
   return retried;
 }
 
-export function getRedisClient(): Redis {
-  return getRedis();
+export function getRedisClient() {
+  return redis;
 }
 
 const STUCK_JOB_TIMEOUT_MS = 3600_000; // 1 hour
 
+/**
+ * DB-level reconciliation: books stuck in pending/processing with no live
+ * queue job (lost after a Redis flush, in-memory mock restart, or a crash
+ * between insert and enqueue) are re-enqueued from their stored file_url.
+ *
+ * - `pending` older than 15 min: the queue should have picked it up within
+ *   seconds — if not, the job is gone.
+ * - `processing` older than 75 min: beyond the 1h job timeout + slack.
+ *
+ * Books currently present in the Redis processing list are left alone (a
+ * worker may legitimately still be chewing on them).
+ */
+export async function reconcileStuckTextbooks(): Promise<number> {
+  const now = Date.now();
+  const pendingCutoff = new Date(now - 15 * 60_000).toISOString();
+  const processingCutoff = new Date(now - 75 * 60_000).toISOString();
+
+  const { data: stuck, error } = await supabase
+    .from("textbooks")
+    .select("id, user_id, file_url, file_hash, status, updated_at")
+    .or(
+      `and(status.eq.pending,updated_at.lt.${pendingCutoff}),and(status.eq.processing,updated_at.lt.${processingCutoff})`
+    )
+    .limit(50);
+
+  if (error || !stuck || stuck.length === 0) {
+    return 0;
+  }
+
+  // Skip any textbook that still has a live job in the processing list
+  const processingRaw = await redis.lrange(PROCESSING_KEY, 0, -1);
+  const activeIds = new Set<string>();
+  for (const jobStr of processingRaw) {
+    try {
+      const job = JSON.parse(jobStr);
+      if (job.textbookId) activeIds.add(job.textbookId);
+    } catch {
+      // ignore
+    }
+  }
+
+  let requeued = 0;
+  for (const book of stuck) {
+    if (activeIds.has(book.id)) continue;
+    if (!book.file_url || book.file_url.startsWith("pending://")) continue;
+
+    if (book.status === "processing") {
+      await supabase
+        .from("textbooks")
+        .update({ status: "pending", updated_at: new Date().toISOString() })
+        .eq("id", book.id);
+    }
+
+    await enqueueTextbookJob({
+      textbookId: book.id,
+      fileUrl: book.file_url,
+      userId: book.user_id,
+      fileHash: book.file_hash || "",
+    });
+
+    requeued++;
+    log.warn("Reconciled stuck textbook", { textbookId: book.id, prevStatus: book.status });
+  }
+
+  if (requeued > 0) {
+    log.info("Reconciled stuck textbooks", { count: requeued });
+  }
+  return requeued;
+}
+
 export async function sweepStuckJobs(): Promise<number> {
-  const r = getRedis();
   let swept = 0;
 
-  const jobs = await r.lrange(PROCESSING_KEY, 0, -1);
+  const jobs = await redis.lrange(PROCESSING_KEY, 0, -1);
   const now = Date.now();
 
   for (const jobStr of jobs) {
     try {
       const job = JSON.parse(jobStr);
       if (job.createdAt && now - job.createdAt > STUCK_JOB_TIMEOUT_MS) {
-        // Job is stuck — move to DLQ
-        await r.lrem(PROCESSING_KEY, 1, jobStr);
-        await r.lpush(DLQ_KEY, JSON.stringify({
+        await redis.lrem(PROCESSING_KEY, 1, jobStr);
+        await redis.lpush(DLQ_KEY, JSON.stringify({
           ...job,
           error: "Job stuck in processing (timeout)",
           failed_at: new Date().toISOString(),
         }));
+
+        if (job.textbookId) {
+          await supabase
+            .from("textbooks")
+            .update({
+              status: "failed",
+              error: "Processing timed out (stuck job)",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", job.textbookId)
+            .eq("status", "processing");
+        }
+
         swept++;
         log.warn("Swept stuck job to DLQ", { jobId: job.jobId, textbookId: job.textbookId });
       }
     } catch {
-      // Remove malformed entries
-      await r.lrem(PROCESSING_KEY, 1, jobStr);
+      await redis.lrem(PROCESSING_KEY, 1, jobStr);
       swept++;
     }
   }

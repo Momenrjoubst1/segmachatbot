@@ -1,14 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { moderateInput, type CoreMessage } from '../services/chat/moderation.service.js';
 
-// Mock the rag/rag-supabase-client module
+// Mock the lazy-loaded supabase client that moderation.service.ts imports via import()
+const mockInvoke = vi.fn().mockResolvedValue({ data: null, error: null });
+
 vi.mock('../services/rag/rag-supabase-client.js', () => ({
   supabase: {
     functions: {
-      invoke: vi.fn().mockResolvedValue({ data: null, error: null }),
+      invoke: mockInvoke,
     },
   },
 }));
+
+// Import AFTER mocks are set up
+import { moderateInput, type CoreMessage } from '../services/chat/moderation.service.js';
 
 /** Helper to build a user-role `CoreMessage` for tests. */
 const u = (content: string): CoreMessage => ({ role: 'user', content });
@@ -16,6 +20,8 @@ const u = (content: string): CoreMessage => ({ role: 'user', content });
 describe('Moderation Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset to default: returns null (service unavailable)
+    mockInvoke.mockResolvedValue({ data: null, error: null });
   });
 
   describe('Length Check', () => {
@@ -30,8 +36,12 @@ describe('Moderation Service', () => {
     });
 
     it('should allow messages within length limit', async () => {
-      const messages: CoreMessage[] = [u('Hello, how are you?')];
+      mockInvoke.mockResolvedValue({
+        data: { flagged: false, action: 'allow' },
+        error: null,
+      });
 
+      const messages: CoreMessage[] = [u('Hello, how are you?')];
       const result = await moderateInput(messages);
 
       expect(result.blocked).toBe(false);
@@ -50,17 +60,19 @@ describe('Moderation Service', () => {
   });
 
   describe('Content Moderation', () => {
-    it('should proceed when moderation service returns null', async () => {
-      const messages: CoreMessage[] = [u('Normal message')];
+    it('should block when moderation service returns null (fail-closed)', async () => {
+      // Default mock returns null data → service unavailable
+      mockInvoke.mockResolvedValue({ data: null, error: null });
 
+      const messages: CoreMessage[] = [u('Normal message')];
       const result = await moderateInput(messages);
 
-      expect(result.blocked).toBe(false);
+      expect(result.blocked).toBe(true);
+      expect(result.error).toContain('unavailable');
     });
 
     it('should censor flagged content', async () => {
-      const { supabase } = await import('../services/rag/rag-supabase-client.js');
-      (supabase.functions.invoke as ReturnType<typeof vi.fn>).mockResolvedValue({
+      mockInvoke.mockResolvedValue({
         data: {
           flagged: true,
           action: 'censor',
@@ -73,12 +85,12 @@ describe('Moderation Service', () => {
       const result = await moderateInput(messages);
 
       expect(result.blocked).toBe(false);
-      expect(messages[0].content).toContain('***');
+      expect(result.messages[0].content).toContain('***');
+      expect(messages[0].content).toBe('This is badword content'); // Original unchanged
     });
 
     it('should block content when action is block', async () => {
-      const { supabase } = await import('../services/rag/rag-supabase-client.js');
-      (supabase.functions.invoke as ReturnType<typeof vi.fn>).mockResolvedValue({
+      mockInvoke.mockResolvedValue({
         data: {
           flagged: true,
           action: 'block',
@@ -93,9 +105,8 @@ describe('Moderation Service', () => {
       expect(result.error).toContain('content policy');
     });
 
-    it('should proceed when moderation service fails', async () => {
-      const { supabase } = await import('../services/rag/rag-supabase-client.js');
-      (supabase.functions.invoke as ReturnType<typeof vi.fn>).mockResolvedValue({
+    it('should block when moderation service fails (fail-closed)', async () => {
+      mockInvoke.mockResolvedValue({
         data: null,
         error: new Error('Service unavailable'),
       });
@@ -103,7 +114,8 @@ describe('Moderation Service', () => {
       const messages: CoreMessage[] = [u('Normal message')];
       const result = await moderateInput(messages);
 
-      expect(result.blocked).toBe(false);
+      expect(result.blocked).toBe(true);
+      expect(result.error).toContain('unavailable');
     });
   });
 });

@@ -20,6 +20,19 @@ vi.mock('@/features/ai-assistant/shadcn/components/Sidebar/UserProfileCard', () 
   UserProfileCard: () => <div data-testid="user-profile" />,
 }));
 
+// Mock useGuestMode
+vi.mock('@/context/GuestModeContext', () => ({
+  useGuestMode: () => ({
+    isGuestMode: false,
+    guestMessageCount: 0,
+    guestMessageLimit: 4,
+    retryAfterSeconds: null,
+    limitReached: false,
+    setGuestQuota: vi.fn(),
+    refreshGuestStatus: vi.fn(),
+  }),
+}));
+
 const defaultProps = {
   collapsed: false,
   onToggle: vi.fn(),

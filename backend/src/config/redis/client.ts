@@ -3,10 +3,13 @@ import MockRedis from './mock.js';
 import { createLogger } from '../../utils/logger.js';
 
 const log = createLogger('redis');
-const useRealRedis = process.env.USE_REAL_REDIS === 'true';
+// Keep the Redis client and rate-limit stores on one deployment switch. This
+// prevents a configuration where guest quotas select Redis while the client
+// silently remains the in-memory mock.
+const useRealRedis = process.env.RATE_LIMIT_STORE === 'redis';
 
 if (process.env.NODE_ENV === 'production' && !useRealRedis) {
-  throw new Error('USE_REAL_REDIS must be set to "true" in production');
+  throw new Error('RATE_LIMIT_STORE must be set to "redis" in production');
 }
 
 let redis: Redis | MockRedis;

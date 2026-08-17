@@ -10,11 +10,18 @@ interface TextbookUploadProps {
   onUploadComplete?: (textbookId: string) => void;
 }
 
+const STAGE_LABELS: Record<string, string> = {
+  scanning: "Extracting pages",
+  figures: "Processing figures",
+  embedding: "Building knowledge index",
+};
+
 export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadProps) {
   const { t } = useTranslation("common");
-  const { uploadTextbook, textbooks, getStatus, deleteTextbook, isLoading } = useTextbooks();
+  const { uploadTextbook, textbooks, getStatus, deleteTextbook, refetch, isLoading } = useTextbooks();
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [activeTextbookId, setActiveTextbookId] = useState<string | null>(null);
   const [activeStatus, setActiveStatus] = useState<TextbookStatus | null>(null);
@@ -32,21 +39,34 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
   const pollStatus = useCallback(
     (textbookId: string) => {
       if (pollRef.current) clearInterval(pollRef.current);
+      let missedPolls = 0;
       pollRef.current = setInterval(async () => {
         const status = await getStatus(textbookId);
-        if (status) {
-          setActiveStatus(status);
-          if (status.status === "completed" || status.status === "failed") {
+        if (!status) {
+          // Book deleted or status endpoint unreachable — stop polling after
+          // a few consecutive misses instead of hammering the API forever.
+          missedPolls += 1;
+          if (missedPolls >= 5) {
             if (pollRef.current) clearInterval(pollRef.current);
             pollRef.current = null;
-            if (status.status === "completed") {
-              onUploadComplete?.(textbookId);
-            }
+            refetch();
+          }
+          return;
+        }
+        missedPolls = 0;
+        setActiveStatus(status);
+        if (status.status === "completed" || status.status === "failed") {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          // Refresh the library list so statuses there reflect the outcome
+          refetch();
+          if (status.status === "completed") {
+            onUploadComplete?.(textbookId);
           }
         }
       }, 2000);
     },
-    [getStatus, onUploadComplete]
+    [getStatus, onUploadComplete, refetch]
   );
 
   const handleFile = useCallback(
@@ -55,15 +75,16 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
         setUploadError("Only PDF files are supported");
         return;
       }
-      if (file.size > 200 * 1024 * 1024) {
-        setUploadError("File size must be under 200MB");
+      if (file.size > 500 * 1024 * 1024) {
+        setUploadError("File size must be under 500MB");
         return;
       }
 
       setUploadError(null);
       setIsUploading(true);
+      setUploadProgress(0);
       try {
-        const result = await uploadTextbook(file, courseId);
+        const result = await uploadTextbook(file, courseId, (pct) => setUploadProgress(pct));
         setActiveTextbookId(result.textbook_id);
         if (result.status === "pending") {
           pollStatus(result.textbook_id);
@@ -72,6 +93,7 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
         setUploadError(err instanceof Error ? err.message : "Upload failed");
       } finally {
         setIsUploading(false);
+        setUploadProgress(null);
       }
     },
     [uploadTextbook, courseId, pollStatus]
@@ -164,15 +186,27 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
         <div className="text-center">
           <p className="text-sm font-medium">
             {isUploading
-              ? "Uploading..."
+              ? uploadProgress !== null
+                ? `Uploading... ${uploadProgress}%`
+                : "Uploading..."
               : isDragOver
               ? "Drop your PDF here"
               : "Upload a textbook PDF"}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Native digital PDF only, up to 200MB
+            Native digital PDF only, up to 500MB
           </p>
         </div>
+        {isUploading && uploadProgress !== null && (
+          <div className="w-full max-w-xs">
+            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {uploadError && (
@@ -192,9 +226,10 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
           {activeStatus.progress && (
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{activeStatus.progress.stage}</span>
+                <span>{STAGE_LABELS[activeStatus.progress.stage] ?? activeStatus.progress.stage}</span>
                 <span>
-                  {activeStatus.progress.pages_done}/{activeStatus.progress.total_pages || "?"} pages
+                  {activeStatus.progress.pages_done}/{activeStatus.progress.total_pages || "?"}{" "}
+                  {activeStatus.progress.stage === "embedding" ? "chunks" : activeStatus.progress.stage === "figures" ? "figures" : "pages"}
                 </span>
               </div>
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
@@ -203,7 +238,7 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
                   style={{
                     width:
                       activeStatus.progress.total_pages && activeStatus.progress.total_pages > 0
-                        ? `${(activeStatus.progress.pages_done / activeStatus.progress.total_pages) * 100}%`
+                        ? `${Math.min(100, (activeStatus.progress.pages_done / activeStatus.progress.total_pages) * 100)}%`
                         : "0%",
                   }}
                 />

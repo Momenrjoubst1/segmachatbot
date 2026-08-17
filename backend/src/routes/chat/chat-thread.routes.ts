@@ -27,7 +27,7 @@ router.get("/threads", asyncHandler(async (req, res) => {
   const cursor = req.query.cursor as string | undefined;
 
   let query = supabase
-    .from('chat_sessions')
+    .from('chat_sessions_with_messages')
     .select('id, title, updated_at, course_id')
     .eq("user_id", userId);
 

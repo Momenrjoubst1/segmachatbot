@@ -46,9 +46,16 @@ export async function authFetch(input: RequestInfo | URL, init: RequestInit = {}
     const previousToken = token;
     await delay(RETRY_DELAY_MS);
 
-    const freshToken = await getFreshToken();
+    let freshToken: string | null = null;
+    try {
+      freshToken = await getFreshToken();
+    } catch (refreshErr) {
+      // Refresh itself failed — session is truly expired
+      throw new Error("SESSION_EXPIRED: Authentication session has expired. Please sign in again.");
+    }
+    
     if (!freshToken || freshToken === previousToken) {
-      throw new Error("Token refresh failed: got the same or no token after refresh");
+      throw new Error("SESSION_EXPIRED: Could not refresh authentication token. Please sign in again.");
     }
 
     headers.set("Authorization", `Bearer ${freshToken}`);

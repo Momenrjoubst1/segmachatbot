@@ -26,5 +26,13 @@
   "user": "مستخدم",
   "you": "أنت",
   "them": "الآخر",
-  "underDevelopment": "🔒 قيد التطوير"
+  "underDevelopment": "🔒 قيد التطوير",
+  "guestPersistenceHint": "محادثات الضيف لا تُحفظ — سجّل الدخول للاحتفاظ بمحادثاتك.",
+  "moderationRefusal": "لا أستطيع المساعدة في هذا الطلب. هل يمكنك إعادة صياغته؟",
+  "composerPlaceholder": "اسأل سيجما",
+  "composerSend": "إرسال الرسالة",
+  "composerStop": "إيقاف التوليد",
+  "composerDisclaimer": "سيجما مساعد ذكي — قد تحتوي الردود على أخطاء. يُرجى التحقق من المعلومات المهمة.",
+  "guestLimitTitle": "لقد استخدمت كل رسائلك المجانية",
+  "guestLimitSignIn": "سجّل الدخول للمتابعة"
 }

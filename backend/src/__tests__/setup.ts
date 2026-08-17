@@ -10,16 +10,28 @@ process.env.ASSISTANT_DEFAULT_MODEL = 'llama-3.3-70b-versatile';
 process.env.ANALYTICS_ENABLED = 'false';
 
 // Mock Redis client
-vi.mock('../config/redis-client.js', () => ({
+vi.mock('../config/redis/client.js', () => ({
   default: {
     get: vi.fn().mockResolvedValue(null),
     set: vi.fn().mockResolvedValue('OK'),
+    setex: vi.fn().mockResolvedValue('OK'),
     del: vi.fn().mockResolvedValue(1),
     exists: vi.fn().mockResolvedValue(0),
     expire: vi.fn().mockResolvedValue(1),
+    ttl: vi.fn().mockResolvedValue(-1),
+    incr: vi.fn().mockResolvedValue(1),
+    decr: vi.fn().mockResolvedValue(0),
+    ping: vi.fn().mockResolvedValue('PONG'),
+    lrange: vi.fn().mockResolvedValue([]),
+    rpush: vi.fn().mockResolvedValue(0),
+    ltrim: vi.fn().mockResolvedValue('OK'),
+    llen: vi.fn().mockResolvedValue(0),
     pipeline: vi.fn().mockReturnValue({
+      incr: vi.fn().mockReturnThis(),
+      expire: vi.fn().mockReturnThis(),
       exec: vi.fn().mockResolvedValue([]),
     }),
+    defineCommand: vi.fn(),
   },
 }));
 

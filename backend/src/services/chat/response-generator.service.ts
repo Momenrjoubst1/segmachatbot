@@ -52,6 +52,7 @@ export interface StreamOptions {
   res: Response;
   cacheMetadata?: CacheMetadata;
   retrievedDocsForGrounding?: Array<{ content: string; metadata?: Record<string, unknown> }>;
+  metadata?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -231,6 +232,7 @@ export async function generateAndStreamResponse(
                 model: cacheMetadata.model,
                 ragSources: cacheMetadata.ragSources,
               },
+              cacheMetadata.userId,
             );
           } catch (cacheErr) {
             log.warn("Failed to cache response", {
@@ -346,10 +348,16 @@ export async function generateAndStreamResponse(
           // Update stream options for the new model
           streamOptions.model = currentClient.chat(currentModelName);
 
-          // Graceful degradation notice for user
+          // Graceful degradation notice for user — surfaced via the same
+          // X-Model-Fallback header the pipeline uses for validation-time
+          // fallbacks, so the frontend can render it before the stream starts.
           if (!res.headersSent) {
             const degradationMsg = getGracefulDegradationMessage(modelName, nextModel);
             log.info("Graceful degradation", { message: degradationMsg });
+            res.setHeader(
+              "X-Model-Fallback",
+              JSON.stringify({ from: modelName, to: nextModel }),
+            );
           }
         } else {
           // No more fallbacks â€” wait before retry
@@ -366,7 +374,7 @@ export async function generateAndStreamResponse(
         if (!res.headersSent) {
           res.status(500).json({
             error:
-              "Ø¹Ø°Ø±Ø§Ù‹ØŒ Ø­Ø¯Ø« Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ ØªÙˆÙ„ÙŠØ¯ Ø§Ù„Ø±Ø¯. ÙŠØ±Ø¬Ù‰ Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø© Ù…Ø±Ø© Ø£Ø®Ø±Ù‰.",
+              "عذراً، حدث خطأ أثناء توليد الرد. يرجى المحاولة مرة أخرى.",
           });
         } else {
           try {

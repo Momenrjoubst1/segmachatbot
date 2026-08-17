@@ -182,6 +182,11 @@ if (process.env.NODE_ENV !== 'test') {
   const validation = validateMemoryConfig();
   if (!validation.valid) {
     log.error('Memory configuration errors', { errors: validation.errors });
+    
+    // In production, fail fast on critical configuration errors
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`Invalid memory configuration: ${validation.errors.join(', ')}`);
+    }
   }
 
   if (MemoryConfig.debug.enabled) {

@@ -1,4 +1,4 @@
-import { knowledgeSupabase as supabase } from "../../../config/supabase.config.js";
+import { supabase } from "../../../config/supabase.config.js";
 
 interface Contact {
   id: string;

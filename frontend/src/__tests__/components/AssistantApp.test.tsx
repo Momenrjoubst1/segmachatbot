@@ -107,6 +107,15 @@ vi.mock('@/lib/supabaseClient', () => ({
   },
 }));
 
+vi.mock('@/context/AuthContext', () => ({
+  AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useAuthContext: vi.fn(() => ({
+    user: { id: 'user-1', email: 'test@test.com' },
+    isAuthenticated: true,
+    isLoading: false,
+  })),
+}));
+
 // Import after mocks
 import { AssistantApp } from '@/features/ai-assistant/AssistantApp';
 import { useChatHistory } from '@/hooks/useChatHistory';
@@ -144,6 +153,7 @@ describe('AssistantApp', () => {
       refreshThreads: vi.fn(),
       createNewThread: vi.fn(),
       deleteThread: vi.fn(),
+      updateThreadTitle: vi.fn(),
       getThreadsByCourse: vi.fn(),
       clearDraft: vi.fn(),
     });
@@ -181,6 +191,7 @@ describe('AssistantApp', () => {
       refreshThreads: vi.fn(),
       createNewThread: vi.fn(),
       deleteThread: vi.fn(),
+      updateThreadTitle: vi.fn(),
       getThreadsByCourse: vi.fn(),
       clearDraft: vi.fn(),
     });

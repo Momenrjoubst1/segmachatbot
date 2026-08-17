@@ -68,7 +68,7 @@ export interface RagContextData {
   hasContext: boolean;
   contextText: string;
   sourceNames: string[];
-  retrievalMethod: 'vector' | 'bm25' | 'hybrid';
+  retrievalMethod: 'vector' | 'bm25' | 'hybrid' | 'structure_scope' | 'curriculum';
 }
 
 /** Aggregate of every result the steps produce — passed forward to the next step. */

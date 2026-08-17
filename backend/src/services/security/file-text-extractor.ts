@@ -79,23 +79,37 @@ export async function extractTextFromFilePart(file: FilePart): Promise<{ text: s
     mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
     ext === "docx"
   ) {
-    const { default: mammoth } = await import("mammoth");
-    const result = await mammoth.extractRawText({ buffer });
-    return trimText(result.value || "");
+    try {
+      // @ts-ignore - Optional runtime dependency
+      const { default: mammoth } = await import("mammoth");
+      const result = await mammoth.extractRawText({ buffer });
+      return trimText(result.value || "");
+    } catch (error) {
+      throw new Error(
+        `DOCX extraction failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
   if (
     mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
     ext === "xlsx"
   ) {
-    const { default: XLSX } = await import("xlsx");
-    const workbook = XLSX.read(buffer, { type: "buffer" });
-    const sheets = workbook.SheetNames.map((name) => {
-      const sheet = workbook.Sheets[name];
-      const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
-      return `Sheet: ${name}\n${csv}`;
-    });
-    return trimText(sheets.join("\n\n---\n\n"));
+    try {
+      // @ts-ignore - Optional runtime dependency
+      const { default: XLSX } = await import("xlsx");
+      const workbook = XLSX.read(buffer, { type: "buffer" });
+      const sheets = workbook.SheetNames.map((name: string) => {
+        const sheet = workbook.Sheets[name];
+        const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+        return `Sheet: ${name}\n${csv}`;
+      });
+      return trimText(sheets.join("\n\n---\n\n"));
+    } catch (error) {
+      throw new Error(
+        `XLSX extraction failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
   if (mimeType === "text/csv" || mimeType === "application/csv" || ext === "csv") {

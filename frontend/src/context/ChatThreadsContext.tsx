@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { authFetch } from "@/lib/auth";
 import { useAuthContext } from "@/context/AuthContext";
 import { useChatMessages } from "@/context/ChatMessagesContext";
+import { useChatDrafts } from "@/context/ChatDraftsContext";
 import type { LoadErrorCode } from "@/lib/load-errors";
 
 export interface ChatThread {
@@ -20,7 +21,8 @@ interface ChatThreadsContextType {
   fetchThreads: () => Promise<void>;
   retryFetchThreads: () => Promise<void>;
   deleteThread: (threadId: string) => Promise<void>;
-  loadThread: (id: string | null) => void;
+  updateThreadTitle: (threadId: string, title: string) => Promise<void>;
+  loadThread: (id: string | null) => Promise<void>;
   getThreadsByCourse: (courseId: string | null) => ChatThread[];
   createNewThread: (courseId?: string) => Promise<void>;
   activeThreadId: string | null;
@@ -33,7 +35,8 @@ const ChatThreadsContext = createContext<ChatThreadsContextType | undefined>(und
 export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuthContext();
-  const { activeThreadMessages, setActiveThreadId: setGlobalActiveThreadId, loadMessagesForThread } = useChatMessages();
+  const { activeThreadMessages, setActiveThreadId: setGlobalActiveThreadId, loadMessagesForThread, removeFromCache } = useChatMessages();
+  const { clearDraft } = useChatDrafts();
 
   const urlThreadId = searchParams.get("thread");
 
@@ -62,11 +65,46 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
     if (id) {
       setSearchParams({ thread: id });
     } else {
-      // Increment ?new=N atomically with the URL change — single render, no race
-      const nextCount = (parseInt(searchParams.get("new") ?? "0", 10) || 0) + 1;
-      setSearchParams({ new: String(nextCount) });
+      // Increment ?new=N atomically with the URL change — single render, no race.
+      // Functional updater reads the CURRENT params, so rapid successive clicks
+      // can't both compute the same count from a stale closure.
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("thread");
+        next.set("new", String((parseInt(next.get("new") ?? "0", 10) || 0) + 1));
+        return next;
+      });
     }
-  }, [searchParams, setSearchParams]);
+  }, [setSearchParams]);
+
+  // Root-cause fix for the navigation flash: ensure messages are in the
+  // context BEFORE the URL changes. The chat UI remounts on URL change
+  // (motion.div keyed by chatKey), and the new AI SDK Chat is created
+  // with the messages from the context. If we don't await the fetch, the
+  // remount happens with an empty context → blank screen until the fetch
+  // resolves and MessageSyncer pushes messages.
+  const loadThread = useCallback(async (id: string | null) => {
+    if (!user?.id) {
+      // Guest: skip DB fetch, just clear messages and navigate
+      loadMessagesForThread(null);
+      goToThread(id);
+      return;
+    }
+    if (id) {
+      try {
+        await loadMessagesForThread(id, { background: false });
+      } catch (err) {
+        // Don't block navigation on fetch errors — fall through to URL change
+        console.warn("[loadThread] preload failed, navigating anyway:", err);
+      }
+    } else {
+      // New chat: clear messages synchronously BEFORE the URL change so the
+      // remounting chat starts empty (no leftover conversation from the
+      // previous thread bleeding into the new chat view).
+      loadMessagesForThread(null);
+    }
+    goToThread(id);
+  }, [goToThread, loadMessagesForThread]);
 
   const setActiveThreadId = useCallback((id: string | null) => {
     if (id && id !== urlThreadId) {
@@ -75,6 +113,11 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
   }, [setSearchParams, urlThreadId]);
 
   const fetchThreads = useCallback(async () => {
+    if (!user?.id) {
+      setThreadsSafe([]);
+      setIsLoadingThreads(false);
+      return;
+    }
     setThreadsError(null);
     setIsLoadingThreads(true);
     try {
@@ -125,6 +168,15 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => { fetchThreads(); }, [fetchThreads]);
 
+  // Guest + stale ?thread=ID (e.g. after sign-out) would render an empty chat
+  // forever — the fetches are auth-gated. Strip the param so the guest lands
+  // on a clean new chat instead.
+  useEffect(() => {
+    if (!user?.id && urlThreadId) {
+      setSearchParams({}, { replace: true });
+    }
+  }, [user?.id, urlThreadId, setSearchParams]);
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
@@ -154,11 +206,16 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
         },
         (payload) => {
           const updated = payload.new as ChatThread;
-          setThreadsSafe((prev) =>
-            prev.map((t) =>
-              t.id === updated.id ? { ...t, title: updated.title } : t,
-            ),
-          );
+          setThreadsSafe((prev) => {
+            const rest = prev.filter((t) => t.id !== updated.id);
+            // Bump the updated thread to the top (ChatGPT/Gemini-style
+            // live reordering). Falls back gracefully if the thread isn't
+            // in the list yet (e.g. created on another device) — skip it
+            // rather than showing an unvetted partial row.
+            const existing = prev.find((t) => t.id === updated.id);
+            if (!existing) return prev;
+            return [{ ...existing, title: updated.title, updated_at: updated.updated_at }, ...rest];
+          });
         },
       )
       .subscribe();
@@ -166,10 +223,6 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
       supabase.removeChannel(channel);
     };
   }, [user?.id, setThreadsSafe]);
-
-  const loadThread = useCallback((id: string | null) => {
-    goToThread(id);
-  }, [goToThread]);
 
 
 
@@ -181,6 +234,9 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
     threads.filter((t) => t.course_id === courseId), [threads]);
 
   const deleteThread = useCallback(async (threadId: string) => {
+    removeFromCache(threadId);
+    clearDraft(threadId);
+    if (!user?.id) return;
     try {
       const res = await authFetch(`${backendUrl}/api/chat/threads/${threadId}`, { method: "DELETE" });
       if (!res.ok) {
@@ -201,6 +257,25 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [backendUrl, goToThread, setThreadsSafe, urlThreadId]);
 
+  const updateThreadTitle = useCallback(async (threadId: string, title: string) => {
+    if (!user?.id) return;
+    try {
+      const res = await authFetch(`${backendUrl}/api/chat/threads/${threadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      if (res.ok) {
+        setThreadsSafe((prev) =>
+          prev.map((t) => (t.id === threadId ? { ...t, title } : t)),
+        );
+      }
+    } catch (err) {
+      console.error("[ChatHistory] updateThreadTitle error:", err);
+      throw err;
+    }
+  }, [backendUrl, setThreadsSafe]);
+
   const contextValue = useMemo(() => ({
     threads,
     isLoadingThreads,
@@ -208,6 +283,7 @@ export const ChatThreadsProvider = ({ children }: { children: ReactNode }) => {
     fetchThreads,
     retryFetchThreads: fetchThreads,
     deleteThread,
+    updateThreadTitle,
     loadThread,
     getThreadsByCourse,
     createNewThread,

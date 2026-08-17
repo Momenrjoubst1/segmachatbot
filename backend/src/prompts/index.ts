@@ -36,7 +36,7 @@ export interface PromptBuildOptions {
     hasContext: boolean;
     contextText: string;
     sourceNames: string[];
-    retrievalMethod: 'vector' | 'bm25' | 'hybrid';
+    retrievalMethod: 'vector' | 'bm25' | 'hybrid' | 'structure_scope' | 'curriculum';
   };
   /** Memory context string (pre-built from unified memory) */
   memoryContext?: string;

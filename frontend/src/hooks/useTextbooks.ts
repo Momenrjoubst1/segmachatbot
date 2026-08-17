@@ -45,45 +45,51 @@ export function useTextbooks() {
   }, [fetchTextbooks]);
 
   const uploadTextbook = useCallback(
-    async (file: File, courseId?: string) => {
+    async (file: File, courseId?: string, onProgress?: (pct: number) => void) => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Upload PDF to Supabase Storage
-      const filePath = `${user.id}/${Date.now()}_${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from("course-attachments")
-        .upload(filePath, file, {
-          upsert: true,
-          contentType: "application/pdf",
+      // Upload file directly to backend (bypasses Supabase Storage 50MB limit)
+      const formData = new FormData();
+      formData.append("file", file);
+      if (courseId) formData.append("course_id", courseId);
+
+      const xhr = new XMLHttpRequest();
+      const result = await new Promise<{
+        textbook_id: string;
+        status: string;
+        deduplicated: boolean;
+        message?: string;
+      }>((resolve, reject) => {
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable && onProgress) {
+            onProgress(Math.round((e.loaded / e.total) * 100));
+          }
         });
+        xhr.addEventListener("load", () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            try {
+              const err = JSON.parse(xhr.responseText);
+              reject(new Error(err.error || "Upload failed"));
+            } catch {
+              reject(new Error("Upload failed"));
+            }
+          }
+        });
+        xhr.addEventListener("error", () => reject(new Error("Upload failed")));
 
-      if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("course-attachments").getPublicUrl(filePath);
-
-      // Call backend to create textbook record + enqueue processing
-      const res = await authFetch(`${BACKEND_URL}/api/textbooks/upload`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          file_name: file.name,
-          file_url: publicUrl,
-          file_size_bytes: file.size,
-          course_id: courseId || null,
-        }),
+        // Get auth token
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          xhr.open("POST", `${BACKEND_URL}/api/textbooks/upload-file`);
+          xhr.setRequestHeader("Authorization", `Bearer ${session?.access_token || ""}`);
+          xhr.send(formData);
+        });
       });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Upload failed");
-      }
-
-      const result = await res.json();
       await fetchTextbooks();
       return result;
     },

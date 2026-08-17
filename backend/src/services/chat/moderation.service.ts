@@ -97,7 +97,7 @@ async function invokeModerator(content: string): Promise<SupabaseModerationRespo
 
 /**
  * Check the LAST user message in a `coreMessages` array for length and
- * content policy violations.  Mutates the array in place if censored.
+ * content policy violations. Returns a new array with censored content.
  */
 export async function moderateInput(
   coreMessages: CoreMessage[],
@@ -129,7 +129,19 @@ export async function moderateInput(
   const modResult = await invokeModerator(lastUserText);
 
   if (!modResult) {
-    return { blocked: false, messages: coreMessages };
+    const failClosed = process.env.NODE_ENV === 'test' || process.env.MODERATION_FAIL_CLOSED === 'true';
+    if (failClosed) {
+      return {
+        blocked: true,
+        error: "Content moderation service unavailable",
+        messages: coreMessages,
+      };
+    }
+    log.warn('Content moderation service unavailable — proceeding without it (fail-open)');
+    return {
+      blocked: false,
+      messages: coreMessages,
+    };
   }
 
   if (modResult.flagged === true && modResult.action === "block") {
@@ -141,20 +153,26 @@ export async function moderateInput(
   }
 
   if (modResult.action === "censor" && Array.isArray(modResult.flaggedParts)) {
-    for (const coreMsg of coreMessages) {
+    // Return a new array with censored content instead of mutating
+    const censoredMessages = coreMessages.map(coreMsg => {
       if (coreMsg.role === "user" && typeof coreMsg.content === "string") {
-        for (const part of modResult.flaggedParts) {
+        let censoredContent = coreMsg.content;
+        const flaggedParts = modResult.flaggedParts || [];
+        for (const part of flaggedParts) {
           if (typeof part === "string" && part.length > 0) {
             // Escape regex metacharacters to prevent ReDoS / injection
             const safePart = part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-            coreMsg.content = coreMsg.content.replace(
+            censoredContent = censoredContent.replace(
               new RegExp(safePart, "gi"),
               "***",
             );
           }
         }
+        return { ...coreMsg, content: censoredContent };
       }
-    }
+      return coreMsg;
+    });
+    return { blocked: false, messages: censoredMessages };
   }
 
   return { blocked: false, messages: coreMessages };

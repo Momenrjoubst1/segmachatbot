@@ -90,7 +90,7 @@ export const Avatar: React.FC<AvatarProps> = ({
 
       {isOnline && (
         <div
-          className="absolute rounded-full border-2 border-white dark:border-gray-950 bg-emerald-500 shadow-sm"
+          className="absolute rounded-full border-2 border-white bg-emerald-500 shadow-sm"
           style={{
             width: dotSize,
             height: dotSize,

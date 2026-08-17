@@ -1,14 +1,33 @@
-const CACHE_NAME = 'sigma-ai-v1';
-const STATIC_CACHE = 'sigma-ai-static-v1';
-const DYNAMIC_CACHE = 'sigma-ai-dynamic-v1';
+const CACHE_VERSION = 'v2';
+const CACHE_NAME = `sigma-ai-${CACHE_VERSION}`;
+const STATIC_CACHE = `sigma-ai-static-${CACHE_VERSION}`;
+const DYNAMIC_CACHE = `sigma-ai-dynamic-${CACHE_VERSION}`;
+
+// Dynamic cache LRU cap — prevents unbounded growth from runtime responses.
+const DYNAMIC_CACHE_MAX_ENTRIES = 60;
 
 // Static assets to cache immediately
+// NOTE: keep this list to files that ACTUALLY exist in /public, otherwise
+// cache.addAll() rejects the whole install (one 404 = whole cache fails).
 const STATIC_ASSETS = [
   '/',
   '/index.html',
-  '/favicon.ico',
   '/manifest.json',
 ];
+
+function isSameOrigin(url) {
+  return url.origin === self.location.origin;
+}
+
+// Trim the dynamic cache to a bounded LRU set (oldest entries evicted).
+async function trimDynamicCache() {
+  const cache = await caches.open(DYNAMIC_CACHE);
+  const keys = await cache.keys();
+  if (keys.length <= DYNAMIC_CACHE_MAX_ENTRIES) return;
+  for (const key of keys.slice(0, keys.length - DYNAMIC_CACHE_MAX_ENTRIES)) {
+    await cache.delete(key);
+  }
+}
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
@@ -46,14 +65,15 @@ self.addEventListener('fetch', (event) => {
   // Skip API calls and chrome-extension
   if (url.pathname.startsWith('/api') || url.protocol === 'chrome-extension:') return;
 
-  // Network first for navigation requests
+  // Network first for navigation requests — users must always get the
+  // newest index.html so a deploy is picked up on the next reload.
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then((response) => {
           const responseClone = response.clone();
           caches.open(DYNAMIC_CACHE).then((cache) => {
-            cache.put(request, responseClone);
+            cache.put(request, responseClone).then(trimDynamicCache);
           });
           return response;
         })
@@ -64,15 +84,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache first for static assets (JS, CSS, images)
+  // Cache-first ONLY for same-origin build outputs (Vite emits
+  // content-hashed filenames under /assets/, so a cached entry can never go
+  // stale — a new build produces new URLs). Cross-origin media (Supabase
+  // avatars, R2 figures, …) must NOT be frozen cache-first and is handled
+  // by the network-first branch below.
   if (
-    url.pathname.endsWith('.js') ||
-    url.pathname.endsWith('.css') ||
-    url.pathname.endsWith('.woff2') ||
-    url.pathname.endsWith('.woff') ||
-    url.pathname.endsWith('.ttf') ||
-    url.pathname.endsWith('.eot') ||
-    url.pathname.match(/\.(png|jpg|jpeg|gif|ico|svg|webp)$/)
+    isSameOrigin(url) &&
+    (url.pathname.startsWith('/assets/') ||
+      url.pathname.endsWith('.woff2') ||
+      url.pathname.endsWith('.woff') ||
+      url.pathname.endsWith('.ttf') ||
+      url.pathname.endsWith('.eot'))
   ) {
     event.respondWith(
       caches.match(request).then((cachedResponse) => {
@@ -91,13 +114,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network first for everything else
+  // Network first for everything else (incl. all cross-origin requests)
   event.respondWith(
     fetch(request)
       .then((response) => {
         const responseClone = response.clone();
         caches.open(DYNAMIC_CACHE).then((cache) => {
-          cache.put(request, responseClone);
+          cache.put(request, responseClone).then(trimDynamicCache);
         });
         return response;
       })

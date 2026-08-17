@@ -1,17 +1,159 @@
 
 import { AssistantChatTransport, useChatRuntime, useAISDKChat } from "@assistant-ui/react-ai-sdk";
-import { useMemo, useCallback, useRef, useEffect } from "react";
+import type { UIMessage, UIMessageChunk } from "ai";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { flushSync } from "react-dom";
 import { useChatHistory } from "../../../hooks/useChatHistory";
 import { supabase } from "@/lib/supabaseClient";
 import type { AcademicCourse } from "../../../hooks/useCourses";
 import { useRAGContext } from "../../../context/RAGContext";
+import { toast } from "sonner";
 import {
   dispatchUIAction,
   type AgenticUIAction,
 } from "../../../context/AgenticUIBus";
 import { getAssistantAuthHeaders } from "@/lib/auth";
+import { useGuestMode } from "@/context/GuestModeContext";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3004";
+const THREAD_ID_UPDATE_DELAY_MS = Number(import.meta.env.VITE_THREAD_ID_UPDATE_DELAY_MS || "200");
+
+/** Guest quota cookies require credentialed requests across origins. */
+export function resolveRequestCredentials(
+  isGuestMode: boolean,
+  requestedCredentials: RequestCredentials | undefined,
+): RequestCredentials | undefined {
+  return isGuestMode ? "include" : requestedCredentials;
+}
+
+/**
+ * The authenticated API still uses the legacy AI SDK text protocol (`0:"…"`).
+ * Guest chat has no UI actions, so convert that lightweight protocol into the
+ * current UI-message event stream expected by AssistantChatTransport.
+ */
+export function legacyGuestStreamToUIMessageStream(
+  stream: ReadableStream<Uint8Array>,
+): ReadableStream<UIMessageChunk> {
+  const decoder = new TextDecoder();
+  const textPartId = `guest-text-${crypto.randomUUID()}`;
+  let buffered = "";
+  let textStarted = false;
+
+  const emitTextStart = (controller: ReadableStreamDefaultController<UIMessageChunk>) => {
+    if (!textStarted) {
+      controller.enqueue({ type: "text-start", id: textPartId });
+      textStarted = true;
+    }
+  };
+
+  const processLine = (
+    rawLine: string,
+    controller: ReadableStreamDefaultController<UIMessageChunk>,
+  ) => {
+    const line = rawLine.replace(/\r$/, "");
+    if (!line) return;
+    if (line.startsWith("0:")) {
+      try {
+        const text = JSON.parse(line.slice(2));
+        if (typeof text === "string" && text) {
+          emitTextStart(controller);
+          controller.enqueue({ type: "text-delta", id: textPartId, delta: text });
+        }
+      } catch (e) {
+        console.warn("[legacyGuestStream] JSON parse error on chunk:", e);
+      }
+      return;
+    }
+    if (line.startsWith("3:")) {
+      try {
+        const error = JSON.parse(line.slice(2));
+        const errorMsg = error?.error ?? "Guest chat failed";
+        emitTextStart(controller);
+        controller.enqueue({ type: "text-delta", id: textPartId, delta: `\n\n⚠️ ${errorMsg}` });
+      } catch {
+        emitTextStart(controller);
+        controller.enqueue({ type: "text-delta", id: textPartId, delta: "\n\n⚠️ Guest chat failed" });
+      }
+    }
+  };
+
+  return new ReadableStream<UIMessageChunk>({
+    start(controller) {
+      controller.enqueue({ type: "start" });
+      const reader = stream.getReader();
+      void (async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffered += decoder.decode(value, { stream: true });
+            const lines = buffered.split("\n");
+            buffered = lines.pop() ?? "";
+            lines.forEach((line) => processLine(line, controller));
+          }
+          buffered += decoder.decode();
+          processLine(buffered, controller);
+          if (textStarted) controller.enqueue({ type: "text-end", id: textPartId });
+          controller.enqueue({ type: "finish", finishReason: "stop" });
+          controller.close();
+        } catch (error) {
+          controller.error(error);
+        }
+      })();
+    },
+  });
+}
+
+class GuestChatTransport extends AssistantChatTransport<UIMessage> {
+  protected override processResponseStream(
+    stream: ReadableStream<Uint8Array>,
+  ): ReadableStream<UIMessageChunk> {
+    return legacyGuestStreamToUIMessageStream(stream);
+  }
+}
+
+// ─── Guest Body Transformation ─────────────────────────────────────────────────
+/**
+ * Transform AI SDK message format to guest API format.
+ * Extracts the last user message and conversation history.
+ */
+function transformToGuestBody(body: any): { message: string; conversationHistory: Array<{ role: string; content: string }> } {
+  const messages = body.messages ?? [];
+  const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+
+  // AI SDK: content can be string OR array of parts; assistant-ui: parts[0].text
+  const userText = (() => {
+    if (!lastUserMsg) return "";
+    if (lastUserMsg.parts?.[0]?.text) return lastUserMsg.parts[0].text;
+    if (typeof lastUserMsg.content === "string") return lastUserMsg.content;
+    if (Array.isArray(lastUserMsg.content)) {
+      const textPart = lastUserMsg.content.find((p: any) => p.type === "text");
+      return textPart?.text ?? "";
+    }
+    return "";
+  })();
+
+  const historyWithoutLastUser = messages
+    .filter((m: any) => m.role === "user" || m.role === "assistant")
+    .slice(0, -1)
+    .slice(-10)
+    .map((m: any) => {
+      let text = "";
+      if (m.parts?.[0]?.text) text = m.parts[0].text;
+      else if (typeof m.content === "string") text = m.content;
+      else if (Array.isArray(m.content)) {
+        const tp = m.content.find((p: any) => p.type === "text");
+        text = tp?.text ?? "";
+      }
+      return { role: m.role, content: text };
+    });
+
+  return {
+    message: userText,
+    conversationHistory: historyWithoutLastUser,
+  };
+}
 
 // ─── UI Action Stream Parser ─────────────────────────────────────────────────────
 
@@ -104,26 +246,30 @@ class UIActionStreamParser {
 // ─── Message Syncer ────────────────────────────────────────────────────────────
 //
 // Bridges the gap between ChatMessagesProvider (async fetch) and the AI SDK
-// runtime (initial-mount-only messages). When fetchMessages resolves AFTER
-// mount (cache miss), this component imperatively pushes the fetched messages
-// into the already-mounted runtime via useAISDKChat().setMessages().
-//
-// Safety guards:
-// 1. Skips if messages reference hasn't changed (avoids redundant calls)
-// 2. Skips if the runtime is actively streaming (never overwrites live content)
-// 3. Skips the initial mount (initial messages are handled by useChatRuntime)
+// runtime (initial-mount-only messages). For authenticated sessions only.
+// Guest sessions are fully in-memory and must not be overwritten.
 
-export const MessageSyncer = () => {
+const AuthenticatedMessageSyncer = () => {
   const chat = useAISDKChat();
-  const { activeThreadMessages } = useChatHistory();
+  const { activeThreadMessages, activeThreadId, appendMessage, upsertMessage } = useChatHistory();
   const lastSyncedRef = useRef<typeof activeThreadMessages | null>(null);
+  const lastAiCountRef = useRef(0);
 
   useEffect(() => {
     if (!chat) return;
 
-    // Skip initial mount — messages were already passed to useChatRuntime
+    // On initial mount, push messages if we have any.
     if (lastSyncedRef.current === null) {
       lastSyncedRef.current = activeThreadMessages;
+      if (activeThreadMessages.length > 0) {
+        const mapped = activeThreadMessages.map((msg) => ({
+          id: msg.id,
+          role: msg.role as "user" | "assistant" | "system",
+          parts: [{ type: "text" as const, text: msg.content }],
+        }));
+        chat.setMessages(mapped);
+      }
+      lastAiCountRef.current = chat.messages?.length ?? 0;
       return;
     }
 
@@ -144,27 +290,110 @@ export const MessageSyncer = () => {
       parts: [{ type: "text" as const, text: msg.content }],
     }));
     chat.setMessages(mapped);
+    lastAiCountRef.current = mapped.length;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeThreadMessages]);
+
+  // ─── Reverse sync: AI SDK chat → context ────────────────────────────────────
+  // Mirror completed AI SDK messages into context only once streaming is done.
+  const aiMessages = chat?.messages;
+  const chatStatus = chat?.status;
+  useEffect(() => {
+    if (!aiMessages || aiMessages.length === 0) return;
+    if (chatStatus === "streaming" || chatStatus === "submitted") return;
+
+    const existingMap = new Map(activeThreadMessages.map((m) => [m.id, m]));
+    for (const m of aiMessages) {
+      const textPart = m.parts?.find((p) => p.type === "text");
+      const content = textPart && "text" in textPart ? textPart.text : "";
+      const existing = existingMap.get(m.id);
+      if (!existing) {
+        appendMessage({
+          id: m.id,
+          role: m.role as "user" | "assistant" | "system" | "data",
+          content,
+          is_pinned: false,
+          created_at: new Date().toISOString(),
+        });
+      } else if (existing.content !== content && content) {
+        upsertMessage(m.id, (msg) => ({ ...msg, content }));
+      }
+    }
+    lastAiCountRef.current = aiMessages.length;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiMessages, chatStatus, activeThreadId]);
+
+  // ─── Tab visibility / focus: re-push messages to the AI SDK chat ───────────
+  const [, forceRender] = useState(0);
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+
+    const resync = () => {
+      if (chat && chat.status !== "streaming" && chat.status !== "submitted" && activeThreadMessages.length > 0) {
+        const mapped = activeThreadMessages.map((msg) => ({
+          id: msg.id,
+          role: msg.role as "user" | "assistant" | "system",
+          parts: [{ type: "text" as const, text: msg.content }],
+        }));
+        chat.setMessages(mapped);
+        lastSyncedRef.current = activeThreadMessages;
+      }
+      setTimeout(() => {
+        flushSync(() => {
+          forceRender((t) => t + 1);
+        });
+      }, 0);
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") resync();
+    };
+    const handleFocus = () => resync();
+    const handlePageShow = () => resync();
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat, activeThreadMessages]);
 
   return null;
 };
 
+export const MessageSyncer = () => {
+  const { isGuestMode } = useGuestMode();
+  if (isGuestMode) {
+    return null;
+  }
+  return React.createElement(AuthenticatedMessageSyncer);
+};
+
 // ─── Runtime Hook ─────────────────────────────────────────────────────────────────
 
-export const useRuntime = (activeCourse: AcademicCourse | null) => {
+export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: string) => {
   // Because AssistantChatInner is mounted with key=chatKey (from URL),
   // this hook is fully recreated on every thread switch / new chat.
+  const navigate = useNavigate();
   const { activeThreadId, activeThreadMessages, setActiveThreadId, refreshThreads, saveDraft: _saveDraft, getDraft, clearDraft, markLastAssistantInterrupted } = useChatHistory();
   const { ragEnabled } = useRAGContext();
+  const { isGuestMode, refreshGuestStatus, setGuestQuota } = useGuestMode();
   const threadCreatedRef = useRef(false);
 
-  // Key: use the URL thread ID, or a composite key for new chats (new-courseId or new-general)
-  const chatKey = activeThreadId
-    ? activeThreadId
-    : activeCourse
-    ? `new-${activeCourse.id}`
-    : "new-general";
+  // Key: use the caller-supplied chatKey (which includes the new-chat counter)
+  // when available so drafts are saved/cleared under the SAME key AssistantApp
+  // uses. Fallback kept for callers that only pass the course.
+  const chatKey = draftKey
+    ?? (activeThreadId
+      ? activeThreadId
+      : activeCourse
+      ? `new-${activeCourse.id}`
+      : "new-general");
 
   // Idempotency key: generated once per new-chat mount so that the original
   // request AND any 401 token-refresh retry carry the SAME GUID.
@@ -197,10 +426,14 @@ export const useRuntime = (activeCourse: AcademicCourse | null) => {
   }, []);
 
   const abortRef = useRef<(() => void) | null>(null);
+  const threadUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
       abortRef.current?.();
+      if (threadUpdateTimeoutRef.current) {
+        clearTimeout(threadUpdateTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -210,43 +443,106 @@ export const useRuntime = (activeCourse: AcademicCourse | null) => {
       const controller = new AbortController();
       abortRef.current = () => controller.abort();
 
-      const headers = await getAssistantAuthHeaders(init.headers);
-      if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-
+      let headers: Headers;
       let body = init.body;
-      if (typeof body === "string") {
-        try {
-          const parsed = JSON.parse(body);
-          if (activeThreadId) {
-            // Continuing an existing thread
-            parsed.threadId = activeThreadId;
-          } else {
-            // New thread — attach idempotency GUID (same GUID survives 401 retry
-            // because this customFetch closure captures guidRef once per mount)
-            if (activeCourse) {
-              parsed.courseId = activeCourse.id;
-            }
-            if (guidRef.current) {
-              parsed.clientChatGuid = guidRef.current;
-            }
+
+      if (isGuestMode) {
+        // Guest: no auth headers, simple JSON body with message + conversationHistory
+        headers = new Headers(init.headers);
+        if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+
+        // Check for image content - model doesn't support images in guest mode
+        let hasImage = false;
+        if (typeof body === "string") {
+          try {
+            const parsed = JSON.parse(body);
+            // Check for data URLs, HTML img tags, or image references in the message
+            const allText = [
+              parsed.message,
+              ...(parsed.conversationHistory?.map((m: any) => m.content) ?? [])
+            ].join(' ');
+            hasImage = allText.includes('<img') || allText.includes('data:image/') || allText.includes('image/');
+          } catch (e) {
+            console.error("[guest customFetch] Failed to parse body:", e);
           }
-          // else: no threadId/courseId → backend creates a new session
-          parsed.ragEnabled = ragEnabled;
-          body = JSON.stringify(parsed);
-        } catch { /* keep original body */ }
+        } else if (body && typeof body === "object") {
+          try {
+            const parsed = body as any;
+            const allText = [
+              parsed.message,
+              ...(parsed.conversationHistory?.map((m: any) => m.content) ?? [])
+            ].join(' ');
+            hasImage = allText.includes('<img') || allText.includes('data:image/') || allText.includes('image/');
+          } catch (e) {
+            console.error("[guest customFetch] Failed to parse object body:", e);
+          }
+        }
+
+        if (hasImage) {
+          toast.error("Images not supported in guest mode. Please sign in to send images.", {
+            description: "Guest mode only supports text messages. Sign in to unlock image sending.",
+            action: {
+              label: "Sign in",
+              onClick: () => {
+                navigate("/login", { state: { from: `` } });
+              }
+            }
+          });
+          throw new Error("Images are not supported in guest mode");
+        }
+
+        if (typeof body === "string") {
+          try {
+            const parsed = JSON.parse(body);
+            const transformed = transformToGuestBody(parsed);
+            body = JSON.stringify(transformed);
+          } catch (e) {
+            console.error("[guest customFetch] Failed to transform body:", e);
+          }
+        } else if (body && typeof body === "object") {
+          try {
+            const transformed = transformToGuestBody(body as any);
+            body = JSON.stringify(transformed);
+          } catch (e) {
+            console.error("[guest customFetch] Failed to transform object body:", e);
+          }
+        }
+      } else {
+        // Authenticated: full auth headers, thread ID, course ID, etc.
+        headers = await getAssistantAuthHeaders(init.headers);
+        if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+
+        if (typeof body === "string") {
+          try {
+            const parsed = JSON.parse(body);
+            if (activeThreadId) {
+              parsed.threadId = activeThreadId;
+            } else {
+              if (activeCourse) {
+                parsed.courseId = activeCourse.id;
+              }
+              if (guidRef.current) {
+                parsed.clientChatGuid = guidRef.current;
+              }
+            }
+            parsed.ragEnabled = ragEnabled;
+            body = JSON.stringify(parsed);
+          } catch { /* keep original body */ }
+        }
       }
 
       const { signal } = controller;
-      let res = await fetch(input, { ...init, headers, body, signal });
+      // For guest mode, include credentials to ensure cookies are sent cross-origin
+      const credentials = resolveRequestCredentials(isGuestMode, init.credentials);
+      let res = await fetch(input, { ...init, headers, body, signal, credentials });
 
-      // Auto-retry on 401
-      if (res.status === 401 && !signal.aborted) {
+      // Auto-retry on 401 (authenticated only)
+      if (!isGuestMode && res.status === 401 && !signal.aborted) {
         const { data, error } = await supabase.auth.refreshSession();
         if (!error && data.session?.access_token) {
           headers.set("Authorization", `Bearer ${data.session.access_token}`);
-          res = await fetch(input, { ...init, headers, body, signal });
+          res = await fetch(input, { ...init, headers, body, signal, credentials });
         } else {
-          // Refresh failed — notify the app so a modal can prompt re-login
           window.dispatchEvent(new CustomEvent("auth:session-expired"));
           throw new Error("Session expired: unable to refresh authentication token");
         }
@@ -256,17 +552,64 @@ export const useRuntime = (activeCourse: AcademicCourse | null) => {
         throw new DOMException("Aborted", "AbortError");
       }
 
+      // Handle 429 rate limit for guests
+      if (isGuestMode && res.status === 429) {
+        try {
+          const data = await res.clone().json();
+          const count = Number(data.count);
+          const limit = Number(data.limit);
+          if (Number.isFinite(count) && Number.isFinite(limit) && limit > 0) {
+            setGuestQuota({
+              count,
+              limit,
+              retryAfterSeconds: Number.isFinite(Number(data.retryAfterSeconds))
+                ? Number(data.retryAfterSeconds)
+                : undefined,
+            });
+          } else {
+            // The IP limiter also returns 429 but has no guest quota payload.
+            // Keep the last known quota instead of incorrectly resetting it to 0.
+            await refreshGuestStatus();
+          }
+        } catch { /* ignore */ }
+      }
+
+      // Read quota headers from successful guest responses
+      if (isGuestMode && res.ok) {
+        const count = res.headers.get("X-Guest-Message-Count");
+        const limit = res.headers.get("X-Guest-Message-Limit");
+        const retryAfter = res.headers.get("X-Guest-Retry-After");
+        const parsedCount = Number(count);
+        const parsedLimit = Number(limit);
+        const parsedRetryAfter = Number(retryAfter);
+        if (Number.isFinite(parsedCount) && Number.isFinite(parsedLimit) && parsedLimit > 0) {
+          setGuestQuota({
+            count: parsedCount,
+            limit: parsedLimit,
+            retryAfterSeconds: retryAfter && Number.isFinite(parsedRetryAfter)
+              ? parsedRetryAfter
+              : undefined,
+          });
+        }
+      }
+
       // Capture new thread ID from backend after stream completes
       const serverThreadId = res.headers.get("X-Thread-Id");
 
       const isNewThread = !!serverThreadId && serverThreadId !== activeThreadId && !threadCreatedRef.current;
 
-      // Always wrap the response body to intercept <ui_action> tags.
-      // If this is a new thread, also handle URL update + sidebar refresh on stream end.
+      // Guests: return response as-is (no UI actions, no thread creation)
+      if (isGuestMode) {
+        return res;
+      }
+
+      // Authenticated: wrap response body to intercept <ui_action> tags.
       const originalBody = res.body;
       if (originalBody) {
         const reader = originalBody.getReader();
         const parser = new UIActionStreamParser();
+        const decoder = new TextDecoder();
+        const encoder = new TextEncoder();
         let hasEnqueuedData = false;
         let streamClosed = false;
         const stream = new ReadableStream({
@@ -281,54 +624,42 @@ export const useRuntime = (activeCourse: AcademicCourse | null) => {
                 }
                 const { done, value } = await reader.read();
                 if (done) {
-                  // Flush any remaining buffered content
                   const remaining = parser.flush();
                   if (remaining && !streamClosed) {
-                    try { controller.enqueue(new TextEncoder().encode(remaining)); } catch {}
+                    try { controller.enqueue(encoder.encode(remaining)); } catch {}
                   }
                   if (!streamClosed) { try { controller.close(); } catch {} }
                   streamClosed = true;
 
-                  // Post-stream: update URL for new threads
-                  // Delay the URL update to let the streamed content render first.
-                  // Changing activeThreadId changes the component key, which remounts
-                  // the component and would lose the streamed response if done immediately.
-                  if (isNewThread && serverThreadId) {
+                  // Post-stream: update URL for new threads (authenticated only)
+                  if (!isGuestMode && isNewThread && serverThreadId) {
                     threadCreatedRef.current = true;
                     clearDraft(chatKey);
                     refreshThreads();
-                    setTimeout(() => {
+                    if (threadUpdateTimeoutRef.current) {
+                      clearTimeout(threadUpdateTimeoutRef.current);
+                    }
+                    threadUpdateTimeoutRef.current = setTimeout(() => {
                       setActiveThreadId(serverThreadId);
-                    }, 200);
+                    }, THREAD_ID_UPDATE_DELAY_MS);
                   }
                   break;
                 }
 
-                // Decode chunk → parse UI actions → enqueue clean text
-                const text = new TextDecoder().decode(value, { stream: true });
+                const text = decoder.decode(value, { stream: true });
                 const cleanText = parser.process(text);
                 if (cleanText && !streamClosed) {
-                  try { controller.enqueue(new TextEncoder().encode(cleanText)); } catch { streamClosed = true; }
+                  try { controller.enqueue(encoder.encode(cleanText)); } catch { streamClosed = true; }
                   hasEnqueuedData = true;
                 }
               }
             } catch (err) {
               if (hasEnqueuedData) {
-                // Stream interrupted mid-way: preserve partial text by closing
-                // the stream gracefully instead of propagating the error. The
-                // library already received the enqueued chunks, so the partial
-                // response stays visible. Mark the message as interrupted so
-                // the UI can show a "retry" banner.
                 console.warn("[Runtime] Stream interrupted (partial response preserved):", err);
                 if (!streamClosed) { try { controller.close(); } catch {} }
                 streamClosed = true;
-
-                // Find the last assistant message that doesn't already have
-                // content — this is the one that was being streamed.
                 markLastAssistantInterrupted();
               } else {
-                // Request failed before any data arrived — propagate so the
-                // library surfaces a full error banner.
                 console.error("[Runtime] Request failed before streaming started:", err);
                 if (!streamClosed) { try { controller.error(err); } catch {} }
                 streamClosed = true;
@@ -341,29 +672,32 @@ export const useRuntime = (activeCourse: AcademicCourse | null) => {
           status: res.status,
           statusText: res.statusText,
         });
-      } else if (isNewThread && serverThreadId) {
-        // No body to wrap — still update thread state
+      } else if (!isGuestMode && isNewThread && serverThreadId) {
         threadCreatedRef.current = true;
         clearDraft(chatKey);
         refreshThreads();
-        setTimeout(() => {
+        if (threadUpdateTimeoutRef.current) {
+          clearTimeout(threadUpdateTimeoutRef.current);
+        }
+        threadUpdateTimeoutRef.current = setTimeout(() => {
           setActiveThreadId(serverThreadId);
-        }, 200);
+        }, THREAD_ID_UPDATE_DELAY_MS);
       }
-      // NOTE: for an existing thread (serverThreadId === activeThreadId or null),
-      // we intentionally do NOT call refreshThreads() here.
-      // The Supabase Realtime channel in ChatHistoryProvider already receives
-      // UPDATE events on chat_sessions and updates thread titles in real-time
-      // without any extra round-trip to the backend.
 
       return res;
     },
-    [activeThreadId, activeCourse, chatKey, setActiveThreadId, refreshThreads, ragEnabled, clearDraft, markLastAssistantInterrupted],
+    [isGuestMode, activeThreadId, activeCourse, chatKey, setActiveThreadId, refreshThreads, ragEnabled, clearDraft, markLastAssistantInterrupted, navigate, setGuestQuota],
   );
 
   const transport = useMemo(
-    () => new AssistantChatTransport({ api: `${BACKEND_URL}/api/chat`, fetch: customFetch }),
-    [customFetch],
+    () => (isGuestMode ? new GuestChatTransport({
+      api: `${BACKEND_URL}/api/guest/chat`,
+      fetch: customFetch,
+    }) : new AssistantChatTransport({
+      api: isGuestMode ? `${BACKEND_URL}/api/guest/chat` : `${BACKEND_URL}/api/chat`,
+      fetch: customFetch,
+    })),
+    [customFetch, isGuestMode],
   );
 
   // Because this component remounts on every key change, activeThreadMessages

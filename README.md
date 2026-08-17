@@ -4,7 +4,7 @@ Full-stack AI chatbot with RAG (Retrieval-Augmented Generation), memory manageme
 
 ## Features
 
-- **9 AI Models**: Groq, OpenAI, Gemini, DeepSeek, Qwen (via OpenRouter), Meta
+- **Multi-Model Support**: Azure, Groq, GitHub, OpenRouter, Fireworks, Novita (via intelligent routing)
 - **RAG Pipeline**: Vector search + BM25 + Reranking
 - **Memory System**: Session, cross-session, enhanced memory extraction
 - **Tools**: Email, calendar, web search, calculator, time/date
@@ -44,7 +44,7 @@ Full-stack AI chatbot with RAG (Retrieval-Augmented Generation), memory manageme
 │         │                │                │                     │
 │  ┌──────┴────────────────┴────────────────┴──────┐            │
 │  │              AI Provider Services              │            │
-│  │  Groq │ OpenAI │ Gemini │ DeepSeek │ Qwen     │            │
+│  │  Azure │ Groq │ GitHub │ OpenRouter │ Fireworks │ Novita │            │
 │  └─────────────────────┬─────────────────────────┘            │
 │                        │                                       │
 │  ┌─────────────────────┴─────────────────────────┐            │
@@ -92,7 +92,7 @@ Full-stack AI chatbot with RAG (Retrieval-Augmented Generation), memory manageme
 - Node.js 18+
 - npm or yarn
 - Supabase account (for database)
-- Groq API key (or other LLM provider)
+- At least one AI provider API key (Azure, Groq, GitHub, OpenRouter, Fireworks, or Novita)
 
 ### 1. Clone & Install
 
@@ -115,12 +115,18 @@ npm install
 ```env
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# AI Providers (at least one required)
+AZURE_API_KEY=your-azure-api-key
 GROQ_API_KEY=gsk_your-groq-key
-ASSISTANT_DEFAULT_MODEL=llama-3.3-70b-versatile
+GITHUB_TOKEN=your-github-token
+OPENROUTER_API_KEY=your-openrouter-key
+FIREWORKS_API_KEY=your-fireworks-key
+NOVITA_API_KEY=your-novita-key
+ASSISTANT_DEFAULT_MODEL=gpt-4o-mini
 REDIS_URL=redis://localhost:6379
 PORT=3004
 NODE_ENV=development
-CORS_ORIGINS=http://localhost:5173
+FRONTEND_URL=http://localhost:5173
 ```
 
 **Frontend `.env`:**

@@ -81,5 +81,3 @@ export const supabase = createClient(
     },
   },
 );
-
-export const knowledgeSupabase = supabase;

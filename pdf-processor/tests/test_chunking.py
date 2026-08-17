@@ -110,6 +110,78 @@ def test_split_overlap():
     print("PASS: test_split_overlap")
 
 
+def test_build_chunks_splits_long_page():
+    """Verify _build_chunks_v2 splits long pages via _split_long_text."""
+    from app.main import _build_chunks_v2
+    from app.layout import analyze_book
+    from app.models import BBox, TextBlock, PageExtraction, StructureNode
+
+    # Build a page with >1000 chars of text
+    long_text = "This is a sentence about biology. " * 60  # ~1980 chars
+    block = TextBlock(
+        text=long_text,
+        bbox=BBox(x0=50, y0=50, x1=500, y1=500),
+        font_size=12.0,
+        font_name="Helvetica",
+        is_bold=False,
+        is_italic=False,
+    )
+    extraction = PageExtraction(
+        page_number=1,
+        width=612,
+        height=792,
+        text_blocks=[block],
+        images=[],
+        approximate_columns=1,
+        font_size_histogram={"12.0": 1},
+    )
+    page_models, _lang = analyze_book([extraction])
+
+    tree = StructureNode(level="root", title="Root", page_start=1, page_end=1, children=[])
+    chunks = _build_chunks_v2(page_models, tree)
+
+    # Should produce MORE than 1 chunk (the long text should be split)
+    assert len(chunks) > 1, f"Expected multiple chunks for long page, got {len(chunks)}"
+    for c in chunks:
+        assert len(c.content) <= 1150, f"Chunk too long: {len(c.content)} chars"
+        assert c.page_number == 1
+        assert c.bbox is not None, "v2 chunks must carry layout bbox"
+        assert c.text_color is not None, "v2 chunks must carry text color"
+    print(f"PASS: test_build_chunks_splits_long_page ({len(chunks)} chunks from ~1980 chars)")
+
+
+def test_build_chunks_short_page_single_chunk():
+    """Short pages should still produce exactly one chunk."""
+    from app.main import _build_chunks_v2
+    from app.layout import analyze_book
+    from app.models import BBox, TextBlock, PageExtraction, StructureNode
+
+    block = TextBlock(
+        text="Short text about a topic.",
+        bbox=BBox(x0=50, y0=50, x1=500, y1=100),
+        font_size=12.0,
+        font_name="Helvetica",
+        is_bold=False,
+        is_italic=False,
+    )
+    extraction = PageExtraction(
+        page_number=1,
+        width=612,
+        height=792,
+        text_blocks=[block],
+        images=[],
+        approximate_columns=1,
+        font_size_histogram={"12.0": 1},
+    )
+    page_models, _lang = analyze_book([extraction])
+
+    tree = StructureNode(level="root", title="Root", page_start=1, page_end=1, children=[])
+    chunks = _build_chunks_v2(page_models, tree)
+
+    assert len(chunks) == 1, f"Expected 1 chunk for short page, got {len(chunks)}"
+    print("PASS: test_build_chunks_short_page_single_chunk")
+
+
 if __name__ == "__main__":
     test_merge_close_blocks()
     test_merge_different_fonts_no_merge()
@@ -121,4 +193,6 @@ if __name__ == "__main__":
     test_split_no_word_cutoff()
     test_split_exact_boundary()
     test_split_overlap()
+    test_build_chunks_splits_long_page()
+    test_build_chunks_short_page_single_chunk()
     print("\nALL CHUNKING TESTS PASSED")

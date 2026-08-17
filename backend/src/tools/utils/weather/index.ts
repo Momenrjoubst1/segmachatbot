@@ -19,7 +19,7 @@ registerTool("get_weather", {
         if (res.status === 404) return JSON.stringify({ status: "error", message: `المدينة '${city}' غير موجودة` });
         return JSON.stringify({ status: "error", message: "فشل في جلب بيانات الطقس" });
       }
-      const data: Record<string, unknown> = await res.json();
+      const data: any = await res.json();
       const main = data.main as Record<string, unknown> | undefined;
       const sys = data.sys as Record<string, unknown> | undefined;
       const weather = data.weather as Array<Record<string, unknown>> | undefined;

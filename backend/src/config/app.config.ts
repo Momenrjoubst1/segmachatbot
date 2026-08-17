@@ -7,6 +7,10 @@ const frontendOrigins = (
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+if (frontendOrigins.includes('*')) {
+  throw new Error('[Config] FRONTEND_URL must contain explicit origins; "*" cannot be used with credentialed CORS.');
+}
+
 if (nodeEnv === 'production' && frontendOrigins.length === 0) {
   throw new Error(
     '[Config] FRONTEND_URL is required in production. Set a comma-separated list of allowed origins.',
@@ -27,16 +31,14 @@ export const appConfig = {
   nodeEnv,
   /**
    * Number of reverse-proxy hops to trust for X-Forwarded-* headers.
-   *   - 0 = trust nothing (use socket IP)
+   *   - 0 = trust nothing (use socket IP) - SAFE DEFAULT
    *   - 1 = trust the immediate upstream (typical for nginx behind a CDN)
    *   - N = trust N hops back
-   * Set TRUST_PROXY_HOPS in env when running behind multiple proxies
-   * (e.g. Cloudflare -> nginx -> app). Wrong value = wrong req.ip and
-   * broken rate limiting. Leave unset in production until verified.
+   * Set TRUST_PROXY_HOPS in env when running behind reverse proxy / CDN.
    */
   trustProxyHops: process.env.TRUST_PROXY_HOPS != null
     ? Number(process.env.TRUST_PROXY_HOPS)
-    : 1,
+    : 0,
 } as const;
 
 export function isAllowedCorsOrigin(origin: string | undefined): boolean {

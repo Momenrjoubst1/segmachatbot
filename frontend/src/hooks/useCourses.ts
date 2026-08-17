@@ -62,6 +62,20 @@ export function useCourses() {
     }
   }, []);
 
+  // Refresh on window focus: newly processed chat-uploaded materials create
+  // course entries server-side — the sidebar picks them up without a reload.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") fetchCourses();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [fetchCourses]);
+
   // Initial fetch + auth state listener
   useEffect(() => {
     fetchCourses();

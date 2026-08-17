@@ -18,7 +18,7 @@ export const ChatTitleConfig = {
    * عدد الرسائل المطلوبة لتفعيل التسمية
    * Number of messages required to trigger titling
    */
-  minMessagesCount: parseInt(process.env.CHAT_TITLE_MIN_MESSAGES || '3'),
+  minMessagesCount: parseInt(process.env.CHAT_TITLE_MIN_MESSAGES || '2'),
 
   /**
    * الحد الأقصى لطول العنوان (بالأحرف)
@@ -58,10 +58,11 @@ export const ChatTitleConfig = {
    * Priority order of AI models to use
    */
   modelPriority: [
+    { provider: 'bigmodel', model: 'glm-5.2', envKey: 'BIGMODEL_API_KEY' },
     { provider: 'azure', model: 'gpt-4o-mini', envKey: 'AZURE_OPENAI_API_KEY' },
     { provider: 'google', model: 'gemini-1.5-flash', envKey: 'GOOGLE_API_KEY' },
     { provider: 'github', model: 'gpt-4o-mini', envKey: 'GITHUB_TOKEN' },
-    { provider: 'groq', model: 'gemma2-9b-it', envKey: 'GROQ_API_KEY' },
+    { provider: 'groq', model: 'llama-3.1-8b-instant', envKey: 'GROQ_API_KEY' },
   ],
 
   /**

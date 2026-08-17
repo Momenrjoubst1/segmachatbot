@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Request, Response, NextFunction } from 'express';
-import { setTraceContext, clearTraceContext } from '../utils/logger.js';
+import { runWithTraceContext } from '../utils/logger.js';
 
 export function requestIdMiddleware(req: Request, res: Response, next: NextFunction): void {
   const raw = req.headers['x-request-id'] as string | undefined;
@@ -15,11 +15,9 @@ export function requestIdMiddleware(req: Request, res: Response, next: NextFunct
 
   req.headers['x-request-id'] = requestId;
   res.setHeader('X-Request-Id', requestId);
-  setTraceContext({ requestId });
 
-  res.on('finish', () => {
-    clearTraceContext();
-  });
-
-  next();
+  // Scope the trace context to this request's call chain: every log emitted
+  // while handling it carries the requestId, and concurrent requests stay
+  // isolated (the previous enterWith/disable approach corrupted them).
+  runWithTraceContext({ requestId }, () => next());
 }

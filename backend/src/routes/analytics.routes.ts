@@ -4,14 +4,88 @@ import { AnalyticsTracker } from '../services/analytics/analytics-tracker.servic
 import { requireAdmin } from '../utils/admin-role-check.js';
 import { asyncHandler } from '../utils/express-async-wrapper.js';
 import { trackEventSchema, feedbackScoreSchema } from '../validators/analytics-validation.js';
+import { ValidationError, UnauthorizedError } from '../utils/error-handler.js';
 
 const router = Router();
 
 const tracker = new AnalyticsTracker(supabase);
 
 /**
+ * GET /api/analytics/user-dashboard
+ * User-scoped analytics for regular users.
+ * Auth: app.use('/api/analytics', authMiddleware, analyticsRoutes)
+ */
+router.get('/user-dashboard', asyncHandler(async (req, res) => {
+  const userId = req.user!.id;
+  const { days = '7' } = req.query;
+  const numDays = parseInt(days as string, 10);
+
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - numDays);
+
+  const recentEvents: Record<string, unknown>[] = await tracker.getUserEvents(userId, 20);
+
+  interface DailyMetric {
+    total_conversations: number;
+    total_messages: number;
+    avg_response_time_ms: number;
+    total_tokens_used: number;
+    feedback_avg_score: number;
+    estimated_cost_usd: number;
+    [key: string]: unknown;
+  }
+  const dailyMetrics: DailyMetric[] = await tracker.getUserDailyMetrics(userId, startDate, endDate);
+
+  const totalConversations = dailyMetrics.reduce((sum: number, m: DailyMetric) => sum + m.total_conversations, 0);
+  const totalMessages = dailyMetrics.reduce((sum: number, m: DailyMetric) => sum + m.total_messages, 0);
+  const avgResponseTime = dailyMetrics.length > 0
+    ? dailyMetrics.reduce((sum: number, m: DailyMetric) => sum + m.avg_response_time_ms, 0) / dailyMetrics.length
+    : 0;
+  const totalTokens = dailyMetrics.reduce((sum: number, m: DailyMetric) => sum + m.total_tokens_used, 0);
+  const avgFeedbackScore = dailyMetrics.length > 0
+    ? dailyMetrics.reduce((sum: number, m: DailyMetric) => sum + m.feedback_avg_score, 0) / dailyMetrics.length
+    : 0;
+  const totalCost = dailyMetrics.reduce((sum: number, m: DailyMetric) => sum + m.estimated_cost_usd, 0);
+
+  const modelMap = new Map<string, number>();
+  dailyMetrics.forEach((m: DailyMetric) => {
+    const topModels = m.top_models as Array<{ model: string; count: number }>;
+    topModels.forEach(({ model, count }: { model: string; count: number }) => {
+      modelMap.set(model, (modelMap.get(model) || 0) + count);
+    });
+  });
+  const topModels = Array.from(modelMap.entries())
+    .map(([model, count]) => ({ model, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
+  res.json({
+    success: true,
+    data: {
+      scope: 'user',
+      summary: {
+        totalConversations,
+        totalMessages,
+        avgResponseTime: Math.round(avgResponseTime),
+        totalTokens,
+        avgFeedbackScore: Math.round(avgFeedbackScore * 100) / 100,
+        totalCost: Math.round(totalCost * 100) / 100,
+        dateRange: {
+          start: startDate.toISOString().split('T')[0],
+          end: endDate.toISOString().split('T')[0],
+        },
+      },
+      dailyMetrics,
+      topModels,
+      recentEvents,
+    },
+  });
+}));
+
+/**
  * GET /api/analytics/dashboard
- * Platform metrics for admins; user-scoped summary for everyone else.
+ * Platform metrics for admins.
  * Auth: app.use('/api/analytics', authMiddleware, analyticsRoutes)
  */
 router.get('/dashboard', requireAdmin, asyncHandler(async (req, res) => {
@@ -52,7 +126,8 @@ router.get('/dashboard', requireAdmin, asyncHandler(async (req, res) => {
 
   const modelMap = new Map<string, number>();
   dailyMetrics.forEach((m: DailyMetric) => {
-    m.top_models.forEach(({ model, count }: { model: string; count: number }) => {
+    const topModels = m.top_models as Array<{ model: string; count: number }>;
+    topModels.forEach(({ model, count }: { model: string; count: number }) => {
       modelMap.set(model, (modelMap.get(model) || 0) + count);
     });
   });
@@ -88,8 +163,7 @@ router.get('/dashboard', requireAdmin, asyncHandler(async (req, res) => {
 router.get('/events', asyncHandler(async (req, res) => {
   const userId = req.user?.id;
   if (!userId) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
+    throw new UnauthorizedError();
   }
   const { limit = '100', event_type } = req.query;
   const numLimit = parseInt(limit as string, 10);
@@ -119,14 +193,12 @@ router.get('/events', asyncHandler(async (req, res) => {
 router.post('/track', asyncHandler(async (req, res) => {
   const userId = req.user?.id;
   if (!userId) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
+    throw new UnauthorizedError();
   }
 
   const parsed = trackEventSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.flatten().fieldErrors });
-    return;
+    throw new ValidationError('Invalid event data', { errors: parsed.error.flatten().fieldErrors });
   }
 
   const { event_type, metadata, ...rest } = parsed.data;
@@ -147,14 +219,12 @@ router.post('/track', asyncHandler(async (req, res) => {
 router.post('/feedback', asyncHandler(async (req, res) => {
   const userId = req.user?.id;
   if (!userId) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
+    throw new UnauthorizedError();
   }
 
   const parsed = feedbackScoreSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.flatten().fieldErrors });
-    return;
+    throw new ValidationError('Invalid feedback data', { errors: parsed.error.flatten().fieldErrors });
   }
 
   const { message_id, score, thread_id } = parsed.data;

@@ -13,6 +13,7 @@ export const chatTranslationSchema = z.object({
  * Loose validator for the streaming chat endpoint. The full message-shape
  * validation (parts, base64 images, etc.) happens later in chat.routes.ts
  * — this only protects against outright type confusion on the URL/body
+ * — actual content length validation happens in moderation (MAX_MESSAGE_CHARS = 32000)
  * (e.g. threadId not a string, ragEnabled not a boolean).
  *
  * Kept as a `.partial()` style on the known scalar fields so we don't
@@ -34,7 +35,7 @@ export const chatMessagesSchema = z.object({
   messages: z.array(
     z.object({
       role: z.enum(['user', 'assistant', 'system']),
-      content: z.string().max(50000),
+      content: z.string().max(32000),
     })
   ).min(1),
 });

@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback, useMemo, useRef, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect, ReactNode } from "react";
 import { authFetch } from "@/lib/auth";
+import { useAuthContext } from "@/context/AuthContext";
 import type { LoadErrorCode } from "@/lib/load-errors";
 
 export interface ChatMessage {
@@ -55,7 +56,7 @@ interface ChatMessagesContextType {
     seedMessages?: ChatMessage[];
     background?: boolean;
     clear?: boolean;
-  }) => void;
+  }) => Promise<void>;
   removeFromCache: (threadId: string) => void;
   prefetchThread: (threadId: string) => Promise<void>;
   setActiveThreadId: (id: string | null) => void;
@@ -78,6 +79,7 @@ interface ChatMessagesContextType {
 const ChatMessagesContext = createContext<ChatMessagesContextType | undefined>(undefined);
 
 export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
+  const { user } = useAuthContext();
   const [activeThreadMessages, setActiveThreadMessages] = useState<ChatMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [messagesError, setMessagesError] = useState<LoadErrorCode | null>(null);
@@ -88,6 +90,7 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
   const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3004";
 
   const fetchMessages = useCallback(async (threadId: string, isBackground = false) => {
+    if (!user?.id) return;
     const requestId = ++fetchRequestSeq.current;
     if (!isBackground) setIsLoadingMessages(true);
     setMessagesError(null);
@@ -127,11 +130,11 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [fetchMessages]);
 
-  const loadMessagesForThread = useCallback((threadId: string | null, options?: {
+  const loadMessagesForThread = useCallback(async (threadId: string | null, options?: {
     seedMessages?: ChatMessage[];
     background?: boolean;
     clear?: boolean;
-  }) => {
+  }): Promise<void> => {
     const { seedMessages, background = false, clear = false } = options ?? {};
 
     // Clear path (new chat / sign-out / no thread)
@@ -163,16 +166,35 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
     // Cache miss — full fetch with loading state
     if (background) {
       fetchMessages(threadId, true);
-    } else {
-      setActiveThreadMessages([]);
-      setIsLoadingMessages(true);
-      fetchMessages(threadId, false);
+      return;
     }
+    setActiveThreadMessages([]);
+    setIsLoadingMessages(true);
+    // Await the fetch so callers (e.g. loadThread) can wait for messages
+    // to land in the context BEFORE the URL change remounts the chat UI.
+    await fetchMessages(threadId, false);
   }, [messagesCache, fetchMessages]);
 
   const removeFromCache = useCallback((threadId: string) => {
     messagesCache.remove(threadId);
   }, [messagesCache]);
+
+  // Background refresh on window focus: picks up server-inserted messages
+  // (e.g. the "material is ready" notification posted by the worker).
+  useEffect(() => {
+    const refresh = () => {
+      const threadId = activeThreadIdRef.current;
+      if (threadId && document.visibilityState === "visible") {
+        fetchMessages(threadId, true);
+      }
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [fetchMessages]);
 
   const appendMessage = useCallback((msg: ChatMessage) => {
     setActiveThreadMessages((prev) => [...prev, msg]);
@@ -237,6 +259,7 @@ export const ChatMessagesProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const prefetchThread = useCallback(async (threadId: string) => {
+    if (!user?.id) return;
     if (!threadId || threadId === "new-chat-virtual" || messagesCache.get(threadId)) return;
     try {
       const res = await authFetch(`${backendUrl}/api/chat/threads/${threadId}`);

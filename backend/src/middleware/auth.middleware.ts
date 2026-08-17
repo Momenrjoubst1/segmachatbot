@@ -37,6 +37,23 @@ function isCircuitOpen(): boolean {
   return false;
 }
 
+/**
+ * Seconds remaining until the JWT's `exp` (Infinity when undecodable —
+ * callers fall back to the default TTL in that case).
+ */
+function getTokenRemainingSeconds(token: string | undefined): number {
+  try {
+    if (!token) return Number.POSITIVE_INFINITY;
+    const payload = JSON.parse(
+      Buffer.from(token.split('.')[1] ?? '', 'base64').toString('utf-8')
+    ) as { exp?: number };
+    if (typeof payload.exp !== 'number') return Number.POSITIVE_INFINITY;
+    return payload.exp - Math.floor(Date.now() / 1000);
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
 declare module 'express-serve-static-core' {
   interface Request {
     user?: {
@@ -114,6 +131,27 @@ export async function authMiddleware(
         user = cached.user;
         isBanned = cached.isBanned;
         bannedUntil = cached.bannedUntil;
+
+        // Re-verify ban status if cache is stale (>60s old)
+        const cacheAge = cached.cachedAt ? Date.now() - cached.cachedAt : Infinity;
+        if (cacheAge > 60_000) {
+          const { data: banRows } = await supabase
+            .from('banned_users')
+            .select('expires_at')
+            .eq('user_id', user!.id)
+            .eq('is_active', true)
+            .limit(10);
+
+          const activeBan = (banRows ?? []).find((row) => {
+            if (!row.expires_at) return true;
+            return new Date(row.expires_at) > new Date();
+          });
+
+          if (activeBan) {
+            isBanned = true;
+            bannedUntil = activeBan.expires_at ?? null;
+          }
+        }
       } else {
         await redis.del(cacheKey).catch((err: unknown) => {
           logger.warn('Redis cache delete failed during session cleanup', { err, cacheKey });
@@ -147,9 +185,10 @@ export async function authMiddleware(
         banned_until: authData.user.banned_until,
       };
 
-      // Check both Auth metadata and banned_users rows.
+      // Check both Auth metadata and banned_users rows in a single query
       const isAuthBanned = user.banned_until && new Date(user.banned_until) > new Date();
 
+      // Single query to check banned_users table
       const { data: banRows } = await supabase
         .from('banned_users')
         .select('expires_at')
@@ -167,13 +206,18 @@ export async function authMiddleware(
       isBanned = isAuthBanned || !!activeBan;
       bannedUntil = isAuthBanned ? user.banned_until : activeBan?.expires_at ?? null;
 
-      // Cache validation result in Redis for 5 minutes
-      await redis.set(
-        cacheKey,
-        JSON.stringify({ user, isBanned, bannedUntil }),
-        'EX',
-        300
-      ).catch((err: unknown) => logger.error('Redis cache set error', { err }));
+      // Cache validation result in Redis — but never longer than the token's
+      // own remaining lifetime, so an expired token's session can never be
+      // served from cache past its real expiry.
+      const cacheTtl = Math.min(300, getTokenRemainingSeconds(token) - 30);
+      if (cacheTtl > 0) {
+        await redis.set(
+          cacheKey,
+          JSON.stringify({ user, isBanned, bannedUntil, cachedAt: Date.now() }),
+          'EX',
+          Math.ceil(cacheTtl)
+        ).catch((err: unknown) => logger.error('Redis cache set error', { err }));
+      }
     }
 
     if (!user) {

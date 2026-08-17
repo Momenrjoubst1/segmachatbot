@@ -7,11 +7,10 @@ import { useChatHistory, ChatHistoryProvider } from "../../hooks/useChatHistory"
 import { useCourses, type AcademicCourse } from "../../hooks/useCourses";
 import { useScrollPreservation } from "../../hooks/useScrollPreservation";
 import { useTitle } from "@/context/TitleContext";
-import { useState, useCallback, useEffect, useRef, useLayoutEffect, useTransition } from "react";
+import { useCallback, useEffect, useRef, useLayoutEffect, useTransition } from "react";
 import { Toaster } from "sonner";
 import { RAGProvider } from "../../context/RAGContext";
 import { TopLoadingBar } from "@/components/ui/TopLoadingBar";
-import { ThreadSwitchSkeleton } from "@/components/ui/LoadingStates";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { LoadErrorPanel } from "@/components/ui/LoadErrorPanel";
@@ -21,6 +20,8 @@ import type { LoadErrorCode } from "@/lib/load-errors";
 import { SidebarView } from "./shadcn/components/Sidebar/SidebarView";
 import { MobileSidebarView } from "./shadcn/components/Sidebar/MobileSidebarView";
 import { Header } from "./shadcn/components/Header/Header";
+import { useAssistantState } from "./hooks/useAssistantState";
+import { GuestModeProvider, useGuestMode } from "@/context/GuestModeContext";
 
 
 const WELCOME_SUGGESTIONS = [
@@ -57,6 +58,37 @@ const DraftSaver = ({
 }) => {
   const aui = useAui();
   const prevKeyRef = useRef(chatKey);
+
+  // Keep the latest key/save fn available to the unload handler without
+  // re-registering listeners on every render.
+  const chatKeyRef = useRef(chatKey);
+  chatKeyRef.current = chatKey;
+  const onDraftSaveRef = useRef(onDraftSave);
+  onDraftSaveRef.current = onDraftSave;
+
+  // DraftSaver only fires on key *change*, so without this the composer text
+  // of a brand-new chat is lost on refresh/close (there is no key change to
+  // trigger a save). pagehide covers refresh, tab close, and mobile app switch;
+  // it fires reliably even when beforeunload is ignored (iOS Safari).
+  useEffect(() => {
+    const saveDraftNow = () => {
+      try {
+        const composer = aui.composer() as any;
+        const text = typeof composer?.getText === "function" ? composer.getText() : "";
+        if (text) {
+          onDraftSaveRef.current(chatKeyRef.current, text);
+        }
+      } catch {
+        // Composer not mounted — nothing to save
+      }
+    };
+    window.addEventListener("pagehide", saveDraftNow);
+    document.addEventListener("visibilitychange", saveDraftNow);
+    return () => {
+      window.removeEventListener("pagehide", saveDraftNow);
+      document.removeEventListener("visibilitychange", saveDraftNow);
+    };
+  }, [aui]);
 
   useLayoutEffect(() => {
     const prevKey = prevKeyRef.current;
@@ -126,6 +158,7 @@ interface AssistantChatInnerProps {
   setArtifactPanelOpen: (open: boolean) => void;
   emailHistoryOpen: boolean;
   setEmailHistoryOpen: (open: boolean) => void;
+  isGuestMode: boolean;
 }
 
 const AssistantChatInner = ({
@@ -149,8 +182,9 @@ const AssistantChatInner = ({
   setArtifactPanelOpen,
   emailHistoryOpen,
   setEmailHistoryOpen,
+  isGuestMode,
 }: AssistantChatInnerProps) => {
-  const runtime = useRuntime(activeCourse);
+  const runtime = useRuntime(activeCourse, chatKey);
   const aui = useAui({
     suggestions: Suggestions([...WELCOME_SUGGESTIONS]),
   });
@@ -162,9 +196,9 @@ const AssistantChatInner = ({
         <DraftSaver chatKey={chatKey} onDraftSave={onDraftSave} onThreadSwitch={onThreadSwitch} />
         <DraftRestorer draftText={draftText} />
         <Shadcn
-          isOnboarded={isOnboarded}
-          isCoursesLoadingVisible={isCoursesLoading && !localOnboarded}
-          coursesError={coursesError}
+          isOnboarded={isGuestMode || isOnboarded}
+          isCoursesLoadingVisible={!isGuestMode && isCoursesLoading && !localOnboarded}
+          coursesError={isGuestMode ? null : coursesError}
           retryCourses={retryCourses}
           onActiveCourseChange={setActiveCourse}
           onCompleteOnboarding={handleCompleteOnboarding}
@@ -175,6 +209,7 @@ const AssistantChatInner = ({
           setArtifactPanelOpen={setArtifactPanelOpen}
           emailHistoryOpen={emailHistoryOpen}
           setEmailHistoryOpen={setEmailHistoryOpen}
+          isGuestMode={isGuestMode}
         />
       </RAGProvider>
     </AssistantRuntimeProvider>
@@ -185,57 +220,44 @@ const AssistantAppContent = () => {
   const { threads, activeThreadId, isLoadingMessages, messagesError, retryFetchMessages, saveDraft, getDraft, newChatCount } = useChatHistory();
   const { t } = useTranslation(["errors", "common"]);
   const { setBaseTitle } = useTitle();
-  const [activeCourse, setActiveCourse] = useState<AcademicCourse | null>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeView, _setActiveView] = useState<'chat' | 'calendar'>('chat');
-  const [artifactPanelOpen, _setArtifactPanelOpen] = useState(false);
-  const [emailHistoryOpen, _setEmailHistoryOpen] = useState(false);
   const [, startTransition] = useTransition();
+  const { isGuestMode } = useGuestMode();
 
   const {
     courses: dbCourses,
-    isOnboarded: dbOnboarded,
     isCoursesLoading,
     coursesError,
-    replaceCourses,
     refetch: refetchCourses,
     retryCourses,
   } = useCourses();
 
-  const [localCourses, setLocalCourses] = useState<AcademicCourse[]>([]);
-  const [localOnboarded, setLocalOnboarded] = useState(false);
+  // Guest sessions must never inherit a signed-in user's local course state.
+  // The guest chat is available immediately; course onboarding starts only
+  // after authentication.
+  // Course-onboarding form removed: study materials are added by uploading
+  // files in chat (or the upload dialog) — each material creates its own
+  // sidebar course entry. dbCourses is now the single source of truth.
+  const courses = isGuestMode ? [] : dbCourses;
+  const isOnboarded = true;
 
-  const courses = localOnboarded ? localCourses : dbCourses;
-  const isOnboarded = localOnboarded || dbOnboarded;
+  // Use consolidated state management hook
+  const { state, actions } = useAssistantState(activeThreadId, threads, dbCourses);
 
-  // Transition-wrapped setters for heavy UI updates (lazy-loaded panels, view switches)
+  // Transition-wrapped setters for heavy UI updates
   const setActiveView = useCallback((view: 'chat' | 'calendar') => {
-    startTransition(() => { _setActiveView(view); });
-  }, []);
+    startTransition(() => { actions.setActiveView(view); });
+  }, [actions]);
   const setArtifactPanelOpen = useCallback((open: boolean) => {
-    startTransition(() => { _setArtifactPanelOpen(open); });
-  }, []);
+    startTransition(() => { actions.setArtifactPanelOpen(open); });
+  }, [actions]);
   const setEmailHistoryOpen = useCallback((open: boolean) => {
-    startTransition(() => { _setEmailHistoryOpen(open); });
-  }, []);
-
-  useEffect(() => {
-    if (activeThreadId && threads.length) {
-      const activeThread = threads.find((t) => t.id === activeThreadId);
-      if (activeThread) {
-        const course = dbCourses.find((c) => c.id === activeThread.course_id) ?? null;
-        setActiveCourse(course);
-      }
-    } else if (!activeThreadId) {
-      // New Chat — reset course so chatKey doesn't carry stale course info
-      setActiveCourse(null);
-    }
-  }, [activeThreadId, threads, dbCourses]);
+    startTransition(() => { actions.setEmailHistoryOpen(open); });
+  }, [actions]);
 
   const chatKey = activeThreadId
     ? activeThreadId
-    : activeCourse
-    ? `new-${activeCourse.id}-${newChatCount}`
+    : state.activeCourse
+    ? `new-${state.activeCourse.id}-${newChatCount}`
     : `new-general-${newChatCount}`;
 
   const { onThreadChange, restorePosition: _restorePosition } = useScrollPreservation(chatKey);
@@ -249,38 +271,25 @@ const AssistantAppContent = () => {
     return () => setBaseTitle("Sigma AI");
   }, [setBaseTitle]);
 
-  const handleCompleteOnboarding = useCallback(async (draftCourses: { course_name: string; credit_hours: number }[]) => {
-    const mapped = draftCourses.map((c) => ({
-      id: crypto.randomUUID(),
-      course_name: c.course_name,
-      credit_hours: c.credit_hours,
-    }));
-    setLocalCourses(mapped);
-    setLocalOnboarded(true);
-    try {
-      await replaceCourses(draftCourses);
-      await refetchCourses();
-    } catch (err) {
-      console.warn("[AssistantApp] Supabase sync failed, using local state", err);
-    }
-  }, [replaceCourses, refetchCourses]);
+  // Onboarding form removed — materials/courses are created by uploading
+  // files in chat. Handlers kept as stable no-ops for layout prop types.
+  const handleCompleteOnboarding = useCallback(async (_draftCourses: { course_name: string; credit_hours: number }[]) => {
+    await refetchCourses();
+  }, [refetchCourses]);
 
-  const handleSkipOnboarding = useCallback(() => {
-    setLocalOnboarded(true);
-  }, []);
+  const handleSkipOnboarding = useCallback(() => {}, []);
 
   const draftText = getDraft(chatKey);
 
   return (
-    <div className="assistant-app-shell dark flex flex-1 h-full w-full overflow-hidden bg-background text-foreground">
+    <div className="assistant-app-shell flex flex-1 h-full w-full overflow-hidden bg-background text-foreground">
       <Toaster
         position="top-right"
-        theme="dark"
         toastOptions={{
           style: {
-            background: '#2a2a2a',
-            border: 'none',
-            color: '#fff',
+            background: '#ffffff',
+            border: '1px solid #e3e3e3',
+            color: '#3a3a3a',
             padding: '8px 12px',
             fontSize: '13px',
             minWidth: 'auto',
@@ -295,20 +304,22 @@ const AssistantAppContent = () => {
         richColors
       />
       <TooltipProvider>
-        <div className="hidden md:block shrink-0">
+        <div className="hidden md:block shrink-0 overflow-visible">
           <SidebarView
-            collapsed={sidebarCollapsed}
-            onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+            collapsed={state.sidebarCollapsed}
+            onToggle={() => actions.toggleSidebar()}
             courses={courses}
-            activeCourse={activeCourse}
-            onActiveCourseChange={setActiveCourse}
+            activeCourse={state.activeCourse}
+            onActiveCourseChange={actions.setActiveCourse}
+            isGuestMode={isGuestMode}
           />
         </div>
         <div className="md:hidden shrink-0">
           <MobileSidebarView
             courses={courses}
-            activeCourse={activeCourse}
-            onActiveCourseChange={setActiveCourse}
+            activeCourse={state.activeCourse}
+            onActiveCourseChange={actions.setActiveCourse}
+            isGuestMode={isGuestMode}
           />
         </div>
         <div className="flex-1 min-w-0 h-full flex flex-col">
@@ -317,12 +328,13 @@ const AssistantAppContent = () => {
             label={t("common:loadingMessages", { ns: "common" })}
           />
           <Header
-            sidebarCollapsed={sidebarCollapsed}
-            onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
-            activeView={activeView}
+            sidebarCollapsed={state.sidebarCollapsed}
+            onToggleSidebar={() => actions.toggleSidebar()}
+            activeView={state.activeView}
             onToggleView={setActiveView}
-            onToggleArtifacts={() => setArtifactPanelOpen(!artifactPanelOpen)}
-            onToggleEmailHistory={() => setEmailHistoryOpen(!emailHistoryOpen)}
+            onToggleArtifacts={() => setArtifactPanelOpen(!state.artifactPanelOpen)}
+            onToggleEmailHistory={() => setEmailHistoryOpen(!state.emailHistoryOpen)}
+            isGuestMode={isGuestMode}
           />
           <div
             className="relative flex-1 min-h-0 overflow-hidden"
@@ -330,11 +342,6 @@ const AssistantAppContent = () => {
             aria-live="polite"
           >
             {isLoadingMessages && !messagesError && <TopLoadingBar />}
-            {isLoadingMessages && !messagesError && (
-              <div className="absolute inset-0 z-20 flex flex-1 flex-col bg-background/80 backdrop-blur-[2px]">
-                <ThreadSwitchSkeleton />
-              </div>
-            )}
             {messagesError && !isLoadingMessages && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-background">
                 <LoadErrorPanel errorCode={messagesError} onRetry={retryFetchMessages} />
@@ -342,31 +349,32 @@ const AssistantAppContent = () => {
             )}
             <motion.div
               key={chatKey}
-              initial={{ opacity: 0 }}
+              initial={false}
               animate={{ opacity: 1 }}
               className="flex flex-1 h-full w-full overflow-hidden"
             >
               <AssistantChatInner
-                activeCourse={activeCourse}
+                activeCourse={state.activeCourse}
                 isOnboarded={isOnboarded}
                 isCoursesLoading={isCoursesLoading}
                 coursesError={coursesError}
                 retryCourses={retryCourses}
-                localOnboarded={localOnboarded}
+                localOnboarded={false}
                 handleCompleteOnboarding={handleCompleteOnboarding}
                 handleSkipOnboarding={handleSkipOnboarding}
-                setActiveCourse={setActiveCourse}
+                setActiveCourse={actions.setActiveCourse}
                 activeThreadId={activeThreadId}
                 draftText={draftText}
                 chatKey={chatKey}
                 onDraftSave={handleDraftSave}
                 onThreadSwitch={onThreadChange}
-                activeView={activeView}
+                activeView={state.activeView}
                 onToggleView={setActiveView}
-                artifactPanelOpen={artifactPanelOpen}
+                artifactPanelOpen={state.artifactPanelOpen}
                 setArtifactPanelOpen={setArtifactPanelOpen}
-                emailHistoryOpen={emailHistoryOpen}
+                emailHistoryOpen={state.emailHistoryOpen}
                 setEmailHistoryOpen={setEmailHistoryOpen}
+                isGuestMode={isGuestMode}
               />
             </motion.div>
           </div>
@@ -378,8 +386,10 @@ const AssistantAppContent = () => {
 
 export const AssistantApp = () => {
   return (
-    <ChatHistoryProvider>
-      <AssistantAppContent />
-    </ChatHistoryProvider>
+    <GuestModeProvider>
+      <ChatHistoryProvider>
+        <AssistantAppContent />
+      </ChatHistoryProvider>
+    </GuestModeProvider>
   );
 };

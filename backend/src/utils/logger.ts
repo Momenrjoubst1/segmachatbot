@@ -20,6 +20,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import * as Sentry from '@sentry/node';
+import { getModuleLogLevel } from './log-config.js';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
@@ -30,16 +31,6 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
   error: 40,
   fatal: 50,
 };
-
-/** Threshold below which messages are dropped. Controlled via LOG_LEVEL env. */
-const ACTIVE_LEVEL: LogLevel = ((): LogLevel => {
-  const raw = (process.env.LOG_LEVEL || '').toLowerCase();
-  if (raw === 'debug' || raw === 'info' || raw === 'warn' || raw === 'error' || raw === 'fatal') {
-    return raw;
-  }
-  // Default: info in production, debug in development
-  return process.env.NODE_ENV === 'production' ? 'info' : 'debug';
-})();
 
 /** Force JSON output regardless of NODE_ENV (set to '1' to enable). */
 const FORCE_JSON = process.env.LOG_JSON === '1';
@@ -58,8 +49,20 @@ export function setTraceContext(ctx: TraceContext): void {
   }
 }
 
+/**
+ * Run `fn` inside a dedicated trace-context scope. Preferred over
+ * `enterWith` for request middleware: each request gets its own store and
+ * the context dies naturally when the scope ends.
+ */
+export function runWithTraceContext<T>(ctx: TraceContext, fn: () => T): T {
+  return traceStorage.run({ ...ctx }, fn);
+}
+
 export function clearTraceContext(): void {
-  traceStorage.disable();
+  // Intentional no-op. The old implementation called `traceStorage.disable()`,
+  // which switched the AsyncLocalStorage instance off PROCESS-WIDE — one
+  // finishing request dropped requestId correlation for every other
+  // in-flight request. Contexts are now scoped via runWithTraceContext.
 }
 
 function getTraceContext(): TraceContext {
@@ -263,11 +266,12 @@ function buildLogger(module: string, levelRef: { current: LogLevel }): Logger {
 }
 
 export function createLogger(module: string): Logger {
-  // Each module gets its own level reference so `setLevel` is per-logger
-  // without mutating globals.  All loggers start at the global threshold.
-  const levelRef = { current: ACTIVE_LEVEL };
+  // Use module-specific log level from configuration
+  const moduleLevel = getModuleLogLevel(module);
+  const levelRef = { current: moduleLevel };
   return buildLogger(module, levelRef);
 }
 
 /** Backward-compatible singleton for legacy `logger.xxx(msg, meta)` calls. */
 export const logger = createLogger('app');
+export { logger as log };

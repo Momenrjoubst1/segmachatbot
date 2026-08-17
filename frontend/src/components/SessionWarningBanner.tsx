@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { cn } from "@/lib/cn";
 import { AlertTriangle, LogIn, RefreshCcw } from "lucide-react";
@@ -8,6 +9,7 @@ const WARNING_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes before expiry
 const REAPPEAR_DELAY_MS = 5 * 60 * 1000; // reappear after 5 min if not addressed
 
 export function SessionWarningBanner() {
+  const navigate = useNavigate();
   const [status, setStatus] = useState<"none" | "expiring" | "expired">("none");
   const [minutesLeft, setMinutesLeft] = useState(0);
   const [dismissed, setDismissed] = useState(false);
@@ -64,7 +66,7 @@ export function SessionWarningBanner() {
   };
 
   const handleLogin = () => {
-    window.location.href = "/login";
+    navigate("/login", { state: { from: `` } });
   };
 
   if (status === "none" || dismissed) return null;

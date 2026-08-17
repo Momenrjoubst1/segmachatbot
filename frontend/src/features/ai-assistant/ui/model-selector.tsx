@@ -142,7 +142,7 @@ function ModelSelectorContent({
     <SelectContent
       position="popper"
       data-slot="model-selector-content"
-      className={cn("min-w-[220px] rounded-xl border-white/10 bg-[#1a1a1a] p-1 shadow-2xl backdrop-blur-sm", className)}
+      className={cn("min-w-[220px] rounded-xl border-zinc-200 bg-white p-1 shadow-2xl backdrop-blur-sm", className)}
       {...props}
     >
       {children ??
@@ -176,15 +176,15 @@ function ModelSelectorItem({
       textValue={model.name}
       className={cn(
         "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-lg py-2.5 pr-9 pl-3 text-sm outline-none transition-colors duration-100",
-        "text-white/80 hover:bg-white/[0.06] hover:text-white",
-        "focus:bg-white/[0.06] focus:text-white",
-        "data-[state=checked]:text-white",
+        "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
+        "focus:bg-zinc-100 focus:text-zinc-900",
+        "data-[state=checked]:text-zinc-900",
         "data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
         className,
       )}
       {...props}
     >
-      <span className="absolute right-3 flex size-4 items-center justify-center text-white/70">
+      <span className="absolute right-3 flex size-4 items-center justify-center text-zinc-500">
         <SelectPrimitive.ItemIndicator>
           <CheckIcon className="size-4" />
         </SelectPrimitive.ItemIndicator>
@@ -200,7 +200,7 @@ function ModelSelectorItem({
         </span>
       </SelectPrimitive.ItemText>
       {model.description && (
-        <span className="truncate text-white/40 text-xs">
+        <span className="truncate text-zinc-400 text-xs">
           {model.description}
         </span>
       )}

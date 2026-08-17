@@ -22,12 +22,38 @@ import { useRef, useCallback, useLayoutEffect, useEffect } from "react";
  */
 
 const VIEWPORT_SELECTOR = '[data-slot="aui_thread-viewport"]';
+const SCROLL_STORAGE_PREFIX = "chat_scroll_";
+const SCROLL_STORAGE_THROTTLE_MS = 300;
+
+/**
+ * Reads a scroll position that survives a full page refresh (sessionStorage),
+ * keyed per thread. Returns undefined when nothing was persisted.
+ */
+function readPersistedScroll(key: string): number | undefined {
+  try {
+    const raw = sessionStorage.getItem(SCROLL_STORAGE_PREFIX + key);
+    const parsed = raw ? Number(raw) : NaN;
+    return Number.isFinite(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writePersistedScroll(key: string, scrollTop: number): void {
+  try {
+    sessionStorage.setItem(SCROLL_STORAGE_PREFIX + key, String(scrollTop));
+  } catch {
+    // sessionStorage full/unavailable — in-memory preservation still works
+  }
+}
 
 export function useScrollPreservation(activeThreadId: string | null) {
   /** Map<threadId | "__new__", scrollTop> — persists across child remounts */
   const scrollPositions = useRef<Map<string, number>>(new Map());
   /** The DOM element currently acting as the scroll viewport */
   const viewportEl = useRef<HTMLElement | null>(null);
+  /** Last sessionStorage write timestamp — writes are throttled */
+  const lastPersistRef = useRef(0);
 
   // ── Save scroll on every scroll event ────────────────────────────
   const handleScroll = useCallback(() => {
@@ -35,6 +61,11 @@ export function useScrollPreservation(activeThreadId: string | null) {
     if (!el) return;
     const key = activeThreadId ?? "__new__";
     scrollPositions.current.set(key, el.scrollTop);
+    const now = Date.now();
+    if (now - lastPersistRef.current >= SCROLL_STORAGE_THROTTLE_MS) {
+      lastPersistRef.current = now;
+      writePersistedScroll(key, el.scrollTop);
+    }
   }, [activeThreadId]);
 
   // ── Callback ref to attach to the viewport element ───────────────
@@ -67,7 +98,8 @@ export function useScrollPreservation(activeThreadId: string | null) {
   const restorePosition = useCallback(
     (threadId: string | null) => {
       const key = threadId ?? "__new__";
-      const saved = scrollPositions.current.get(key);
+      // In-memory first (exact), then sessionStorage (survives F5)
+      const saved = scrollPositions.current.get(key) ?? readPersistedScroll(key);
 
       // Try the captured ref first, then fall back to DOM query
       const el = viewportEl.current ?? document.querySelector<HTMLElement>(VIEWPORT_SELECTOR);
@@ -118,7 +150,9 @@ export function useScrollPreservation(activeThreadId: string | null) {
       const el = viewportEl.current ?? document.querySelector<HTMLElement>(VIEWPORT_SELECTOR);
       if (el) {
         const key = previousThreadId ?? "__new__";
-        scrollPositions.current.set(key, el.scrollTop);
+        const top = el.scrollTop;
+        scrollPositions.current.set(key, top);
+        writePersistedScroll(key, top);
       }
     },
     [],

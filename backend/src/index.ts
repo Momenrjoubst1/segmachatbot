@@ -11,48 +11,28 @@ import { appConfig, isAllowedCorsOrigin } from "./config/app.config.js";
 import { authMiddleware } from "./middleware/auth.middleware.js";
 import { globalLimiter, healthLimiter, proxyLimiter } from "./middleware/rate-limiters.js";
 import { requestIdMiddleware } from "./middleware/request-id.js";
-import { logger, initSentry } from "./utils/logger.js";
+import { logger, initSentry, log } from "./utils/logger.js";
+import { validateConfigurationOrExit } from "./config/config-validator.js";
+import { validateToolRegistry } from "./tools/tool-metadata.js";
+import { createErrorResponse, logError, AppError } from "./utils/error-handler.js";
 
 initSentry();
 
 import chatRoutes from "./routes/chat.routes.js";
+import guestRoutes from "./routes/guest.routes.js";
 import feedbackRoutes from "./routes/feedback.routes.js";
 import memoryRoutes from "./routes/memory.routes.js";
 import artifactsRoutes from "./routes/artifacts.routes.js";
 import analyticsRoutes from "./routes/analytics.routes.js";
 import proxyRoutes from "./routes/proxy.routes.js";
 import moderationRoutes from "./routes/moderation.routes.js";
+import textbookRoutes from "./routes/textbook.routes.js";
 import { initializeBM25FromDB } from "./services/rag/bm25-search.js";
 
 // ==========================================
 // Startup validation
 // ==========================================
-function validateStartupConfig(): void {
-  const missing: string[] = [];
-
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.AUTH_SUPABASE_URL;
-  if (!supabaseUrl) missing.push("SUPABASE_URL");
-
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.AUTH_SUPABASE_SERVICE_ROLE_KEY;
-  if (!serviceKey) missing.push("SUPABASE_SERVICE_ROLE_KEY");
-
-  if (!process.env.REDIS_URL && !process.env.REDIS_HOST) missing.push("REDIS_URL (or REDIS_HOST)");
-  if (!process.env.ASSISTANT_DEFAULT_MODEL) missing.push("ASSISTANT_DEFAULT_MODEL");
-
-  const hasProvider = !!(
-    process.env.AZURE_API_KEY ||
-    process.env.AZURE_OPENAI_API_KEY ||
-    process.env.GROQ_API_KEY ||
-    process.env.GITHUB_TOKEN ||
-    process.env.OPENROUTER_API_KEY
-  );
-  if (!hasProvider) missing.push("At least one AI provider key (AZURE_API_KEY, GROQ_API_KEY, GITHUB_TOKEN, or OPENROUTER_API_KEY)");
-
-  if (missing.length > 0) {
-    logger.error("Startup validation failed — missing required environment variables:", { missing });
-    process.exit(1);
-  }
-
+function logStartupConfigSummary(): void {
   const providersAvailable: string[] = [];
   if (process.env.AZURE_API_KEY || process.env.AZURE_OPENAI_API_KEY) providersAvailable.push("Azure");
   if (process.env.GROQ_API_KEY) providersAvailable.push("Groq");
@@ -84,9 +64,19 @@ async function testRedisConnection(): Promise<void> {
   }
 }
 
-validateStartupConfig();
+validateConfigurationOrExit();
+
+// Validate tool registry
+const toolValidation = validateToolRegistry();
+if (!toolValidation.valid) {
+  log.warn('Tool registry validation issues:', { issues: toolValidation.issues });
+} else {
+  log.info('✅ Tool registry validation passed');
+}
+
 testRedisConnection();
 initializeBM25FromDB();
+logStartupConfigSummary();
 
 const app = express();
 app.disable('x-powered-by');
@@ -95,18 +85,7 @@ app.set("trust proxy", appConfig.trustProxyHops);
 // Helmet sets: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection,
 // Referrer-Policy, Strict-Transport-Security, X-DNS-Prefetch-Control,
 // X-Download-Options, X-Permitted-Cross-Domain-Policies, Cross-Origin-*.
-// We add a strict Permissions-Policy on top because helmet doesn't set one.
-app.use(
-  helmet({
-    permissionsPolicy: {
-      features: {
-        geolocation: [],
-        microphone: [],
-        camera: [],
-      },
-    },
-  }),
-);
+app.use(helmet());
 app.use(requestIdMiddleware);
 
 const PORT = Number(appConfig.port);
@@ -121,7 +100,7 @@ app.use(
       callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-    exposedHeaders: ['X-Thread-Id'],
+    exposedHeaders: ['X-Thread-Id', 'X-Guest-Message-Count', 'X-Guest-Message-Limit', 'X-Guest-Retry-After'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
   }),
 );
@@ -132,12 +111,65 @@ app.use(globalLimiter);
 
 // Sigma AI Chatbot routes only
 app.use("/api/chat", authMiddleware, chatRoutes);
+app.use("/api/guest", guestRoutes); // No auth — public guest endpoint
 app.use("/api/feedback", authMiddleware, feedbackRoutes);
 app.use("/api/moderation", authMiddleware, moderationRoutes);
-app.use("/api/proxy", proxyLimiter, proxyRoutes);
+app.use("/api/proxy", authMiddleware, proxyLimiter, proxyRoutes);
 app.use("/api/memory", authMiddleware, memoryRoutes);
 app.use("/api/artifacts", authMiddleware, artifactsRoutes);
 app.use("/api/analytics", authMiddleware, analyticsRoutes);
+app.use("/api/textbooks", authMiddleware, textbookRoutes);
+
+if (process.env.NODE_ENV === "development") {
+  app.post("/api/dev/reprocess/:id", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { supabase } = await import("./config/supabase.config.js");
+      const { enqueueTextbookJob } = await import("./services/textbook/textbook-queue.js");
+
+      const { data: textbook } = await supabase
+        .from("textbooks")
+        .select("id, file_url, file_hash, user_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (!textbook) { res.status(404).json({ error: "Not found" }); return; }
+
+      await supabase
+        .from("textbooks")
+        .update({ status: "pending", error: null, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      await supabase.from("textbook_chunks").delete().eq("textbook_id", id);
+      await supabase.from("textbook_figures").delete().eq("textbook_id", id);
+      await supabase.from("textbook_pages").delete().eq("textbook_id", id);
+      await supabase.from("textbook_glossary").delete().eq("textbook_id", id);
+      await supabase.from("textbook_questions").delete().eq("textbook_id", id);
+      await supabase.from("textbook_sections").delete().eq("textbook_id", id);
+
+      await enqueueTextbookJob({
+        textbookId: id,
+        fileUrl: textbook.file_url,
+        userId: textbook.user_id,
+        fileHash: textbook.file_hash || "",
+      });
+
+      res.json({ ok: true, textbook_id: id });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/dev/reembed/:id", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { embedTextbookChunks } = await import("./services/textbook/textbook-embeddings.js");
+      const embedded = await embedTextbookChunks(id);
+      res.json({ ok: true, textbook_id: id, embedded });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+}
 
 app.get("/api/health", healthLimiter, async (_req: Request, res: Response) => {
   const startMs = Date.now();
@@ -156,13 +188,15 @@ app.get("/api/health", healthLimiter, async (_req: Request, res: Response) => {
   let bm25Stats: { totalDocs: number; avgDocLen: number; vocabSize: number } | null = null;
   try {
     const { getBM25Search } = await import("./services/rag/bm25-search.js");
-    bm25Stats = getBM25Search().getStats();
+    const bm25 = getBM25Search();
+    bm25Stats = bm25.getStats();
   } catch {
     bm25Stats = null;
   }
 
   const providers: string[] = [];
   if (process.env.AZURE_API_KEY || process.env.AZURE_OPENAI_API_KEY) providers.push("azure");
+  if (process.env.BIGMODEL_API_KEY) providers.push("bigmodel");
   if (process.env.GROQ_API_KEY) providers.push("groq");
   if (process.env.GITHUB_TOKEN) providers.push("github");
   if (process.env.OPENROUTER_API_KEY) providers.push("openrouter");
@@ -189,14 +223,14 @@ app.get("/api/health", healthLimiter, async (_req: Request, res: Response) => {
 app.use(
   (err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     const error = err instanceof Error ? err : new Error("Unknown error");
-    logger.error("Unhandled error", {
-      message: error.message,
-      stack: error.stack,
-    });
-    res.status(500).json({
-      success: false,
-      error: "Internal server error",
-    });
+    
+    // Log the error using standardized error handler
+    logError(error as AppError);
+    
+    // Create standardized error response
+    const errorResponse = createErrorResponse(error as AppError);
+    
+    res.status(errorResponse.error.statusCode).json(errorResponse);
   },
 );
 
@@ -205,10 +239,34 @@ if (appConfig.nodeEnv !== "test") {
 
   const server = app.listen(PORT, "0.0.0.0", () => {
     logger.info(`Sigma AI Backend running on http://localhost:${PORT}`);
+
+    // Start textbook processing worker (non-blocking, only processes when jobs exist)
+    import("./services/textbook/textbook-worker.js").then(({ startTextbookWorker }) => {
+      startTextbookWorker();
+      logger.info("Textbook worker started");
+    }).catch((err) => {
+      logger.warn("Textbook worker failed to start (non-fatal)", { error: err.message });
+    });
+
+    // Start email scheduler worker (polls email_schedules + email_jobs every 60s)
+    import("./tools/email/send/email-scheduler-worker.js").then(({ startEmailSchedulerWorker }) => {
+      startEmailSchedulerWorker();
+      logger.info("Email scheduler worker started");
+    }).catch((err) => {
+      logger.warn("Email scheduler worker failed to start (non-fatal)", { error: err.message });
+    });
   });
 
   const shutdown = async (signal: string) => {
     logger.info(`Received ${signal}. Shutting down gracefully...`);
+    try {
+      const { stopTextbookWorker } = await import("./services/textbook/textbook-worker.js");
+      await stopTextbookWorker();
+    } catch { /* worker may not have started */ }
+    try {
+      const { stopEmailSchedulerWorker } = await import("./tools/email/send/email-scheduler-worker.js");
+      stopEmailSchedulerWorker();
+    } catch { /* worker may not have started */ }
     try {
       const { cleanupAllAgentsOnShutdown } = await import("./services/agent.service.js");
       await cleanupAllAgentsOnShutdown();

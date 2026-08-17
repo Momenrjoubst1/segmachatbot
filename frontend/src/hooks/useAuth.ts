@@ -87,11 +87,11 @@ export function useAuth() {
       }
     };
 
-    const safetyTimer = setTimeout(() => {
-      if (isMounted) {
-        setAuthState((prev) => (prev.isAuthLoading ? { ...prev, isAuthLoading: false } : prev));
-      }
-    }, 3000);
+    // NOTE: no safety timer that force-clears isAuthLoading — doing so
+    // fabricated a guest state for an authenticated user while the session
+    // was still being restored (slow networks). onAuthStateChange also
+    // resolves loading via the INITIAL_SESSION event, so the spinner in
+    // App.tsx is the worst case now.
 
     checkAuth();
 
@@ -108,7 +108,6 @@ export function useAuth() {
 
     return () => {
       isMounted = false;
-      clearTimeout(safetyTimer);
       unsubscribe?.();
     };
   }, []);
@@ -121,6 +120,8 @@ export function useAuth() {
           const { data, error } = await signInWithEmail(email, password);
           if (error) {
             setError(error.message);
+            // Clean up stale auth data on failure
+            localStorage.removeItem('auth_provider');
           }
           return { data, error };
         
@@ -143,6 +144,8 @@ export function useAuth() {
           const { data, error } = await signUpWithEmail(email, password);
           if (error) {
             setError(error.message);
+            // Clean up stale auth data on failure
+            localStorage.removeItem('auth_provider');
           }
           return { data, error };
         

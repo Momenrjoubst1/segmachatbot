@@ -46,15 +46,6 @@ describe('ArtifactPanel', () => {
     expect(screen.getByText('Preview, inspect code, or open full page')).toBeInTheDocument();
   });
 
-  it('renders loading skeletons while fetching', () => {
-    (global.fetch as ReturnType<typeof vi.fn>).mockReturnValue(new Promise(() => {}));
-    const { container } = render(
-      <ArtifactPanel open={true} onClose={vi.fn()} />
-    );
-    const skeletons = container.querySelectorAll('.animate-pulse');
-    expect(skeletons.length).toBeGreaterThan(0);
-  });
-
   it('renders empty state when no artifacts', async () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,

@@ -2,7 +2,8 @@
 import { useState, useEffect, type FC } from "react";
 import { supabase, signOut } from "@/lib/supabaseClient";
 import { getUserAvatarUrl } from "@/lib/cn";
-import { LogOut } from "lucide-react";
+
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 export const useUserProfile = () => {
   const [profile, setProfile] = useState<{ name: string; avatar: string; email: string } | null>(null);
@@ -21,15 +22,16 @@ export const useUserProfile = () => {
         let avatarUrl = metaAvatar;
 
         // Try public_profiles for the local avatar
+        // NOTE: public_profiles only has `avatar_url` (per full_schema.sql).
+        // full_name/username come from auth.user_metadata — don't request them here.
         try {
           const { data: pp } = await supabase
             .from("public_profiles")
-            .select("avatar_url, full_name, username")
+            .select("avatar_url")
             .eq("id", user.id)
             .maybeSingle();
           if (pp && !cancelled) {
             if (pp.avatar_url?.trim()) avatarUrl = pp.avatar_url;
-            if (pp.full_name || pp.username) name = pp.full_name || pp.username;
           }
         } catch (e) {
           console.warn("[UserProfile] public_profiles fetch failed", e);
@@ -90,13 +92,21 @@ export const UserProfileCard: FC = () => {
         <p className="truncate text-sm font-medium text-foreground">{profile.name}</p>
         <p className="truncate text-xs text-muted-foreground">{profile.email}</p>
       </div>
-      <button
-        onClick={handleLogout}
-        className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-        title="Sign out"
-      >
-        <LogOut className="size-4" />
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={handleLogout}
+            className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <svg className="size-4" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style={{ transform: "scaleX(-1)" }}>
+              <path d="M15.24 22.2705H15.11C10.67 22.2705 8.53002 20.5205 8.16002 16.6005C8.12002 16.1905 8.42002 15.8205 8.84002 15.7805C9.24002 15.7405 9.62002 16.0505 9.66002 16.4605C9.95002 19.6005 11.43 20.7705 15.12 20.7705H15.25C19.32 20.7705 20.76 19.3305 20.76 15.2605V8.74047C20.76 4.67047 19.32 3.23047 15.25 3.23047H15.12C11.41 3.23047 9.93002 4.42047 9.66002 7.62047C9.61002 8.03047 9.26002 8.34047 8.84002 8.30047C8.42002 8.27047 8.12001 7.90047 8.15001 7.49047C8.49001 3.51047 10.64 1.73047 15.11 1.73047H15.24C20.15 1.73047 22.25 3.83047 22.25 8.74047V15.2605C22.25 20.1705 20.15 22.2705 15.24 22.2705Z"/>
+              <path d="M15.0001 12.75H3.62012C3.21012 12.75 2.87012 12.41 2.87012 12C2.87012 11.59 3.21012 11.25 3.62012 11.25H15.0001C15.4101 11.25 15.7501 11.59 15.7501 12C15.7501 12.41 15.4101 12.75 15.0001 12.75Z"/>
+              <path d="M5.84994 16.0998C5.65994 16.0998 5.46994 16.0298 5.31994 15.8798L1.96994 12.5298C1.67994 12.2398 1.67994 11.7598 1.96994 11.4698L5.31994 8.11984C5.60994 7.82984 6.08994 7.82984 6.37994 8.11984C6.66994 8.40984 6.66994 8.88984 6.37994 9.17984L3.55994 11.9998L6.37994 14.8198C6.66994 15.1098 6.66994 15.5898 6.37994 15.8798C6.23994 16.0298 6.03994 16.0998 5.84994 16.0998Z"/>
+            </svg>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Sign out</TooltipContent>
+      </Tooltip>
     </div>
   );
 };

@@ -62,6 +62,70 @@ export class AnalyticsTracker {
     return (data || []) as DailyMetric[];
   }
 
+  async getUserDailyMetrics(userId: string, startDate: Date, endDate: Date): Promise<DailyMetric[]> {
+    // For user-scoped metrics, we'll aggregate from individual events
+    // since analytics_daily_metrics doesn't have user_id column
+    const { data, error } = await this.supabase
+      .from("analytics_events")
+      .select("*")
+      .eq("user_id", userId)
+      .gte("created_at", startDate.toISOString())
+      .lte("created_at", endDate.toISOString())
+      .order("created_at", { ascending: true });
+
+    if (error) throw error;
+    const events = (data || []) as AnalyticsEvent[];
+
+    // Group by date and calculate metrics
+    const dailyMap = new Map<string, DailyMetric>();
+    
+    for (const event of events) {
+      const date = event.created_at.split("T")[0];
+      if (!dailyMap.has(date)) {
+        dailyMap.set(date, {
+          date,
+          total_conversations: 0,
+          total_messages: 0,
+          total_tokens_used: 0,
+          avg_response_time_ms: 0,
+          feedback_avg_score: 0,
+          estimated_cost_usd: 0,
+          active_users: 1,
+          top_models: [],
+        });
+      }
+      
+      const metric = dailyMap.get(date)!;
+      metric.total_messages += 1;
+      
+      if (event.event_type === "conversation_created") {
+        metric.total_conversations += 1;
+      }
+      
+      if (event.tokens_used) {
+        metric.total_tokens_used += event.tokens_used;
+      }
+      
+      if (event.response_time_ms) {
+        metric.avg_response_time_ms = 
+          (metric.avg_response_time_ms * (metric.total_messages - 1) + event.response_time_ms) / metric.total_messages;
+      }
+      
+      if (event.event_type === "feedback" && event.metadata?.score) {
+        const feedbackCount = metric.feedback_avg_score === 0 ? 0 : 1;
+        metric.feedback_avg_score = 
+          (metric.feedback_avg_score * feedbackCount + (event.metadata.score as number)) / (feedbackCount + 1);
+      }
+      
+      // Estimate cost (very rough approximation)
+      if (event.tokens_used) {
+        metric.estimated_cost_usd += event.tokens_used * 0.00002; // $0.02 per 1K tokens
+      }
+    }
+    
+    return Array.from(dailyMap.values());
+  }
+
   async track(options: TrackOptions): Promise<void> {
     const { error } = await this.supabase.from("analytics_events").insert({
       event_type: options.event_type,

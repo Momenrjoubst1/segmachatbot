@@ -33,6 +33,67 @@ const fallbackCounters = new Map<
   }
 >();
 
+// Periodic cleanup interval for fallback counters
+let cleanupInterval: NodeJS.Timeout | null = null;
+
+/**
+ * Cleanup stale entries from fallbackCounters
+ * Called periodically to prevent memory leaks
+ */
+function cleanupStaleCounters(): void {
+  const now = Date.now();
+  let cleaned = 0;
+  
+  for (const [key, data] of fallbackCounters.entries()) {
+    if (data.resetTimeMs <= now) {
+      clearTimeout(data.timeout);
+      fallbackCounters.delete(key);
+      cleaned++;
+    }
+  }
+  
+  if (cleaned > 0) {
+    log.debug(`Cleaned ${cleaned} stale fallback counter entries`);
+  }
+}
+
+/**
+ * Start periodic cleanup of fallback counters
+ */
+function startCleanupInterval(): void {
+  if (cleanupInterval) return;
+  
+  // Run cleanup every 5 minutes
+  cleanupInterval = setInterval(cleanupStaleCounters, 5 * 60 * 1000);
+  log.info('Started fallback counter cleanup interval');
+}
+
+/**
+ * Stop periodic cleanup
+ */
+function stopCleanupInterval(): void {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+    log.info('Stopped fallback counter cleanup interval');
+  }
+}
+
+// Start cleanup interval when module loads
+startCleanupInterval();
+
+// Cleanup on process exit
+if (typeof process !== 'undefined') {
+  process.on('beforeExit', () => {
+    stopCleanupInterval();
+    // Clear all timeouts
+    for (const [, data] of fallbackCounters.entries()) {
+      clearTimeout(data.timeout);
+    }
+    fallbackCounters.clear();
+  });
+}
+
 /**
  * Sliding Window Log Redis Store
  * Uses Redis Sorted Sets (ZSET) and a custom Lua script to ensure atomicity.
@@ -181,4 +242,42 @@ export const proxyLimiter = rateLimit({
   passOnStoreError: true,
   message: { error: 'Too many proxy requests' },
   keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip || ''),
+});
+
+// ─── 7. Guest chat — IP-based limit to prevent cookie-reset abuse ─────────
+// Caps a single IP to 12 guest chat requests per hour. This closes the
+// "delete cookie → reset per-cookie counter" hole: even if a client keeps
+// generating new guest IDs, the IP-based limit still applies.
+export const guestIpLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  ...optionalStore('rl:guest-ip:'),
+  passOnStoreError: true,
+  message: {
+    error: 'too_many_requests',
+    message: 'Too many guest requests. Please try again later.',
+    retryAfter: 3600,
+  },
+  keyGenerator: (req) => ipKeyGenerator(req.ip || ''),
+});
+
+// ─── 8. Guest status — lightweight limiter for GET /api/guest/status ──────
+// The status endpoint is read-only and non-sensitive. A generous limit
+// prevents polling abuse while allowing the frontend to poll quota state
+// without hitting rate limits.
+export const guestStatusLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 60,              // 60 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  ...optionalStore('rl:guest-status:'),
+  passOnStoreError: true,
+  message: {
+    error: 'too_many_requests',
+    message: 'Too many requests. Please try again later.',
+    retryAfter: 60,
+  },
+  keyGenerator: (req) => ipKeyGenerator(req.ip || ''),
 });

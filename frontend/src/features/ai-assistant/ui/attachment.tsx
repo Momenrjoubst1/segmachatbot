@@ -22,10 +22,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { cn } from "@/lib/cn";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
 
 const ACCEPTED_FILE_TYPES: Record<string, string[]> = {
   "image/jpeg": [".jpg", ".jpeg"],
@@ -75,7 +76,7 @@ function installFileInputValidation() {
 
       for (const file of files) {
         if (file.size > MAX_FILE_SIZE) {
-          toast.error("File too large. Maximum size is 10MB.", {
+          toast.error("File too large. Maximum size is 500MB.", {
             description: `"${file.name}" is ${formatFileSize(file.size)}.`,
           });
           hasInvalid = true;
@@ -304,7 +305,7 @@ const AttachmentRemove: FC = () => {
         className="aui-attachment-tile-remove absolute top-1.5 right-1.5 size-3.5 rounded-full bg-white text-muted-foreground opacity-100 shadow-sm hover:bg-white! [&_svg]:text-black hover:[&_svg]:text-destructive"
         side="top"
       >
-        <XIcon className="aui-attachment-remove-icon size-3 dark:stroke-[2.5px]" />
+        <XIcon className="aui-attachment-remove-icon size-3" />
       </TooltipIconButton>
     </AttachmentPrimitive.Remove>
   );
@@ -337,16 +338,18 @@ export const ComposerAddAttachment: FC = () => {
 
   return (
     <ComposerPrimitive.AddAttachment asChild>
-      <TooltipIconButton
-        tooltip="Add Attachment"
-        side="bottom"
-        variant="ghost"
-        size="icon"
-        className="aui-composer-add-attachment size-8 rounded-full p-1 font-semibold text-xs hover:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
-        aria-label="Add Attachment"
-      >
-        <PlusIcon className="aui-attachment-add-icon size-5 stroke-[1.5px]" />
-      </TooltipIconButton>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className="state-layer aui-composer-add-attachment inline-flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground p-1 font-semibold text-xs"
+            aria-label="Add Attachment"
+          >
+            <PlusIcon className="aui-attachment-add-icon size-5 stroke-[1.5px]" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">Add Attachment</TooltipContent>
+      </Tooltip>
     </ComposerPrimitive.AddAttachment>
   );
 };

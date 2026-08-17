@@ -3,7 +3,13 @@ import {
   UserMessageAttachments,
 } from "../../../ui/attachment";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
+import { LoadingSpinner } from "@/components/ui/LoadingStates";
 import { MarkdownText } from "../../../ui/markdown-text";
 import { Perspective } from "@/components/ui/perspective-highlight";
 import { MessageTiming } from "../../../ui/message-timing";
@@ -13,7 +19,6 @@ import { TooltipIconButton } from "../../../ui/tooltip-icon-button";
 import {
   ActionBarMorePrimitive,
   ActionBarPrimitive,
-  AuiIf,
   BranchPickerPrimitive,
   ComposerPrimitive,
   ErrorPrimitive,
@@ -311,7 +316,7 @@ function classifyFetchError(raw: string): {
 const MessageError: FC = () => {
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex flex-col gap-1.5 rounded-md border border-destructive bg-destructive/10 p-3 text-destructive text-sm dark:bg-destructive/5 dark:text-red-200">
+      <ErrorPrimitive.Root className="aui-message-error-root mt-2 flex flex-col gap-1.5 rounded-md border border-destructive bg-destructive/10 p-3 text-destructive text-sm">
         <FriendlyErrorMessage />
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
@@ -338,7 +343,7 @@ const FriendlyErrorMessage: FC = () => {
         <div className="ml-auto flex items-center gap-1">
           <ActionBarPrimitive.Reload asChild>
             <button
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+              className="state-layer inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-destructive transition-colors"
               title={t("retry", "Retry")}
             >
               <RefreshCwIcon className="h-3 w-3" />
@@ -347,7 +352,7 @@ const FriendlyErrorMessage: FC = () => {
           </ActionBarPrimitive.Reload>
           <button
             onClick={handleCopy}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-destructive hover:bg-destructive/10 transition-colors"
+            className="state-layer inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-destructive transition-colors"
             title={t("copyDetails", "Copy error details")}
           >
             <CopyIcon className="h-3 w-3" />
@@ -401,9 +406,7 @@ const AssistantStatusLine: FC = () => {
 
   return (
     <div className="flex items-center gap-2 mt-2">
-      <div className="relative">
-        <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
+      <LoadingSpinner size="sm" />
       <span className="text-sm text-muted-foreground/80">
         {activity.label}
       </span>
@@ -413,7 +416,7 @@ const AssistantStatusLine: FC = () => {
 
 const SimpleThinkingLoader: FC = () => {
   return (
-    <div className="flex gap-1">
+    <div className="flex gap-1.5">
       <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-pulse [animation-delay:0ms]" />
       <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-pulse [animation-delay:200ms]" />
       <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-pulse [animation-delay:400ms]" />
@@ -448,64 +451,82 @@ export const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({ className, 
   );
 };
 
+const ActionBarButton: FC<{ tooltip: string; className?: string; onClick?: () => void; children: React.ReactNode }> = ({ tooltip, className, onClick, children }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <button className={cn("state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors", className)} onClick={onClick}>
+        {children}
+      </button>
+    </TooltipTrigger>
+    <TooltipContent side="bottom">{tooltip}</TooltipContent>
+  </Tooltip>
+);
+
 const AssistantActionBar: FC = () => {
   const { disable3D, toggle3D } = useAssistantSettingsStore();
   const { t } = useTranslation();
+  const isCopied = useAuiState((s) => s.message.isCopied);
+  const isPositive = useAuiState((s) => Boolean((s.message as { feedback?: { isPositive?: boolean } }).feedback?.isPositive));
+  const isNegative = useAuiState((s) => Boolean((s.message as { feedback?: { isNegative?: boolean } }).feedback?.isNegative));
 
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
-      autohide="not-last"
-      className="aui-assistant-action-bar-root col-start-3 row-start-2 -ml-1 flex gap-1 text-muted-foreground"
+      className="message-action-bar aui-assistant-action-bar-root col-start-3 row-start-2 -ml-1 flex gap-1 text-muted-foreground"
     >
-      <TooltipIconButton
+      <ActionBarButton
         tooltip={disable3D ? t("chat.enable3D", "Enable 3D effect") : t("chat.disable3D", "Disable 3D effect")}
         onClick={toggle3D}
-        className={cn("size-8 rounded-full", !disable3D && "text-primary")}
+        className={!disable3D ? "text-primary" : undefined}
       >
         <BoxIcon className="size-4" />
-      </TooltipIconButton>
+      </ActionBarButton>
 
       <ActionBarPrimitive.Copy asChild>
-        <TooltipIconButton tooltip="Copy">
-          <AuiIf condition={(s) => s.message.isCopied}>
-            <CheckIcon />
-          </AuiIf>
-          <AuiIf condition={(s) => !s.message.isCopied}>
-            <CopyIcon />
-          </AuiIf>
-        </TooltipIconButton>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors">
+              {isCopied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Copy</TooltipContent>
+        </Tooltip>
       </ActionBarPrimitive.Copy>
       <ActionBarPrimitive.Reload asChild>
-        <TooltipIconButton tooltip="Retry">
-          <RefreshCwIcon />
-        </TooltipIconButton>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors">
+              <RefreshCwIcon className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Retry</TooltipContent>
+        </Tooltip>
       </ActionBarPrimitive.Reload>
       <ActionBarPrimitive.FeedbackPositive asChild>
-        <TooltipIconButton tooltip="Helpful">
-          <AuiIf condition={(s) => Boolean((s.message as { feedback?: { isPositive?: boolean } }).feedback?.isPositive)}>
-            <ThumbsUpIcon className="fill-current" />
-          </AuiIf>
-          <AuiIf condition={(s) => !(s.message as { feedback?: { isPositive?: boolean } }).feedback?.isPositive}>
-            <ThumbsUpIcon />
-          </AuiIf>
-        </TooltipIconButton>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors">
+              <ThumbsUpIcon className={cn("size-4", isPositive && "fill-current")} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Helpful</TooltipContent>
+        </Tooltip>
       </ActionBarPrimitive.FeedbackPositive>
       <ActionBarPrimitive.FeedbackNegative asChild>
-        <TooltipIconButton tooltip="Not helpful">
-          <AuiIf condition={(s) => Boolean((s.message as { feedback?: { isNegative?: boolean } }).feedback?.isNegative)}>
-            <ThumbsDownIcon className="fill-current" />
-          </AuiIf>
-          <AuiIf condition={(s) => !(s.message as { feedback?: { isNegative?: boolean } }).feedback?.isNegative}>
-            <ThumbsDownIcon />
-          </AuiIf>
-        </TooltipIconButton>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors">
+              <ThumbsDownIcon className={cn("size-4", isNegative && "fill-current")} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Not helpful</TooltipContent>
+        </Tooltip>
       </ActionBarPrimitive.FeedbackNegative>
       <ActionBarMorePrimitive.Root>
         <ActionBarMorePrimitive.Trigger asChild>
-          <TooltipIconButton tooltip="More" className="data-[state=open]:bg-accent">
-            <MoreHorizontalIcon />
-          </TooltipIconButton>
+          <ActionBarButton tooltip="More" className="data-[state=open]:bg-accent">
+            <MoreHorizontalIcon className="size-4" />
+          </ActionBarButton>
         </ActionBarMorePrimitive.Trigger>
         <ActionBarMorePrimitive.Content
           side="bottom"
@@ -530,7 +551,7 @@ const UserActionBar: FC = () => {
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
-      className="aui-user-action-bar-root absolute top-1 right-1 z-10 flex items-center opacity-0 group-hover:opacity-100 transition-opacity"
+      className="message-action-bar aui-user-action-bar-root absolute top-1 right-1 z-10 flex items-center"
     >
       <ActionBarPrimitive.Edit asChild>
         <TooltipIconButton tooltip="Edit" className="aui-user-action-edit size-7 rounded-full bg-background/80 hover:bg-background border shadow-sm">
@@ -551,7 +572,7 @@ const EditComposer: FC = () => {
         <LexicalComposerInput
           directiveChip={DirectiveChip}
           autoFocus
-          className="aui-edit-composer-input min-h-14 w-full resize-none bg-transparent p-4 text-foreground text-sm outline-none [&_.aui-directive-chip-icon]:self-center [&_.aui-directive-chip]:inline-flex [&_.aui-directive-chip]:items-baseline [&_.aui-directive-chip]:gap-1 [&_.aui-directive-chip]:rounded-md [&_.aui-directive-chip]:bg-blue-100 [&_.aui-directive-chip]:px-1.5 [&_.aui-directive-chip]:py-0.5 [&_.aui-directive-chip]:font-medium [&_.aui-directive-chip]:text-[13px] [&_.aui-directive-chip]:text-blue-700 [&_.aui-directive-chip]:leading-none dark:[&_.aui-directive-chip]:bg-blue-900/50 dark:[&_.aui-directive-chip]:text-blue-300 [&_.aui-lexical-input]:min-h-lh [&_.aui-lexical-input]:outline-none"
+          className="aui-edit-composer-input min-h-14 w-full resize-none bg-transparent p-4 text-foreground text-sm outline-none [&_.aui-directive-chip-icon]:self-center [&_.aui-directive-chip]:inline-flex [&_.aui-directive-chip]:items-baseline [&_.aui-directive-chip]:gap-1 [&_.aui-directive-chip]:rounded-md [&_.aui-directive-chip]:bg-blue-100 [&_.aui-directive-chip]:px-1.5 [&_.aui-directive-chip]:py-0.5 [&_.aui-directive-chip]:font-medium [&_.aui-directive-chip]:text-[13px] [&_.aui-directive-chip]:text-blue-700 [&_.aui-directive-chip]:leading-none [&_.aui-lexical-input]:min-h-lh [&_.aui-lexical-input]:outline-none"
         />
         <div className="aui-edit-composer-footer mx-3 mb-3 flex items-center gap-2 self-end">
           <ComposerPrimitive.Cancel asChild>
@@ -590,6 +611,7 @@ export const UserMessage: FC = () => {
       <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0 group">
         <div
           className={cn(
+            "message-hover-wrapper",
             "aui-user-message-content wrap-break-word peer rounded-2xl bg-primary/10 border px-4 py-2.5 text-foreground empty:hidden shadow-sm",
             hasError
               ? "border-destructive bg-destructive/5"
@@ -601,8 +623,8 @@ export const UserMessage: FC = () => {
         >
           <MessagePrimitive.Quote>{(quote) => <QuoteBlock {...quote} />}</MessagePrimitive.Quote>
           <MessagePrimitive.Parts components={{ Text: DirectiveText }} />
+          <UserActionBar />
         </div>
-        <UserActionBar />
         {isForked && (
           <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
             <span>This created a new branch. Use ← → to navigate between versions.</span>
@@ -615,7 +637,7 @@ export const UserMessage: FC = () => {
           <span>{t("failedToSend", "Failed to send")}</span>
           <ActionBarPrimitive.Reload asChild>
             <button
-              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+              className="state-layer inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-destructive transition-colors"
               title={t("retry", "Retry")}
             >
               <RefreshCwIcon className="h-3 w-3" />
@@ -642,7 +664,6 @@ export const AssistantMessage: FC = () => {
   const chatMessage = activeThreadMessages?.find((m: any) => m.id === messageId) as { interrupted?: boolean } | undefined;
 
   const handleRetryInterrupted = useCallback(() => {
-    // Trigger the action-bar reload which re-sends the last user message.
     const root = document.querySelector('[data-slot="aui_assistant-message-root"]');
     const reloadBtn = root?.querySelector('[aria-label="Retry"]') as HTMLButtonElement | undefined;
     reloadBtn?.click();
@@ -654,62 +675,64 @@ export const AssistantMessage: FC = () => {
       data-role="assistant"
       className="fade-in slide-in-from-bottom-1 relative mx-auto w-full min-w-0 max-w-3xl animate-in duration-150"
     >
-      <div
-        data-slot="aui_assistant-message-content"
-        className="wrap-break-word px-2 text-[15.5px] leading-8 text-foreground md:text-base"
-        dir="auto"
-      >
-        <MessagePrimitive.Parts>
-          {({ part }) => {
-            if (part.type === "text") {
-              if (disable3D) {
-                return <MarkdownText />;
+      <div className="message-hover-wrapper px-1 py-0.5 -mx-1 -my-0.5">
+        <div
+          data-slot="aui_assistant-message-content"
+          className="wrap-break-word px-2 text-[15.5px] leading-8 text-foreground md:text-base"
+          dir="auto"
+        >
+          <MessagePrimitive.Parts>
+            {({ part }) => {
+              if (part.type === "text") {
+                if (disable3D) {
+                  return <MarkdownText />;
+                }
+                return (
+                  <div style={{ position: "relative", isolation: "isolate" }}>
+                    <Perspective 
+                      maxRotateX={1} 
+                      maxRotateY={5} 
+                      smoothing={0.1}
+                      cardClassName="max-w-none p-0 bg-transparent shadow-none"
+                    >
+                      <MarkdownText />
+                    </Perspective>
+                  </div>
+                );
               }
-              return (
-                <div style={{ position: "relative", isolation: "isolate" }}>
-                  <Perspective 
-                    maxRotateX={1} 
-                    maxRotateY={5} 
-                    smoothing={0.1}
-                    cardClassName="max-w-none p-0 bg-transparent shadow-none"
-                  >
-                    <MarkdownText />
-                  </Perspective>
-                </div>
-              );
-            }
-            return null;
-          }}
-        </MessagePrimitive.Parts>
-        <AssistantStatusLine />
-        <MessageError />
+              return null;
+            }}
+          </MessagePrimitive.Parts>
+          <AssistantStatusLine />
+          <MessageError />
 
-        {chatMessage?.interrupted && (
-          <div className="mt-4 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm animate-in fade-in slide-in-from-bottom-1 duration-200">
-            <div className="rounded-lg bg-amber-500/10 p-2 text-amber-500">
-              <AlertTriangleIcon className="h-4 w-4" />
+          {chatMessage?.interrupted && (
+            <div className="mt-4 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm animate-in fade-in slide-in-from-bottom-1 duration-200">
+              <div className="rounded-lg bg-amber-500/10 p-2 text-amber-500">
+                <AlertTriangleIcon className="h-4 w-4" />
+              </div>
+              <div className="flex-1">
+                <span className="font-medium text-amber-600">Generation interrupted</span>
+                <span className="ml-1 text-xs text-muted-foreground">— network error. Partial response preserved above.</span>
+              </div>
+              <button
+                onClick={handleRetryInterrupted}
+                className="state-layer flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/50 px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors"
+              >
+                <RefreshCwIcon className="h-3 w-3" />
+                Retry
+              </button>
             </div>
-            <div className="flex-1">
-              <span className="font-medium text-amber-600 dark:text-amber-400">Generation interrupted</span>
-              <span className="ml-1 text-xs text-muted-foreground">— network error. Partial response preserved above.</span>
-            </div>
-            <button
-              onClick={handleRetryInterrupted}
-              className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/50 px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-            >
-              <RefreshCwIcon className="h-3 w-3" />
-              Retry
-            </button>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      <div
-        data-slot="aui_assistant-message-footer"
-        className={cn("ml-2 flex items-center relative z-10", ACTION_BAR_HEIGHT)}
-      >
-        <BranchPicker />
-        <AssistantActionBar />
+        <div
+          data-slot="aui_assistant-message-footer"
+          className={cn("ml-2 flex items-center relative z-10", ACTION_BAR_HEIGHT)}
+        >
+          <BranchPicker />
+          <AssistantActionBar />
+        </div>
       </div>
     </MessagePrimitive.Root>
   );

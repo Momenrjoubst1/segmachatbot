@@ -1,4 +1,5 @@
 import { createLogger } from '../../utils/logger.js';
+import { AsyncMutex } from '../../utils/async-mutex.js';
 
 const log = createLogger('bm25');
 
@@ -8,7 +9,7 @@ export interface BM25Doc {
   metadata: Record<string, any>;
 }
 
-const STOP_WORDS = new Set([
+const DEFAULT_STOP_WORDS = [
   "و", "في", "من", "إلى", "عن", "على", "كان", "مع", "هذا", "هذه",
   "ذلك", "تلك", "هو", "هي", "هم", "هن", "قد", "لا", "ما", "لن",
   "إن", "أن", "إذا", "لم", "لما", "يكون", "ليست", "كانت",
@@ -22,7 +23,24 @@ const STOP_WORDS = new Set([
   "all", "each", "every", "both", "few", "more", "most", "other",
   "some", "such", "no", "nor", "not", "only", "own", "same", "so",
   "than", "too", "very", "just", "because", "as", "until", "while",
-]);
+];
+
+function loadStopWords(): Set<string> {
+  const customStopWords = process.env.BM25_STOP_WORDS;
+  if (customStopWords) {
+    try {
+      const words = JSON.parse(customStopWords) as string[];
+      log.info('Using custom BM25 stop words', { count: words.length });
+      return new Set(words);
+    } catch (error) {
+      log.warn('Failed to parse BM25_STOP_WORDS, using defaults', { error });
+    }
+  }
+  log.info('Using default BM25 stop words', { count: DEFAULT_STOP_WORDS.length });
+  return new Set(DEFAULT_STOP_WORDS);
+}
+
+const STOP_WORDS = loadStopWords();
 
 function tokenize(text: string): string[] {
   const normalized = text.toLowerCase().replace(/[^\w\s\u0600-\u06FF]/g, " ");
@@ -161,24 +179,33 @@ let isInitialized = false;
 let isRebuilding = false;
 let globalBM25BeforeRebuild: BM25Search | null = null;
 
+// Mutex to protect global state access
+const bm25Mutex = new AsyncMutex();
+
 export function getBM25Search(): BM25Search {
   if (!globalBM25) {
     globalBM25 = new BM25Search();
   }
   if (isRebuilding && globalBM25BeforeRebuild) {
-    return globalBM25BeforeRebuild;
+    return globalBM25BeforeRebuild!;
   }
-  return globalBM25;
+  return globalBM25!;
 }
 
-export function setBM25Docs(docs: BM25Doc[]): void {
-  const bm25 = getBM25Search();
-  bm25.build(docs);
+export async function setBM25Docs(docs: BM25Doc[]): Promise<void> {
+  const newBm25 = new BM25Search();
+  newBm25.build(docs);
+  return bm25Mutex.runExclusive(async () => {
+    globalBM25 = newBm25;
+    isInitialized = true;
+  });
 }
 
-export function addBM25Doc(doc: BM25Doc): void {
-  const bm25 = getBM25Search();
-  bm25.addDoc(doc);
+export async function addBM25Doc(doc: BM25Doc): Promise<void> {
+  return bm25Mutex.runExclusive(async () => {
+    const bm25 = getBM25Search();
+    bm25.addDoc(doc);
+  });
 }
 
 export async function initializeBM25FromDB(): Promise<void> {
@@ -190,7 +217,8 @@ export async function initializeBM25FromDB(): Promise<void> {
     const { supabase } = await import("./rag-supabase-client.js");
     const { data, error } = await supabase
       .from("documents")
-      .select("id, content, metadata");
+      .select("id, content, metadata")
+      .limit(5000);
 
     if (error) {
       throw error;
@@ -203,12 +231,20 @@ export async function initializeBM25FromDB(): Promise<void> {
         metadata: row.metadata || {},
       }));
 
-      setBM25Docs(docs);
-      isInitialized = true;
+      const newBm25 = new BM25Search();
+      newBm25.build(docs);
+
+      await bm25Mutex.runExclusive(async () => {
+        globalBM25 = newBm25;
+        isInitialized = true;
+      });
       log.info(`[BM25] Successfully indexed ${docs.length} documents from DB.`);
     } else {
+      await bm25Mutex.runExclusive(async () => {
+        if (!globalBM25) globalBM25 = new BM25Search();
+        isInitialized = true;
+      });
       log.info("[BM25] No documents found in DB to index.");
-      isInitialized = true;
     }
   } catch (err) {
     log.error("[BM25] Failed to initialize index from DB:", err instanceof Error ? err : new Error(String(err)));
@@ -223,17 +259,10 @@ export async function initializeBM25FromDB(): Promise<void> {
  * Used by the admin /api/admin/bm25/reindex endpoint.
  */
 export async function resetBM25Index(): Promise<void> {
-  isRebuilding = true;
-  globalBM25BeforeRebuild = globalBM25;
-
-  try {
+  await bm25Mutex.runExclusive(async () => {
     isInitialized = false;
     isInitializing = false;
-    setBM25Docs([]);
-    await initializeBM25FromDB();
-  } finally {
-    globalBM25BeforeRebuild = null;
-    isRebuilding = false;
-  }
+  });
+  await initializeBM25FromDB();
 }
 

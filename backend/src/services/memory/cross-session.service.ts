@@ -4,7 +4,7 @@
  * يربط المحادثات القديمة بالجديدة
  */
 
-import { knowledgeSupabase as supabase } from '../../config/supabase.config.js';
+import { supabase } from '../../config/supabase.config.js';
 import { MemoryConfig } from '../../config/memory.config.js';
 import { logger } from '../../utils/logger.js';
 import { generateEmbedding, generateEmbeddings } from '../rag/embedding-service.js';
@@ -36,6 +36,9 @@ interface CrossSessionResult {
 
 class CrossSessionService {
   private static instance: CrossSessionService;
+  private messageEmbeddingCache = new Map<string, { embedding: number[]; cachedAt: number }>();
+  private readonly CACHE_MAX_SIZE = 1000;
+  private readonly CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
   private constructor() {}
 
@@ -44,6 +47,24 @@ class CrossSessionService {
       CrossSessionService.instance = new CrossSessionService();
     }
     return CrossSessionService.instance;
+  }
+
+  private getCachedEmbedding(msgId: string): number[] | null {
+    const cached = this.messageEmbeddingCache.get(msgId);
+    if (!cached) return null;
+    if (Date.now() - cached.cachedAt > this.CACHE_TTL_MS) {
+      this.messageEmbeddingCache.delete(msgId);
+      return null;
+    }
+    return cached.embedding;
+  }
+
+  private setCachedEmbedding(msgId: string, embedding: number[]): void {
+    if (this.messageEmbeddingCache.size >= this.CACHE_MAX_SIZE) {
+      const firstKey = this.messageEmbeddingCache.keys().next().value;
+      if (firstKey) this.messageEmbeddingCache.delete(firstKey);
+    }
+    this.messageEmbeddingCache.set(msgId, { embedding, cachedAt: Date.now() });
   }
 
   /**
@@ -249,19 +270,40 @@ class CrossSessionService {
         return [];
       }
 
-      const embeddings = await generateEmbeddings(
-        data.map(m => m.content.substring(0, 500))
-      );
+      // Separate cached vs uncached message embeddings
+      const finalEmbeddings: Array<number[] | null> = new Array(data.length).fill(null);
+      const uncachedIndices: number[] = [];
+      const uncachedTexts: string[] = [];
 
-      if (!embeddings || embeddings.length === 0) {
-        return [];
+      for (let i = 0; i < data.length; i++) {
+        const cached = this.getCachedEmbedding(data[i].id);
+        if (cached) {
+          finalEmbeddings[i] = cached;
+        } else {
+          uncachedIndices.push(i);
+          uncachedTexts.push(data[i].content.substring(0, 500));
+        }
+      }
+
+      if (uncachedTexts.length > 0) {
+        const generated = await generateEmbeddings(uncachedTexts);
+        if (generated && generated.length === uncachedTexts.length) {
+          for (let j = 0; j < uncachedIndices.length; j++) {
+            const idx = uncachedIndices[j];
+            const emb = generated[j];
+            finalEmbeddings[idx] = emb;
+            if (emb) {
+              this.setCachedEmbedding(data[idx].id, emb);
+            }
+          }
+        }
       }
 
       const scored = data
         .map((msg, i) => ({
           message: msg,
-          score: embeddings[i]
-            ? cosineSimilarity(queryEmbedding, embeddings[i])
+          score: finalEmbeddings[i]
+            ? cosineSimilarity(queryEmbedding, finalEmbeddings[i]!)
             : 0,
         }))
         .filter(item => item.score > 0.3)

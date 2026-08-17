@@ -19,6 +19,7 @@ export interface ValidationStepResult {
   threadId: string | undefined;
   courseId: string | undefined;
   clientChatGuid: string | undefined;
+  modelFallback?: { from: string; to: string };
 }
 
 export interface ValidationStepFailure {
@@ -72,10 +73,13 @@ export function validateAndPrepareRequest(req: {
     || body.data?.modelName;
 
   let selectedModel = requestedModel || DEFAULT_MODEL;
+  let modelFallback: { from: string; to: string } | undefined;
+  
   if (!ALLOWED_MODELS.includes(selectedModel)) {
     log.warn(
       `Rejected unauthorized model request: ${selectedModel}, falling back to DEFAULT_MODEL`,
     );
+    modelFallback = { from: selectedModel, to: DEFAULT_MODEL };
     selectedModel = DEFAULT_MODEL;
   }
 
@@ -113,5 +117,6 @@ export function validateAndPrepareRequest(req: {
     threadId: validation.data.threadId,
     courseId: validation.data.courseId,
     clientChatGuid: validation.data.clientChatGuid,
+    modelFallback,
   };
 }

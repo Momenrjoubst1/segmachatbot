@@ -10,7 +10,7 @@ interface ChatHistoryContextType {
   threads: ChatThread[];
   activeThreadId: string | null;
   setActiveThreadId: (id: string | null) => void;
-  loadThread: (id: string | null) => void;
+  loadThread: (id: string | null) => Promise<void>;
   isLoadingThreads: boolean;
   threadsError: LoadErrorCode | null;
   retryFetchThreads: () => Promise<void>;
@@ -22,12 +22,13 @@ interface ChatHistoryContextType {
     seedMessages?: ChatMessage[];
     background?: boolean;
     clear?: boolean;
-  }) => void;
+  }) => Promise<void>;
   removeFromCache: (threadId: string) => void;
   prefetchThread: (threadId: string) => Promise<void>;
   refreshThreads: () => void;
   createNewThread: (courseId?: string) => Promise<void>;
   deleteThread: (threadId: string) => Promise<void>;
+  updateThreadTitle: (threadId: string, title: string) => Promise<void>;
   getThreadsByCourse: (courseId: string | null) => ChatThread[];
   saveDraft: (threadId: string | null, text: string) => void;
   getDraft: (threadId: string | null) => string;
@@ -46,7 +47,7 @@ const ChatHistoryContext = createContext<ChatHistoryContextType | undefined>(und
 const ChatHistoryInner = ({ children }: { children: ReactNode }) => {
   const { saveDraft, getDraft, clearDraft } = useChatDrafts();
   const { activeThreadMessages, isLoadingMessages, messagesError, retryFetchMessages, loadMessagesForThread, removeFromCache, prefetchThread, setActiveThreadId: _setActiveThreadId, incrementFetchRequestSeq: _incrementFetchRequestSeq, getFetchRequestSeq: _getFetchRequestSeq, appendMessage, upsertMessage, markStreamInterrupted, markLastAssistantInterrupted, updateApprovalStatus, removeInterruptedMessages } = useChatMessages();
-  const { threads, activeThreadId, setActiveThreadId, loadThread, isLoadingThreads, threadsError, retryFetchThreads, fetchThreads, deleteThread: rawDeleteThread, getThreadsByCourse, createNewThread, newChatCount } = useChatThreads();
+  const { threads, activeThreadId, setActiveThreadId, loadThread, isLoadingThreads, threadsError, retryFetchThreads, fetchThreads, deleteThread: rawDeleteThread, updateThreadTitle, getThreadsByCourse, createNewThread, newChatCount } = useChatThreads();
 
   const deleteThread = useCallback(async (threadId: string) => {
     removeFromCache(threadId);
@@ -72,6 +73,7 @@ const ChatHistoryInner = ({ children }: { children: ReactNode }) => {
     refreshThreads: fetchThreads,
     createNewThread,
     deleteThread,
+    updateThreadTitle,
     getThreadsByCourse,
     saveDraft,
     getDraft,

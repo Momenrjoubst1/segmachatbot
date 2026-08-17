@@ -1,217 +1,200 @@
-# Deep Code Review — Sigma AI Chatbot
+# Deep Code Review Report — Sigma AI Chatbot
 
-**Date:** August 7, 2026
-**Reviewer:** AI Code Review Agent
-**Scope:** Full-stack (Frontend + Backend + Infrastructure)
-**Codebase:** ~33,000 LOC across 270 source files
+**Date:** 2026-08-13  
+**Reviewer:** Automated Deep Code Review  
+**Scope:** Full codebase (backend + frontend), ~30,000+ LOC  
+**Prioritization:** Auth & security first → Chat pipeline → Memory system → RAG → Frontend
 
 ---
 
 ## Executive Summary
 
-Sigma AI Chatbot is a full-stack AI chatbot with RAG, memory management, and multi-model support built with React 19, Express, TypeScript, Supabase, and Redis. The codebase demonstrates production-quality patterns in several areas (structured logger, sliding-window rate limiter, 10-step chat pipeline, auth middleware with JWT + Redis caching).
+Sigma AI Chatbot is a full-stack AI assistant with RAG, multi-tier memory, and multi-model support. The codebase is well-structured with good separation of concerns, strong security fundamentals (auth middleware with circuit breakers, rate limiting, SSRF protection), and a well-modularized chat pipeline. However, several critical and high-severity issues remain that need immediate attention.
 
-**Overall Code Health: 7/10 — Functional with significant security and reliability gaps**
+### Top 5 Priorities
+1. **CRITICAL**: Proxy route SSRF — `/api/proxy/image` lacks authentication and SSRF protection
+2. **CRITICAL**: Auth bypass possible when Redis is down — cached session validation skips ban check
+3. **HIGH**: Memory system has no eviction/TTL — unbounded growth for long-lived users
+4. **HIGH**: Backend `.env` file committed to repository (contains secrets structure)
+5. **HIGH**: `chatLimiter` skips unauthenticated requests entirely
 
-### Top 5 Things to Fix
-
-1. **[CRITICAL] XSS via `dangerouslySetInnerHTML` in SVG artifact viewer** — Stored XSS allows AI-generated SVG to execute arbitrary JavaScript in the user's browser.
-2. **[CRITICAL] Hardcoded fallback agent secret** — `AGENT_INTERNAL_SECRET` falls back to `'skillswap-local-agent-secret'`, enabling full auth bypass if env var is missing.
-3. **[HIGH] Infinite auth retry loop** — `authFetch` retries on 401 without verifying the new token is different, creating infinite loops on persistent auth expiry.
-4. **[HIGH] No tests for critical paths** — Auth middleware, chat routes, SSRF protection, and the 10-step pipeline have zero test coverage.
-5. **[HIGH] Global CSS transition on `*`** — `* { transition: ... }` applies transitions to every DOM element, causing measurable performance degradation.
-
-### Coverage
-
-- **Backend modules:** Fully reviewed (routes, services/chat, services/memory, services/rag, tools, middleware, config, security)
-- **Frontend modules:** Fully reviewed (context, features/ai-assistant, features/artifacts, features/calendar, hooks, lib, components/ui, i18n, styles)
-- **Infrastructure:** Docker, nginx, CI/CD, Redis config reviewed
-- **Cross-cutting:** Security, testing, observability, documentation reviewed
+**Coverage:** Reviewed all backend modules fully; reviewed frontend core, hooks, lib, and key feature files. UI component wrappers (shadcn primitives) and icon files were skimmed but not deeply reviewed — low risk.
 
 ---
 
 ## Architecture Assessment
 
-**Score: 6/10 — Functional but structurally fragile**
+### Strengths
+- Clean 10-step chat pipeline with single-responsibility modules (`chat.pipeline.ts:9-21`)
+- Robust auth middleware with Redis circuit breaker (`auth.middleware.ts:9-38`)
+- Comprehensive rate limiting with sliding window + in-memory fallback
+- Multi-tier memory with parallel retrieval and deduplication
+- Good timeout handling via `withTimeout()` wrapper
+- Centralized error handling with `AppError` classes
 
-### What's Working Well
-- **10-step chat pipeline** — Clean orchestration with separated concerns (validation → moderation → memory → context → tools → LLM → parsing → execution → storage)
-- **Structured logger** — Production-quality with per-module child loggers, trace context, JSON output
-- **Sliding-window rate limiter** — Redis-backed with Lua scripts for atomicity, in-memory fallback
-- **Auth middleware** — JWT verification + Redis caching + dual ban checking (Supabase metadata + banned_users table)
-- **SSRF protection** — DNS resolution + IP pinning + allowlist + redirect validation
+### Concerns
 
-### Critical Structural Issues
-
-| Severity | Finding | File | Impact |
-|----------|---------|------|--------|
-| Critical | `chat-shared.ts` God Module — 7+ responsibilities (rate limiters, model config, provider clients, system prompts, helpers) | `backend/src/routes/chat/chat-shared.ts` | Inverted dependencies; pipeline imports from route layer |
-| Critical | 3 redundant Supabase client exports — `supabase.config.ts`, `rag-supabase-client.ts`, `moderation.service.ts` all export the same client | Multiple files | Confusion about which client to use; version drift risk |
-| Critical | Zero database migrations — schema lives only in SQL comments | `backend/src/services/chat/pipeline/rag-retrieval.ts:389+` | Schema changes require manual SQL; no rollback capability |
-| High | Routes bypass service layer — `analytics.routes.ts` instantiates `AnalyticsTracker` directly | `backend/src/routes/analytics.routes.ts:9` | Business logic in route handlers; no reuse |
-| High | Auth check duplicated 12+ times — each route manually checks `req.user?.id` | All route files | Inconsistent auth enforcement; easy to miss |
-| Medium | In-memory artifact store — `ArtifactStore` is a `Map<string, Artifact>` | `backend/src/tools/files/create-artifact/in-memory-artifact-store.ts` | Artifacts lost on restart; no persistence |
-| Medium | 9 frontend contexts — excessive context splitting creates provider nesting | `frontend/src/context/` | Re-render cascade; complex provider tree |
-| Medium | Provider detection in 3+ places — model routing logic duplicated | `backend/src/routes/chat/chat-shared.ts`, `backend/src/services/chat/pipeline/rag-retrieval.ts` | Inconsistent routing behavior |
+| Severity | Area | Finding |
+|----------|------|---------|
+| **High** | Security | Proxy route unauthenticated + no SSRF check |
+| **High** | Security | Auth cache stores ban status without TTL-based refresh |
+| **Medium** | Architecture | Three memory systems with fragile string-based deduplication |
+| **Medium** | Architecture | Frontend context proliferation (8 contexts) |
+| **Low** | Maintainability | Duplicate component directories (`core/` vs `ui/`) |
 
 ---
 
 ## Findings by Module
 
-### Backend
+### Backend — Security (`middleware/`, `utils/safe-fetch-url.ts`)
 
-#### services/chat/ — Core Chat Pipeline
+| # | Severity | File:Line | Issue | Suggested Fix |
+|---|----------|-----------|-------|---------------|
+| 1 | **Critical** | `routes/proxy.routes.ts:8-26` | Proxy route has **no auth middleware** and **no SSRF validation** — any unauthenticated user can fetch arbitrary URLs through the server | Add `authMiddleware` and call `assertSafeImageProxyUrl()` before fetching |
+| 2 | **Critical** | `middleware/auth.middleware.ts:102-122` | When Redis returns a cached session, the code trusts `isBanned` from cache without re-verifying. If a user is banned after the 5-min cache TTL, they remain accessible until cache expires. | Add TTL check: if cache age > 60s, re-verify ban status against Supabase |
+| 3 | **High** | `routes/chat/chat-shared.ts:57` | `chatLimiter` has `skip: (req) => !req.user?.id` — unauthenticated requests **bypass rate limiting entirely**. Auth middleware returns 401 but the limiter never counts them. | Remove the `skip` function or use IP-based limiting for unauthenticated requests |
+| 4 | **High** | `utils/safe-fetch-url.ts:48-67` | `hostAllowedByAllowlist` falls back to hardcoded defaults when `IMAGE_PROXY_ALLOWED_HOSTS` is empty — any deployment without this env var allows `ui-avatars.com`, `dicebear.com`, and `*.supabase.co` | Document this behavior; consider requiring explicit allowlist in production |
+| 5 | **Medium** | `routes/proxy.routes.ts:22-24` | Error response leaks internal error message (`detail: msg`) to the client | Return generic error message; log details server-side only |
+| 6 | **Medium** | `middleware/auth.middleware.ts:129` | Token preview logged (`token.substring(0, 15)`) — first 15 chars of JWT are not sensitive but this pattern could be extended carelessly | Already acceptable; note for future reviewers |
+| 7 | **Low** | `utils/safe-fetch-url.ts:29-36` | IPv6 private range detection misses `fe80::/10` — only checks `fe80` prefix exactly | Use `normalized.startsWith('fe80:')` or `net.isIPv6()` + range check |
 
-| Severity | Finding | File:Line | Impact | Fix |
-|----------|---------|-----------|--------|-----|
-| High | Error messages leak internal details to clients | `response-generator.service.ts:370,253` | Information disclosure | Return generic error messages |
-| Medium | Race condition in cache-hit session creation | `rag-retrieval.ts:389` | Duplicate sessions created | Use database unique constraint or distributed lock |
-| Medium | Empty session reuse could collide with concurrent writes | `pipeline/thread.ts:77` | Message misattribution | Use session status check before reuse |
-| Medium | Deduplication uses first 120 chars as hash | `rag-retrieval.ts:270` | Fragile dedup; different content with same prefix not caught | Use full content hash or semantic similarity |
+### Backend — Chat Pipeline (`services/chat/`)
 
-#### services/memory/ — Memory System
+| # | Severity | File:Line | Issue | Suggested Fix |
+|---|----------|-----------|-------|---------------|
+| 8 | **High** | `chat.pipeline.ts:305-324` | Global catch-all in `executeChatPipeline` returns generic 500 — errors from individual steps are swallowed without distinguishing user errors from system errors | Use `AppError` subclasses from `error-handler.ts` for step-specific errors |
+| 9 | **High** | `pipeline/validation.ts:69-83` | Model fallback silently replaces user's chosen model with `DEFAULT_MODEL` — user has no indication their model was swapped | Set `X-Model-Fallback` header (already done at line 240-242) but also include in response body |
+| 10 | **Medium** | `moderation.service.ts:128-133` | When Supabase Edge Function is unavailable, moderation is **silently skipped** — messages pass through without content checking | Return a clear indicator that moderation was bypassed; consider blocking if moderation is critical |
+| 11 | **Medium** | `pipeline/rag-retrieval.ts:136-162` | Response cache bypass logic checks personal context, tools, follow-up — but cache hit responses are sent without grounding verification | Add post-cache grounding check or log cache hits for audit |
+| 12 | **Medium** | `pipeline/summarization.ts:55` | Condition `ctxStatus.totalTokens <= ctxStatus.maxTokens * 0.7` duplicates the `shouldSummarize` check from `getContextWindowStatus` — confusing double-check | Remove redundant condition or clarify the threshold difference |
+| 13 | **Low** | `chat.pipeline.ts:47` | `TOOLS_NEEDING_USER_ID` set is built from metadata system at module load time — if tools are added dynamically, this won't update | Already from metadata system — acceptable |
+| 14 | **Low** | `pipeline/rag-retrieval.ts:272` | MD5 used for content deduplication hash — MD5 is fast but not collision-resistant. For RAG doc dedup this is acceptable but worth noting | Consider SHA-256 for security-sensitive contexts |
 
-| Severity | Finding | File:Line | Impact | Fix |
-|----------|---------|-----------|--------|-----|
-| High | Hardcoded Azure endpoint in source code | `enhanced-memory.service.ts:428` | Secrets in source; inflexible config | Move to env var |
-| Medium | Config validation only runs in debug mode | `memory.config.ts:181` | Invalid config silently accepted in production | Always validate in production |
-| Medium | SCAN limit of 10 too small for similarity search | `context-cache.service.ts:195` | May miss cache entries; slow cleanup | Increase to 100+ or use cursor-based iteration |
+### Backend — Memory System (`services/memory/`)
 
-#### services/rag/ — RAG Pipeline
+| # | Severity | File:Line | Issue | Suggested Fix |
+|---|----------|-----------|-------|---------------|
+| 15 | **High** | `unified-memory.ts` (entire class) | **No memory eviction or TTL** — facts, cross-session context, and enhanced memory accumulate indefinitely. Long-lived users will hit storage limits and slow retrieval. | Implement TTL-based eviction (e.g., facts older than 90 days with low relevance score get pruned) |
+| 16 | **High** | `unified-memory.ts:226-232` | Deduplication uses Jaccard similarity on raw text — semantically identical facts with different wording (e.g., "I study CS" vs "My major is Computer Science") are not deduplicated | Use embedding-based similarity for dedup, or at minimum add stemming/normalization |
+| 17 | **Medium** | `unified-memory.ts:168-180` | `withTimeout` creates a new `Promise` with `setTimeout` on every call — the timeout promise is never cleaned up if the operation completes first, causing timer accumulation | Clear the timeout in a `finally` block (the existing `timeout-wrapper.ts` already handles this correctly — use it consistently) |
+| 18 | **Medium** | `unified-memory.ts:238-259` | Memory prompt is partially in Arabic (lines 250, 259) and partially in English — inconsistent for LLM consumption | Standardize memory prompt language or make it configurable based on user language preference |
+| 19 | **Low** | `memory/text-deduplicator.ts` | Text deduplication operates on full context strings rather than individual facts — a long context with one duplicate fact causes the entire context to be flagged | Split contexts into individual facts before deduplication |
 
-| Severity | Finding | File:Line | Impact | Fix |
-|----------|---------|-----------|--------|-----|
-| Medium | Embedding search is non-functional | `cross-session.service.ts:228` | Cross-session recall relies on text search only | Implement actual vector similarity search |
-| Medium | Global singleton not thread-safe during re-indexing | `bm25-search.ts:158` | Stale index served during rebuild | Use read-write lock or versioned index |
+### Backend — RAG (`services/rag/`)
 
-#### tools/ — AI Tool System
+| # | Severity | File:Line | Issue | Suggested Fix |
+|---|----------|-----------|-------|---------------|
+| 20 | **Medium** | `bm25-search.ts` | BM25 index is held in memory with no persistence — on server restart, the index is rebuilt from DB, causing a cold-start period with degraded search | Add index serialization to disk or Redis for faster restart |
+| 21 | **Medium** | `pipeline/rag-retrieval.ts:247-263` | Vector search and BM25 run in parallel but errors from either are silently caught — a Supabase outage would degrade RAG to BM25-only without user notification | Log degradation status and include in response metadata |
+| 22 | **Low** | `rag-cache.service.ts` | Cache keys include raw query text — long queries create very long Redis keys | Hash the query for cache key construction |
+| 23 | **Low** | `document-reranker.ts` | Reranking uses simple scoring — no ML-based reranker. Acceptable for v1 but will limit RAG quality at scale | Consider Cohere Rerank or similar for production |
 
-| Severity | Finding | File:Line | Impact | Fix |
-|----------|---------|-----------|--------|-----|
-| Medium | `ilike` pattern injection via search query | `email/sender.ts:1120` | SQL injection via LIKE wildcards | Escape `%` and `_` in user input |
-| Medium | pdf-parse may have known vulnerabilities | `file-text-extractor.ts:6` | Potential RCE via crafted PDF | Update to latest version; sandbox parsing |
+### Backend — Configuration & Validation
 
-#### middleware/ — Security & Auth
+| # | Severity | File:Line | Issue | Suggested Fix |
+|---|----------|-----------|-------|---------------|
+| 24 | **High** | `backend/.env` (file exists) | `.env` file is present in the repository root — while `.gitignore` has `.env`, the file is already tracked | Run `git rm --cached backend/.env` and verify `.gitignore` works |
+| 25 | **Medium** | `config/config-validator.ts:71-78` | Redis is marked as `severity: 'critical'` but the app can run in degraded mode without Redis (auth falls back to Supabase directly) | Change to `severity: 'warning'` or add explicit degraded-mode startup message |
+| 26 | **Medium** | `config/app.config.ts:52` | Dev CORS allows `localhost` on any port — this is fine for dev but could be exploited if dev config leaks to production | Already guarded by `nodeEnv === 'development'` check — acceptable |
+| 27 | **Low** | `validators/chat-validation-schemas.ts:37` | `messages` schema allows `content: z.string().max(50000)` — 50KB per message is very large and could cause LLM token overflow upstream | Reduce to 32000 (matching `MAX_MESSAGE_CHARS` in moderation service) or validate total message array size |
 
-| Severity | Finding | File:Line | Impact | Fix |
-|----------|---------|-----------|--------|-----|
-| High | 5-min ban enforcement delay due to cache TTL | `auth.middleware.ts:64` | Banned user has 5-min window | Use separate ban cache with shorter TTL |
-| High | Redis errors silently swallowed, causing thundering herd | `auth.middleware.ts:57` | All requests hit Supabase on Redis failure | Log error; implement circuit breaker |
-| Medium | Trusted IP bypass is spoofable behind proxies | `rate-limiters.ts:163` | Rate limiting bypassed via X-Forwarded-For spoofing | Use API key-based trust instead of IP |
-| Medium | Regex detection patterns leaked to clients | `input-validator.ts:276` | Attackers learn bypass patterns | Return generic "blocked" message |
+### Frontend — Auth & Security (`lib/`, `hooks/`, `context/`)
 
-#### config/ — Configuration
+| # | Severity | File:Line | Issue | Suggested Fix |
+|---|----------|-----------|-------|---------------|
+| 28 | **High** | `lib/auth.ts:45-56` | `authFetch` retry loop silently replaces 401 with a fresh token — but if the refresh itself fails (e.g., refresh token expired), the error is thrown as a generic `Error` rather than redirecting to login | Catch refresh failures and emit an auth-expired event |
+| 29 | **Medium** | `lib/supabaseClient.ts:46` | Auth lock is `async (_name, _acquireTimeout, fn) => await fn()` — this disables Supabase's built-in concurrency protection entirely | Only disable lock for specific operations that need it, not globally |
+| 30 | **Medium** | `hooks/useAuth.ts:90-93` | Safety timer sets `isAuthLoading: false` after 3s even if auth is still in progress — could show login page briefly before auth completes | Add a minimum display time for the skeleton or check if auth is close to completing |
+| 31 | **Low** | `lib/supabaseClient.ts:133,155,176,191` | `localStorage.setItem('auth_provider', ...)` called on every sign-in attempt — not cleared on auth failure, only on explicit logout | Clear on failed sign-in attempt |
+| 32 | **Low** | `context/AuthContext.tsx:54-57` | `registerVerifiedUserId` called in useEffect — runs on every user change, potentially triggering side effects on re-renders | Already dependency-gated — acceptable |
 
-| Severity | Finding | File:Line | Impact | Fix |
-|----------|---------|-----------|--------|-----|
-| Medium | Dummy dev key could confuse developers | `supabase.config.ts:49` | Accidental use against real Supabase | Throw error in production if key is dummy |
-| Medium | Environment variable mutation at import time | `embedding-service.ts:14` | Side effects during import; testing difficulty | Defer to runtime |
+### Frontend — Chat & AI Assistant (`features/ai-assistant/`)
 
-### Frontend
+| # | Severity | File:Line | Issue | Suggested Fix |
+|---|----------|-----------|-------|---------------|
+| 33 | **Medium** | `ui/useChatRuntime.ts` | Complex stream parsing + message syncing + tab visibility handling — high cognitive complexity. If any edge case breaks, debugging is difficult | Add more defensive checks and unit tests for stream parser edge cases |
+| 34 | **Medium** | `AssistantApp.tsx` | Multiple state variables (`courses`, `view`, `panelOpen`, etc.) managed separately — prone to state inconsistency during rapid updates | Consider consolidating into useReducer or state machine |
+| 35 | **Low** | `shims/assistant-ui-compat-shim.ts` | Compatibility shim suggests API surface is unstable — this is a maintenance burden | Track when shim can be removed (upstream stabilization) |
+| 36 | **Low** | `model-catalog.ts` | Model catalog is hardcoded — adding new models requires code changes | Consider making model catalog configurable from backend |
 
-#### features/artifacts/ — Artifact Viewer
+### Frontend — Component Architecture
 
-| Severity | Finding | File:Line | Impact | Fix |
-|----------|---------|-----------|--------|-----|
-| Critical | XSS via `dangerouslySetInnerHTML` in SvgViewer | `ArtifactViewer.tsx:110` | Stored XSS — AI-generated SVG executes arbitrary JS | Sanitize with DOMPurify |
-| High | HTML artifacts allow-scripts + allow-popups | `ArtifactViewer.tsx:101` | Artifact JS can open phishing windows and exfiltrate data | Remove allow-popups; inject CSP meta tag |
-| Medium | Artifact polling every 5 seconds | `ArtifactPanel.tsx:57-59` | Unnecessary network traffic | Use Supabase Realtime or WebSocket |
-
-#### features/ai-assistant/ — Main Chat Feature
-
-| Severity | Finding | File:Line | Impact | Fix |
-|----------|---------|-----------|--------|-----|
-| High | DOM scraping for draft save | `AssistantApp.tsx:164-170` | Breaks on library upgrades; loses formatting | Use AUI composer API |
-| High | Email composer injects text via `.value` (broken for Lexical) | `AssistantLayout.tsx:314-319` | "Ask bot about email" feature completely broken | Use `aui.composer().setText()` |
-| Medium | UIActionStreamParser holds unbounded buffer | `useChatRuntime.ts:27-91` | Memory exhaustion on pathological streams | Add max buffer size (64KB) |
-| Medium | No stream cancellation on unmount | `useChatRuntime.ts:196-231` | Memory leak; state updates on unmounted components | Pass AbortController signal |
-| Medium | getFreshToken concurrent refresh race | `lib/auth.ts:3-26` | Duplicate token refreshes under concurrency | Reset promise after all consumers resolve |
-
-#### features/calendar/ — Calendar Integration
-
-| Severity | Finding | File:Line | Impact | Fix |
-|----------|---------|-----------|--------|-----|
-| High | Timezone not considered in date calculations | `useCalendarSync.ts:44-78` | Users in different timezones see wrong times | Use Intl.DateTimeFormat with user timezone |
-| Medium | DST-prone day arithmetic | `useCalendarSync.ts:371-372` | Free slot times wrong on DST transition days | Use date-fns/addDays |
-| Medium | `new Date(\`${date}T${startTime}\`)` without timezone | `SchedulingPanel.tsx:84` | Events stored at wrong UTC time | Append timezone offset |
-
-#### context/ — React Contexts
-
-| Severity | Finding | File:Line | Impact | Fix |
-|----------|---------|-----------|--------|-----|
-| Medium | ChatMessagesContext exposes mutable refs | `ChatMessagesContext.tsx:55-56` | Race conditions on concurrent mutations | Expose setter functions instead |
-| Medium | ChatHistoryContext creates new value every render | `ChatHistoryContext.tsx:40-56` | Unnecessary re-renders for all consumers | Memoize with useMemo |
-| Medium | RAGContext toggle uses stale closure | `RAGContext.tsx:36-38` | Toggle gets stuck under rapid clicks | Use functional updater |
-
-#### lib/ — Core Utilities
-
-| Severity | Finding | File:Line | Impact | Fix |
-|----------|---------|-----------|--------|-----|
-| High | authFetch infinite retry loop on persistent 401 | `lib/auth.ts:28-47` | Infinite fetch loops and UI freezes | Add max retry count; verify new token differs |
-| Medium | Supabase client created with undefined env vars | `lib/supabaseClient.ts:17-26` | Cryptic runtime errors on every operation | Throw error or render config-error boundary |
-| Medium | signInWithGoogle/Facebook swallow errors | `lib/supabaseClient.ts:173-203` | Runtime crash when OAuth fails | Return proper error object |
-
-#### styles/ — CSS Architecture
-
-| Severity | Finding | File:Line | Impact | Fix |
-|----------|---------|-----------|--------|-----|
-| High | Global `* { transition }` on all elements | `styles/base.css:212-214` | Janky scrolling and typing; FPS drops | Remove; apply transitions only where needed |
-| Medium | RTL font-family override on `*` | `styles/rtl.css:6-8` | Code blocks and icons render in Tajawal font | Target only text elements |
-| Medium | RTL uses 11 `!important` overrides | `styles/rtl.css` (multiple) | Specificity war; fragile maintenance | Consolidate; use CSS layers |
+| # | Severity | File:Line | Issue | Suggested Fix |
+|---|----------|-----------|-------|---------------|
+| 37 | **Medium** | `components/ui/core/` vs `components/ui/` | Duplicate component directories: `core/Avatar.tsx` and `ui/avatar.tsx`, `core/Checkbox.tsx` and Radix checkbox wrapper | Consolidate into one directory with clear naming |
+| 38 | **Low** | `components/ui/LoadingStates.tsx` | Multiple loading spinner components (`BarsSpinner`, `AppSkeleton`, `TopLoadingBar`, `LoadingAnnouncer`) — could be simplified | Audit and merge similar loading components |
+| 39 | **Low** | `context/` (8 files) | 8 separate React contexts cause re-render cascades — components using any context re-render when any value changes | Use `useSyncExternalStore` or Zustand for performance-critical state |
 
 ---
 
-## Cross-cutting Findings
+## Cross-Cutting Findings
 
-| Severity | Finding | File:Line | Impact | Fix |
-|----------|---------|-----------|--------|-----|
-| Critical | Hardcoded fallback `AGENT_INTERNAL_SECRET` | `agent.service.ts:40` | Full auth bypass if env var missing | Fail startup if not set |
-| High | No tests for auth middleware, chat routes, SSRF | `backend/src/__tests__/` | Regressions ship silently | Add integration tests |
-| High | Frontend tests cover only ~8% of files | `frontend/src/__tests__/` | Critical bugs (XSS, broken features) not caught | Prioritize security-critical tests |
-| Medium | Inconsistent error response format | Multiple route files | Frontend must guess response shape | Standardize to `{ error: string }` |
-| Medium | 26 silent catch blocks in backend | Multiple files | Debugging impossible; bugs masked | Add logging to catches |
-| Medium | No `helmet` middleware | `backend/src/index.ts:96-107` | Missing security headers; broken CSP | Install helmet; configure proper CSP |
-| Medium | Logger has no external sink | `utils/logger.ts:146-167` | No centralized logging | Add Sentry integration |
-| Medium | Trace context is module-global, not request-scoped | `utils/logger.ts:45-53` | Mixed trace IDs under concurrent load | Use AsyncLocalStorage |
-| Medium | No frontend test coverage config | `frontend/vitest.config.ts` | No way to measure coverage | Add @vitest/coverage-v8 |
-| Low | Auth cache ban race (5-min window) | `auth.middleware.ts:63-81` | Banned user retains access | Use separate ban cache |
-| Low | No root `.gitignore` | Project root | IDE files can be committed | Add root .gitignore |
-| Note | README inaccuracies | `README.md` | Misleading for contributors | Update README |
+### Security
+
+| # | Severity | Finding | Files |
+|---|----------|---------|-------|
+| 40 | **Critical** | Proxy route is completely unauthenticated — any visitor can use the server as an open proxy | `routes/proxy.routes.ts` |
+| 41 | **High** | `.env` file exists in repo despite `.gitignore` — may already be in git history | `backend/.env` |
+| 42 | **High** | Rate limiter skips unauthenticated requests | `routes/chat/chat-shared.ts:57` |
+| 43 | **Medium** | Content moderation silently fails open when Supabase Edge Function is down | `services/chat/moderation.service.ts:128-133` |
+| 44 | **Medium** | Error responses may leak internal details (`detail: msg` in proxy) | `routes/proxy.routes.ts:24` |
+| 45 | **Note** | Auth middleware token preview logging is safe but pattern could be extended carelessly | `middleware/auth.middleware.ts:129` |
+
+### Testing
+
+| # | Severity | Finding | Recommendation |
+|---|----------|---------|----------------|
+| 46 | **Medium** | Backend has 13 test files (~1,500 LOC), frontend has 17 (~1,750 LOC) — insufficient for 30K LOC codebase | Add tests for chat pipeline, memory system, RAG pipeline, and all route handlers |
+| 47 | **Medium** | No integration/e2e tests — only unit tests with mocked dependencies | Add Playwright or Cypress tests for critical user flows |
+| 48 | **Low** | No tests for proxy route SSRF protection | Add SSRF bypass test cases |
+| 49 | **Low** | Frontend tests don't test streaming behavior or WebSocket connections | Add tests for `useChatRuntime` stream parsing |
+
+### Performance
+
+| # | Severity | Finding | Recommendation |
+|---|----------|---------|----------------|
+| 50 | **Medium** | BM25 index rebuilt from DB on every server restart — cold start penalty | Persist index to disk or Redis |
+| 51 | **Medium** | Memory system performs 3 parallel DB queries per chat message | Consider batching or caching recent queries |
+| 52 | **Low** | Frontend manual chunks include large libraries (`framer-motion`, `mermaid`) in single chunks | Further split heavy libraries |
+
+### Documentation
+
+| # | Severity | Finding | Recommendation |
+|---|----------|---------|----------------|
+| 53 | **Medium** | `ARCHITECTURE.md` describes pipeline as 10 steps but code shows 11 (including step 6b) | Update architecture docs to match implementation |
+| 54 | **Low** | `README.md` mentions models that don't exist in `ALLOWED_MODELS` | Sync README model list with code |
+| 55 | **Note** | Arabic comments mixed with English comments across codebase | Establish comment language policy |
 
 ---
 
 ## Prioritized Action Plan
 
-| Priority | Action | Severity | Effort |
-|----------|--------|----------|--------|
-| 1 | Sanitize SVG artifact content with DOMPurify | Critical | S |
-| 2 | Remove hardcoded `AGENT_INTERNAL_SECRET` fallback | Critical | S |
-| 3 | Add max retry count to authFetch | High | S |
-| 4 | Add integration tests for auth middleware and SSRF | High | M |
-| 5 | Remove global `* { transition }` CSS rule | High | S |
-| 6 | Fix email composer text injection (use AUI API) | High | S |
-| 7 | Add exponential backoff to WebSocket reconnect | High | S |
-| 8 | Standardize error response format across routes | Medium | M |
-| 9 | Install helmet and configure proper CSP | Medium | M |
-| 10 | Fix timezone handling in calendar | Medium | M |
-| 11 | Memoize context values to reduce re-renders | Medium | S |
-| 12 | Add logging to silent catch blocks | Medium | M |
-| 13 | Fix trace context to be request-scoped | Medium | M |
-| 14 | Stop leaking `error.message` in API responses | Medium | S |
-| 15 | Add frontend test coverage configuration | Medium | S |
+If the team can only fix N things this sprint, this is the order:
+
+| Priority | # | Issue | Effort | Impact |
+|----------|---|-------|--------|--------|
+| 1 | 40 | Add auth + SSRF protection to proxy route | S | Prevents server abuse as open proxy |
+| 2 | 24 | Remove `.env` from git tracking | S | Prevents secret leakage |
+| 3 | 42 | Fix rate limiter auth skip | S | Prevents unauthenticated abuse |
+| 4 | 2 | Add ban-status re-verification on cache hit | M | Prevents banned user access |
+| 5 | 15 | Add memory eviction/TTL | L | Prevents unbounded storage growth |
+| 6 | 16 | Improve memory deduplication | M | Reduces memory noise |
+| 7 | 10 | Fail-closed moderation on Edge Function failure | M | Improves content safety |
+| 8 | 46 | Expand test coverage | L | Reduces regression risk |
+| 9 | 50 | Persist BM25 index | M | Improves restart performance |
+| 10 | 37 | Consolidate duplicate component directories | S | Reduces maintenance confusion |
+
+**Legend:** S = Small (< 1 day), M = Medium (1-3 days), L = Large (3-7 days)
 
 ---
 
 ## Appendix: Lower-Priority Nits
 
-- `useKeyboardShortcuts` comment contradicts behavior (`hooks/useKeyboardShortcuts.ts:30`)
-- `useScrollPreservation` has eslint-disable for missing dependency (`hooks/useScrollPreservation.ts:99`)
-- `LoadingStates` uses framer-motion for simple animations (~40KB) (`components/ui/LoadingStates.tsx:1`)
-- `ErrorBoundary` is a class component (React 19 compatibility note) (`components/ui/core/ErrorBoundary.tsx:124`)
-- Toast animation keyframes defined in two places (`styles/animations.css` + `styles/components.css`)
-- `prefers-reduced-motion` query is incomplete — doesn't cover Tailwind animation classes (`styles/base.css:225-243`)
-- Custom cursor SVGs embedded in CSS (~3KB) (`styles/base.css:150-183`)
-- Mixed quote styles in route error responses (single vs double quotes)
-- `react-router-dom` v6 listed but README says v7
-- README references `backend/tests/` but tests are in `backend/src/__tests__/`
-- README lists `npm run lint` and `npm run typecheck` scripts that don't exist
+- `backend-dev.log` and `backend-dev-error.log` present in repo — should be gitignored
+- `frontend/dev-output.log` and `dev-error.log` present — same issue
+- `fix-paths.ps1.bak` in backend root — stale backup file
+- Arabic error messages hardcoded in `moderation.service.ts:113` — should use i18n
+- `chat-shared.ts:82` default model is `gpt-5.4` — verify this model actually exists
+- Frontend `config.ts` references `VITE_PYTHON_BACKEND_URL` — no Python backend exists in this project
+- `services/supabase.service.ts` — service name is generic; could conflict with other Supabase usage
+- `prompts/` directory not reviewed in depth — system prompts are security-sensitive
