@@ -139,6 +139,15 @@ vi.mock('../../../hooks/useKeyboardShortcuts', () => ({
   useKeyboardShortcuts: vi.fn(),
 }));
 
+vi.mock('@/hooks/useChatHistory', () => ({
+  useChatHistory: () => ({
+    loadThread: vi.fn(),
+    threads: [],
+    activeThreadId: null,
+    activeThreadMessages: [],
+  }),
+}));
+
 vi.mock('../../../context/AgenticUIBus', () => ({
   useAgenticAction: vi.fn(),
 }));
