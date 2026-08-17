@@ -27,6 +27,7 @@ import analyticsRoutes from "./routes/analytics.routes.js";
 import proxyRoutes from "./routes/proxy.routes.js";
 import moderationRoutes from "./routes/moderation.routes.js";
 import textbookRoutes from "./routes/textbook.routes.js";
+import toolsRoutes from "./routes/tools.routes.js";
 import { initializeBM25FromDB } from "./services/rag/bm25-search.js";
 
 // ==========================================
@@ -119,6 +120,7 @@ app.use("/api/memory", authMiddleware, memoryRoutes);
 app.use("/api/artifacts", authMiddleware, artifactsRoutes);
 app.use("/api/analytics", authMiddleware, analyticsRoutes);
 app.use("/api/textbooks", authMiddleware, textbookRoutes);
+app.use("/api/tools", authMiddleware, toolsRoutes);
 
 if (process.env.NODE_ENV === "development") {
   app.post("/api/dev/reprocess/:id", async (req: Request, res: Response) => {

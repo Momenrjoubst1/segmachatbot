@@ -291,9 +291,8 @@ export const CodeIDEArtifact = ({
           addTerminalLine("$ ✗ فشل التنفيذ", "error")
         }
       } else {
-        // Fallback simulation
-        addTerminalLine("مرحباً بك في بيئة التطوير!", "output")
-        addTerminalLine("$ ✓ تم التنفيذ بنجاح", "success")
+        // No executor wired — fail honestly instead of pretending success.
+        addTerminalLine("$ ✗ لا يوجد منفّذ متصل (No executor connected)", "error")
       }
     } catch (error: any) {
       addTerminalLine(`$ خطأ: ${error.message}`, "error")

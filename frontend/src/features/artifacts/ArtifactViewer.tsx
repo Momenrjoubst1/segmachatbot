@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Code2Icon, CopyIcon, DownloadIcon, ExternalLinkIcon, EyeIcon, TypeIcon } from "lucide-react";
 import DOMPurify from "dompurify";
 import { CodeIDEArtifact } from "@/components/ui/code-ide-artifact";
+import { getAssistantAuthHeaders } from "@/lib/auth";
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3004";
 
 interface Artifact {
   id: string;
@@ -293,20 +296,25 @@ function IDEViewer({ content }: { content: string }) {
     return <div className="p-4 text-muted-foreground">Invalid IDE project data</div>;
   }
 
-  // Handle code execution
+  // Handle code execution — real call to the sandboxed executor endpoint.
+  // Uses the absolute backend URL (the app may be served from a different
+  // origin in production, where a relative /api path would 404).
   const handleExecute = async (code: string, language: string) => {
     try {
-      // Call the backend API to execute code
-      const response = await fetch('/api/tools/execute', {
+      const headers = await getAssistantAuthHeaders();
+      const response = await fetch(`${BACKEND_URL}/api/tools/execute`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tool: 'ide_execute_code',
-          args: { code, language }
-        }),
+        headers,
+        body: JSON.stringify({ code, language }),
       });
-      
+
       const result = await response.json();
+      if (!response.ok) {
+        return {
+          success: false,
+          error: result?.error || `Execution failed (HTTP ${response.status})`,
+        };
+      }
       return {
         success: result.status === 'success',
         output: result.output,

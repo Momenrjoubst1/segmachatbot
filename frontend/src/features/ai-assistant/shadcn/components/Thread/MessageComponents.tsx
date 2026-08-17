@@ -41,7 +41,7 @@ import {
 } from "lucide-react";
 import { create } from "zustand";
 import { LexicalComposerInput } from "@assistant-ui/react-lexical";
-import { type FC, useCallback, useMemo, useState } from "react";
+import { type FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import { type DirectiveChipProps } from "@assistant-ui/react-lexical";
 import { WrenchIcon } from "lucide-react";
@@ -669,12 +669,32 @@ export const AssistantMessage: FC = () => {
     reloadBtn?.click();
   }, []);
 
+  const reloadBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // Code-block "Regenerate" dispatches this event (see markdown-text.tsx);
+  // clicking the hidden Reload button re-runs generation for THIS message.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ messageId?: string }>).detail;
+      if (detail?.messageId === messageId) {
+        reloadBtnRef.current?.click();
+      }
+    };
+    window.addEventListener("sigma:reload-message", handler);
+    return () => window.removeEventListener("sigma:reload-message", handler);
+  }, [messageId]);
+
   return (
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
       className="fade-in slide-in-from-bottom-1 relative mx-auto w-full min-w-0 max-w-3xl animate-in duration-150"
     >
+      {/* Hidden reload trigger — programmatic regeneration for this message
+          (code-block Regenerate button + interrupted-retry path). */}
+      <ActionBarPrimitive.Reload asChild>
+        <button ref={reloadBtnRef} className="hidden" aria-label="Retry" data-testid="assistant-reload" />
+      </ActionBarPrimitive.Reload>
       <div className="message-hover-wrapper px-1 py-0.5 -mx-1 -my-0.5">
         <div
           data-slot="aui_assistant-message-content"

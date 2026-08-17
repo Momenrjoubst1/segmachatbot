@@ -11,9 +11,11 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import React, { type FC, memo, useRef, useState, useEffect } from "react";
 import { Highlight } from "@/components/ui/perspective-highlight";
-import { CopyIcon, PlayIcon, RefreshCwIcon, DownloadIcon, ShareIcon } from "lucide-react";
+import { CopyIcon, PlayIcon, RefreshCwIcon, DownloadIcon, ShareIcon, Loader2Icon, XIcon } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { getAssistantAuthHeaders } from "@/lib/auth";
+import { useGuestMode } from "@/context/GuestModeContext";
 import { CursorBlinker } from "./CursorBlinker";
 import { useBotStatus } from "./useBotStatus";
 import { useAuiState } from "@assistant-ui/react";
@@ -89,7 +91,22 @@ const CodeBlockScrollFade: FC<{ children: React.ReactNode }> = ({ children }) =>
 
 
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3004";
+
+interface CodeExecResult {
+  status: string;
+  output?: string;
+  error?: string;
+  language: string;
+  artifact_id?: string;
+}
+
 const CustomSyntaxHighlighter: FC<{ language: string; code: string }> = memo(({ language, code }) => {
+  const messageId = useAuiState((s) => s.message.id);
+  const { isGuestMode } = useGuestMode();
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [execResult, setExecResult] = useState<CodeExecResult | null>(null);
+
   if (language === "solution") {
     return <NotebookPaper content={code} />;
   }
@@ -140,22 +157,56 @@ const CustomSyntaxHighlighter: FC<{ language: string; code: string }> = memo(({ 
     toast.success(`Downloaded code.${extension}`);
   };
 
-  const handleRun = () => {
-    toast.info(`Running ${language} code...`);
-    setTimeout(() => {
-      toast.success("Code execution simulated successfully!");
-    }, 1000);
+  // Real sandboxed execution via POST /api/tools/execute (auth required).
+  const handleRun = async () => {
+    if (isExecuting) return;
+    setIsExecuting(true);
+    setExecResult(null);
+    try {
+      const headers = await getAssistantAuthHeaders();
+      const res = await fetch(`${BACKEND_URL}/api/tools/execute`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ code, language }),
+      });
+      const data = (await res.json()) as CodeExecResult;
+      if (!res.ok) {
+        setExecResult({
+          status: "error",
+          error: data?.error || `Execution failed (HTTP ${res.status})`,
+          language,
+        });
+      } else {
+        setExecResult(data);
+      }
+    } catch (err) {
+      setExecResult({
+        status: "error",
+        error: err instanceof Error ? err.message : "Network error while executing code",
+        language,
+      });
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
+  // Re-generates the assistant message that contains this code block. The
+  // listener + hidden reload button live in AssistantMessage
+  // (MessageComponents.tsx), which has access to the runtime's Reload action.
   const handleRegenerate = () => {
-    toast.success("Regeneration requested");
+    window.dispatchEvent(
+      new CustomEvent("sigma:reload-message", { detail: { messageId } }),
+    );
   };
 
   const handleShare = () => {
-    navigator.clipboard.writeText(code).then(() => {
-      toast.success("Shared: Code snippet link copied to clipboard");
+    const markdown = "```" + language + "\n" + code + "\n```";
+    navigator.clipboard.writeText(markdown).then(() => {
+      toast.success("Code copied as Markdown");
     });
   };
+
+  const runSupported = !isGuestMode;
 
   return (
     <Artifact className="my-4 border-zinc-200 bg-[#f5f5f5] text-zinc-900 shadow-md" dir="ltr" style={{ direction: "ltr", textAlign: "left" }}>
@@ -169,12 +220,14 @@ const CustomSyntaxHighlighter: FC<{ language: string; code: string }> = memo(({ 
           </ArtifactDescription>
         </div>
         <ArtifactActions className="flex items-center gap-1" style={{ direction: "ltr" }}>
-          <ArtifactAction
-            icon={PlayIcon}
-            tooltip="Run code"
-            onClick={handleRun}
-            className="size-7 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900"
-          />
+          {runSupported && (
+            <ArtifactAction
+              icon={PlayIcon}
+              tooltip={isExecuting ? "Running…" : "Run code"}
+              onClick={handleRun}
+              className="size-7 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900"
+            />
+          )}
           <ArtifactAction
             icon={CopyIcon}
             tooltip="Copy to clipboard"
@@ -195,7 +248,7 @@ const CustomSyntaxHighlighter: FC<{ language: string; code: string }> = memo(({ 
           />
           <ArtifactAction
             icon={ShareIcon}
-            tooltip="Share"
+            tooltip="Copy as Markdown"
             onClick={handleShare}
             className="size-7 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900"
           />
@@ -230,6 +283,50 @@ const CustomSyntaxHighlighter: FC<{ language: string; code: string }> = memo(({ 
             {code}
           </Prism>
         </CodeBlockScrollFade>
+        {(isExecuting || execResult) && (
+          <div
+            className="border-t border-zinc-200 bg-white px-4 py-3 font-mono text-xs"
+            style={{ direction: "ltr", textAlign: "left" }}
+            data-testid="code-execution-result"
+          >
+            <div className="mb-1.5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              {isExecuting ? (
+                <>
+                  <Loader2Icon className="size-3 animate-spin" />
+                  Running…
+                </>
+              ) : (
+                <>
+                  <span
+                    className={
+                      execResult?.status === "success"
+                        ? "text-emerald-600"
+                        : "text-red-500"
+                    }
+                  >
+                    ● {execResult?.status}
+                  </span>
+                </>
+              )}
+              {!isExecuting && (
+                <button
+                  type="button"
+                  onClick={() => setExecResult(null)}
+                  className="ml-auto text-zinc-400 hover:text-zinc-700"
+                  aria-label="Close output"
+                >
+                  <XIcon className="size-3.5" />
+                </button>
+              )}
+            </div>
+            {!isExecuting && execResult?.output && (
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap text-emerald-700">{execResult.output}</pre>
+            )}
+            {!isExecuting && execResult?.error && (
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap text-red-600">{execResult.error}</pre>
+            )}
+          </div>
+        )}
       </ArtifactContent>
     </Artifact>
   );
