@@ -101,7 +101,7 @@ app.use(
       callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
-    exposedHeaders: ['X-Thread-Id', 'X-Guest-Message-Count', 'X-Guest-Message-Limit', 'X-Guest-Retry-After'],
+    exposedHeaders: ['X-Thread-Id', 'X-Guest-Message-Count', 'X-Guest-Message-Limit', 'X-Guest-Retry-After', 'X-Model-Fallback'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
   }),
 );

@@ -1,7 +1,7 @@
 /**
  * Response Generator Service
  *
- * Extracted from chat.routes.ts — streaming and response generation:
+ * Extracted from chat.routes.ts - streaming and response generation:
  * - Single model streaming
  * - Multi-agent mode (main agent + critic)
  * - Retry logic with exponential backoff
@@ -83,6 +83,18 @@ export async function generateAndStreamResponse(
     cacheMetadata,
   } = options;
 
+  // ── Abort when the client disconnects ──────────────────────────────────
+  // Without this the LLM call (and the entire async onFinish pipeline)
+  // continues running even after the user clicks "Stop generating" -
+  // wasting provider tokens and server CPU.
+  const clientAbort = new AbortController();
+  let clientDisconnected = false;
+
+  res.on("close", () => {
+    clientDisconnected = true;
+    clientAbort.abort();
+  });
+
   const MULTI_AGENT_ENABLED = process.env.MULTI_AGENT_ENABLED === "true";
 
   // ---- Model Fallback state (declared early for use in streamOptions) ----
@@ -90,7 +102,7 @@ export async function generateAndStreamResponse(
   let currentClient = client;
   // isFallback state is tracked for logging only
 
-  // Build the system prompt â€” self-reflection for single model, or multi-agent protocol
+  // Build the system prompt â€" self-reflection for single model, or multi-agent protocol
   const resolvedSystemPrompt = MULTI_AGENT_ENABLED
     ? `${augmentedSystemPrompt}\n\n=========================================\nðŸ¤– MULTI-AGENT PROTOCOL: MAIN AGENT DRAFTING\n=========================================\n${MAIN_AGENT_SYSTEM_PROMPT}`
     : `${augmentedSystemPrompt}\n\n**QUALITY GUIDELINES:**\n- Double-check facts and citations before responding\n- Use clear, well-structured Markdown\n- Ensure accuracy and completeness\n- Keep responses concise but thorough`;
@@ -100,7 +112,7 @@ export async function generateAndStreamResponse(
     messages: finalMessages,
     system: resolvedSystemPrompt,
     maxOutputTokens: 4096,
-    abortSignal: AbortSignal.timeout(120_000),
+    abortSignal: clientAbort.signal,
     onFinish: async ({
       text,
       usage,
@@ -168,7 +180,7 @@ export async function generateAndStreamResponse(
         triggerChatTitlingAsync(activeThreadId);
 
         // Advanced Memory Extraction (Background)
-        // NOTE: fire-and-forget â€” must attach .catch() so that any failure inside
+        // NOTE: fire-and-forget â€" must attach .catch() so that any failure inside
         // tryExtractAndStore (e.g. DB timeout) is logged and never surfaces as an
         // UnhandledPromiseRejection that would crash the Node.js process.
         if (userId) {
@@ -271,7 +283,7 @@ export async function generateAndStreamResponse(
           messages: finalMessages,
           system: resolvedSystemPrompt,
           maxOutputTokens: 4096,
-          abortSignal: AbortSignal.timeout(120_000),
+          abortSignal: clientAbort.signal,
           ...(Object.keys(enabledTools).length > 0
             ? { tools: enabledTools, stopWhen: stepCountIs(15) }
             : {}),
@@ -298,12 +310,12 @@ export async function generateAndStreamResponse(
             {
               // FIX: Use system role for draft review instead of user role
               role: "system" as const,
-              content: `[Main Agent Draft â€” Review and polish before outputting to user]\n\n${mainAgentDraft}`,
+              content: `[Main Agent Draft - Review and polish before outputting to user]\n\n${mainAgentDraft}`,
             },
           ],
           system: criticSystemPrompt,
           maxOutputTokens: 4096,
-          abortSignal: AbortSignal.timeout(120_000),
+          abortSignal: clientAbort.signal,
           onFinish: streamOptions.onFinish,
         });
 
@@ -348,7 +360,7 @@ export async function generateAndStreamResponse(
           // Update stream options for the new model
           streamOptions.model = currentClient.chat(currentModelName);
 
-          // Graceful degradation notice for user — surfaced via the same
+          // Graceful degradation notice for user - surfaced via the same
           // X-Model-Fallback header the pipeline uses for validation-time
           // fallbacks, so the frontend can render it before the stream starts.
           if (!res.headersSent) {
@@ -360,7 +372,7 @@ export async function generateAndStreamResponse(
             );
           }
         } else {
-          // No more fallbacks â€” wait before retry
+          // No more fallbacks â€" wait before retry
           await new Promise((resolve) =>
             setTimeout(resolve, 500 * streamAttempts),
           );
