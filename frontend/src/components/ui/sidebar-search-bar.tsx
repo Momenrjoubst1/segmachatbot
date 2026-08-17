@@ -16,7 +16,7 @@ import { useChatHistory } from "../../hooks/useChatHistory";
  * (same height, rounded-full pill, border/bg, gap) so the two stack as a
  * matched pair:
  *
- *   [ +  New Chat                       Ctrl+⌘+O ]
+ *   [ +  New Chat                    Ctrl+Shift+O ]
  *   [ 🔍 Search chats…                  Ctrl+K  + ]
  *
  * - Left:  Search icon (mirrors the Plus icon on the New Chat button)
