@@ -771,10 +771,6 @@ button:not(:disabled):not([data-state="open"]):active,
   inset: 6px;
 }
 
-.aui-sidebar-toggle::before {
-  inset: 6px;
-}
-
 /* Edit pencil on user messages â€” scale effect (complements state-layer) */
 .aui-user-action-edit {
   transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
@@ -821,5 +817,31 @@ button:active:not(:disabled) {
   -webkit-user-select: text !important;
   -moz-user-select: text !important;
   -ms-user-select: text !important;
+}
+
+@keyframes searchSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes searchPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.7; }
+}
+
+@keyframes chatFloat {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-2px) rotate(2deg); }
+  75% { transform: translateY(1px) rotate(-1deg); }
+}
+
+.chat-icon-float {
+  animation: chatFloat 3s ease-in-out infinite;
+}
+
+.chat-icon-float:hover {
+  animation: none;
+  transform: scale(1.15);
+  transition: transform 0.2s ease;
 }
 

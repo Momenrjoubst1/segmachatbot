@@ -83,11 +83,13 @@ export async function generateAndStreamResponse(
     cacheMetadata,
   } = options;
 
-  // ── Abort when the client disconnects ──────────────────────────────────
+  // ── Abort when the client disconnects OR after a hard timeout ──────────
   // Without this the LLM call (and the entire async onFinish pipeline)
   // continues running even after the user clicks "Stop generating" -
   // wasting provider tokens and server CPU.
   const clientAbort = new AbortController();
+  const timeoutAbort = AbortSignal.timeout(120_000);
+  const combinedSignal = AbortSignal.any([clientAbort.signal, timeoutAbort]);
   let clientDisconnected = false;
 
   res.on("close", () => {
@@ -112,7 +114,7 @@ export async function generateAndStreamResponse(
     messages: finalMessages,
     system: resolvedSystemPrompt,
     maxOutputTokens: 4096,
-    abortSignal: clientAbort.signal,
+    abortSignal: combinedSignal,
     onFinish: async ({
       text,
       usage,
@@ -283,7 +285,7 @@ export async function generateAndStreamResponse(
           messages: finalMessages,
           system: resolvedSystemPrompt,
           maxOutputTokens: 4096,
-          abortSignal: clientAbort.signal,
+          abortSignal: combinedSignal,
           ...(Object.keys(enabledTools).length > 0
             ? { tools: enabledTools, stopWhen: stepCountIs(15) }
             : {}),
@@ -315,7 +317,7 @@ export async function generateAndStreamResponse(
           ],
           system: criticSystemPrompt,
           maxOutputTokens: 4096,
-          abortSignal: clientAbort.signal,
+          abortSignal: combinedSignal,
           onFinish: streamOptions.onFinish,
         });
 

@@ -5,18 +5,25 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=overlays-content" />
-    <meta name="theme-color" content="#3b82f6" />
+    <meta name="theme-color" content="#FDFBF7" />
     <meta name="description" content="AI-powered chatbot with multiple models and tools" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="preload" as="image" href="/auth-banner.jpg" />
     <title>Sigma AI Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Pacifico&display=swap" rel="stylesheet" />
     <style>
+      body {
+        margin: 0;
+        background: #FDFBF7;
+      }
       @keyframes shell-pulse {
-        0%, 100% { opacity: 0.15; }
-        50% { opacity: 0.3; }
+        0%, 100% { opacity: 0.45; }
+        50% { opacity: 0.8; }
       }
       .shell-bar {
-        background: #2a2a2a;
+        background: #EBE5DF;
         border-radius: 8px;
         animation: shell-pulse 1.8s ease-in-out infinite;
       }
@@ -28,7 +35,8 @@
         flex-direction: column;
         gap: 16px;
         padding: 16px;
-        border-right: 1px solid #3a3a3a;
+        background: #F4EFEC;
+        border-right: 1px solid #EBE5DF;
       }
       @media (min-width: 768px) { .shell-sidebar { display: flex; } }
       .shell-chat { display: flex; flex: 1; flex-direction: column; overflow: hidden; }
@@ -38,7 +46,7 @@
         gap: 12px;
         height: 56px;
         padding: 0 16px;
-        border-bottom: 1px solid #3a3a3a;
+        border-bottom: 1px solid #EBE5DF;
       }
       .shell-messages {
         display: flex;
@@ -79,7 +87,7 @@
             <div class="shell-msg-row right"><div class="shell-bar" style="height:36px;width:80%;max-width:360px;border-radius:16px;animation-delay:160ms"></div></div>
             <div class="shell-msg-row left"><div class="shell-bar" style="height:36px;width:55%;max-width:360px;border-radius:16px;animation-delay:240ms"></div></div>
           </div>
-          <div class="shell-composer"><div class="shell-bar" style="height:48px;width:100%;border-radius:16px;border:1px solid #3a3a3a"></div></div>
+          <div class="shell-composer"><div class="shell-bar" style="height:48px;width:100%;border-radius:16px;border:1px solid #EBE5DF;background:#FFFFFF"></div></div>
         </div>
       </div>
     </div>

@@ -8,6 +8,7 @@ import { useChatHistory } from "../../../hooks/useChatHistory";
 import { supabase } from "@/lib/supabaseClient";
 import type { AcademicCourse } from "../../../hooks/useCourses";
 import { useRAGContext } from "../../../context/RAGContext";
+import { sendStateBridge } from "../../../context/sendStateBridge";
 import { toast } from "sonner";
 import {
   dispatchUIAction,
@@ -443,6 +444,9 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
       const controller = new AbortController();
       abortRef.current = () => controller.abort();
 
+      // Dispatch submitting state — user clicked send
+      sendStateBridge.setSubmitting();
+
       let headers: Headers;
       let body = init.body;
 
@@ -487,6 +491,7 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
               }
             }
           });
+          sendStateBridge.setIdle();
           throw new Error("Images are not supported in guest mode");
         }
 
@@ -543,6 +548,7 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
           res = await fetch(input, { ...init, headers, body, signal, credentials });
         } else {
           window.dispatchEvent(new CustomEvent("auth:session-expired"));
+          sendStateBridge.setIdle();
           throw new Error("Session expired: unable to refresh authentication token");
         }
       }
@@ -611,6 +617,7 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
         const encoder = new TextEncoder();
         let hasEnqueuedData = false;
         let streamClosed = false;
+        let hasDispatchedStreaming = false;
         const stream = new ReadableStream({
           async start(controller) {
             try {
@@ -619,6 +626,8 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
                   reader.cancel();
                   if (!streamClosed) { try { controller.close(); } catch {} }
                   streamClosed = true;
+                  // User cancelled — back to idle
+                  sendStateBridge.setIdle();
                   return;
                 }
                 const { done, value } = await reader.read();
@@ -629,6 +638,9 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
                   }
                   if (!streamClosed) { try { controller.close(); } catch {} }
                   streamClosed = true;
+
+                  // Stream complete — back to idle
+                  sendStateBridge.setIdle();
 
                   // Post-stream: update URL for new threads (authenticated only)
                   if (!isGuestMode && isNewThread && serverThreadId) {
@@ -650,9 +662,16 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
                 if (cleanText && !streamClosed) {
                   try { controller.enqueue(encoder.encode(cleanText)); } catch { streamClosed = true; }
                   hasEnqueuedData = true;
+                  // First real chunk received — switch to streaming state
+                  if (!hasDispatchedStreaming) {
+                    hasDispatchedStreaming = true;
+                    sendStateBridge.setStreaming();
+                  }
                 }
               }
             } catch (err) {
+              // Stream failed — back to idle
+              sendStateBridge.setIdle();
               if (hasEnqueuedData) {
                 console.warn("[Runtime] Stream interrupted (partial response preserved):", err);
                 if (!streamClosed) { try { controller.close(); } catch {} }

@@ -19,7 +19,7 @@
   [dir="rtl"] th,
   [dir="rtl"] label,
   [dir="rtl"] button {
-    font-family: "Tajawal", "Inter", sans-serif;
+    font-family: "IBM Plex Sans Arabic", "Inter", sans-serif;
   }
 
   [dir="rtl"] p,
@@ -132,11 +132,11 @@
   .aui-root *,
   [class*="aui-"],
   [data-slot*="aui"] {
-    font-family: "Tajawal", "Inter", sans-serif !important;
+    font-family: "IBM Plex Sans Arabic", "Inter", sans-serif !important;
   }
 
   .assistant-app-shell {
-    font-family: "Tajawal", "Inter", sans-serif !important;
+    font-family: "IBM Plex Sans Arabic", "Inter", sans-serif !important;
   }
 
   .assistant-app-shell p,
@@ -150,7 +150,7 @@
   .assistant-app-shell h6,
   .assistant-app-shell label,
   .assistant-app-shell [dir="auto"] {
-    font-family: "Tajawal", "Inter", sans-serif !important;
+    font-family: "IBM Plex Sans Arabic", "Inter", sans-serif !important;
   }
 
   .assistant-app-shell .aui-root [dir="auto"],
@@ -161,6 +161,6 @@
   }
 
   .aui-root, .aui-root * {
-    font-family: 'Tajawal', 'Inter', sans-serif !important;
+    font-family: 'IBM Plex Sans Arabic', 'Inter', sans-serif !important;
   }
 }

@@ -9,8 +9,8 @@ import { ComposerTriggerPopover } from "../../../ui/composer-trigger-popover";
 import { ComposerQuotePreview, SelectionToolbar } from "../../../ui/quote";
 
 import {
-  AuiIf,
   ComposerPrimitive,
+  useAuiState,
   useUnstableMentionAdapter,
 } from "../../../shims/assistant-ui-compat-shim";
 import {
@@ -24,26 +24,37 @@ import { DirectiveChip } from "./MessageComponents";
 import { useGuestMode } from "@/context/GuestModeContext";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useSendState } from "@/context/SendStateContext";
 
-// NOTE: the example "/" slash-command list was removed — every command was a
-// console.log stub, so selecting one silently did nothing. Re-add it (with
-// real handlers) once the installed @assistant-ui version exposes a composer
-// runtime that lets a command write into the input.
-
+/**
+ * Discrete send-button state machine:
+ *   idle      → arrow-up icon, triggers send
+ *   submitting → spinner, input disabled (waiting for first chunk)
+ *   streaming  → stop icon, triggers abort
+ */
 const ComposerAction: FC<{ disabled?: boolean }> = ({ disabled }) => {
   const { t } = useTranslation();
+  const { sendState } = useSendState();
+  const isRunning = useAuiState((s) => s.thread.isRunning);
+
+  // Fallback: if the runtime says we're not running but our state is stale,
+  // snap back to idle. This catches edge cases where the stream ends
+  // before our bridge callback fires.
+  const effectiveState = !isRunning && sendState !== "idle" ? "idle" : sendState;
 
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
       <ComposerAddAttachment />
       <div className="composer-send-group relative flex items-center gap-1.5">
-        <AuiIf condition={(s) => !s.thread.isRunning}>
+
+        {/* ── idle: send button ─────────────────────────────────── */}
+        {effectiveState === "idle" && (
           <ComposerPrimitive.Send asChild>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  className="state-layer aui-composer-send inline-flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                  className="state-layer aui-composer-send inline-flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-[#A03C3C] disabled:pointer-events-none disabled:opacity-50"
                   aria-label={t("composerSend")}
                   disabled={disabled}
                 >
@@ -53,20 +64,53 @@ const ComposerAction: FC<{ disabled?: boolean }> = ({ disabled }) => {
               <TooltipContent side="bottom">{t("composerSend")}</TooltipContent>
             </Tooltip>
           </ComposerPrimitive.Send>
-        </AuiIf>
-        <AuiIf condition={(s) => s.thread.isRunning}>
+        )}
+
+        {/* ── submitting: loading spinner ───────────────────────── */}
+        {effectiveState === "submitting" && (
+          <button
+            type="button"
+            className="inline-flex size-10 items-center justify-center rounded-full text-muted-foreground cursor-not-allowed"
+            aria-label="Sending..."
+          >
+            <svg
+              className="size-4 animate-spin"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              />
+            </svg>
+          </button>
+        )}
+
+        {/* ── streaming: stop button ───────────────────────────── */}
+        {effectiveState === "streaming" && (
           <ComposerPrimitive.Cancel asChild>
             <Button
               type="button"
               variant="default"
               size="icon"
-              className="aui-composer-cancel size-8 rounded-full"
+              className="aui-composer-cancel size-10 rounded-full"
               aria-label={t("composerStop")}
             >
-              <SquareIcon className="aui-composer-cancel-icon size-3 fill-current" />
+              <SquareIcon className="aui-composer-cancel-icon size-3.5 fill-current" />
             </Button>
           </ComposerPrimitive.Cancel>
-        </AuiIf>
+        )}
+
       </div>
     </div>
   );
@@ -77,6 +121,7 @@ export const ThreadComposer: FC = () => {
   const { t } = useTranslation();
   const { limitReached } = useGuestMode();
   const mention = useUnstableMentionAdapter({ fallbackIcon: WrenchIcon });
+  const isThreadEmpty = useAuiState((s) => s.thread.isEmpty);
 
   const updateComposerForKeyboard = useCallback(() => {
     const viewport = window.visualViewport;
@@ -124,7 +169,7 @@ export const ThreadComposer: FC = () => {
         <ComposerPrimitive.AttachmentDropzone asChild>
           <div
             data-slot="aui_composer-shell"
-            className="flex w-full flex-col gap-2 rounded-3xl border bg-background p-2.5 transition-shadow focus-within:border-ring/75 focus-within:ring-2 focus-within:ring-ring/20 data-[dragging=true]:border-ring data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50"
+            className="flex w-full flex-col gap-2 rounded-3xl border border-[#EBE5DF] bg-white p-2.5 text-[#2C2825] shadow-sm transition-[shadow,background-color] hover:bg-[#F9F6F0] focus-within:bg-white focus-within:border-ring/75 focus-within:ring-2 focus-within:ring-ring/20 data-[dragging=true]:border-ring data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50"
             style={{ marginBottom: "var(--composer-keyboard-offset, 0px)" }}
           >
             <ComposerQuotePreview />
@@ -146,9 +191,11 @@ export const ThreadComposer: FC = () => {
             />
           </div>
         </ComposerPrimitive.AttachmentDropzone>
-        <p className="disclaimer-text px-1.5 pt-1.5 text-center text-xs text-muted-foreground/60">
-          {t("composerDisclaimer")}
-        </p>
+        {!isThreadEmpty && (
+          <p className="disclaimer-text px-1.5 pt-1.5 text-center text-xs text-muted-foreground/60">
+            {t("composerDisclaimer")}
+          </p>
+        )}
       </ComposerPrimitive.Root>
     </ComposerPrimitive.Unstable_TriggerPopoverRoot>
   );

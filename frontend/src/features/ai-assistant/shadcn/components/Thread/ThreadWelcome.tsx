@@ -31,18 +31,18 @@ export const ThreadWelcome: FC = () => {
   return (
     <div
       dir="ltr"
-      className="flex w-full min-w-0 items-center justify-center gap-4 select-none"
+      className="fade-in slide-in-from-bottom-1 flex w-full min-w-0 animate-in fill-mode-both duration-200 flex-row items-center justify-center gap-4 select-none"
     >
       {/* Logo */}
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 100 100"
-        className="size-12 text-primary shrink-0 cursor-pointer transition-all duration-300"
-        fill="currentColor"
+        className="size-14 shrink-0 cursor-pointer transition-all duration-300"
         onClick={handleLogoClick}
         style={{
+          color: '#BE1E2D',
           transform: isAnimating ? 'scale(1.1)' : 'scale(1)',
-          filter: isAnimating ? 'drop-shadow(0 8px 16px rgba(139, 92, 246, 0.4))' : 'none',
+          filter: isAnimating ? 'drop-shadow(0 8px 16px rgba(190, 30, 45, 0.4))' : 'none',
         }}
       >
         <style>{`
@@ -85,44 +85,39 @@ export const ThreadWelcome: FC = () => {
         
         {/* Animated lines from center */}
         <g style={{ opacity: isAnimating ? 1 : 0, transition: 'opacity 0.3s' }}>
-          <line x1="50" y1="50" x2="50" y2="23" className="logo-line-animated logo-line-1" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-          <line x1="50" y1="50" x2="50" y2="77" className="logo-line-animated logo-line-2" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-          <line x1="50" y1="50" x2="26" y2="50" className="logo-line-animated logo-line-3" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-          <line x1="50" y1="50" x2="74" y2="50" className="logo-line-animated logo-line-4" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-          <line x1="74" y1="50" x2="87" y2="37" className="logo-line-animated logo-line-5" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-          <line x1="74" y1="50" x2="87" y2="63" className="logo-line-animated logo-line-6" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-          <line x1="50" y1="23" x2="26" y2="50" className="logo-line-animated logo-line-7" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-          <line x1="50" y1="77" x2="74" y2="50" className="logo-line-animated logo-line-8" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
+          <line x1="50" y1="50" x2="50" y2="23" className="logo-line-animated logo-line-1" stroke="#BE1E2D" strokeWidth="7" strokeLinecap="round" />
+          <line x1="50" y1="50" x2="50" y2="77" className="logo-line-animated logo-line-2" stroke="#BE1E2D" strokeWidth="7" strokeLinecap="round" />
+          <line x1="50" y1="50" x2="26" y2="50" className="logo-line-animated logo-line-3" stroke="#BE1E2D" strokeWidth="7" strokeLinecap="round" />
+          <line x1="50" y1="50" x2="74" y2="50" className="logo-line-animated logo-line-4" stroke="#BE1E2D" strokeWidth="7" strokeLinecap="round" />
+          <line x1="74" y1="50" x2="87" y2="37" className="logo-line-animated logo-line-5" stroke="#BE1E2D" strokeWidth="7" strokeLinecap="round" />
+          <line x1="74" y1="50" x2="87" y2="63" className="logo-line-animated logo-line-6" stroke="#BE1E2D" strokeWidth="7" strokeLinecap="round" />
+          <line x1="50" y1="23" x2="26" y2="50" className="logo-line-animated logo-line-7" stroke="#BE1E2D" strokeWidth="7" strokeLinecap="round" />
+          <line x1="50" y1="77" x2="74" y2="50" className="logo-line-animated logo-line-8" stroke="#BE1E2D" strokeWidth="7" strokeLinecap="round" />
         </g>
         
         {/* Original static logo */}
         <g style={{ opacity: isAnimating ? 0 : 1, transition: 'opacity 0.4s' }}>
-          <line x1="50" y1="23" x2="50" y2="77" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-          <path d="M 50 23 L 26 50 L 50 77" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-          <path d="M 50 23 L 74 50 L 50 77" stroke="currentColor" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-          <line x1="74" y1="50" x2="87" y2="37" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
-          <line x1="74" y1="50" x2="87" y2="63" stroke="currentColor" strokeWidth="7" strokeLinecap="round" />
+          <line x1="50" y1="23" x2="50" y2="77" stroke="#BE1E2D" strokeWidth="7" strokeLinecap="round" />
+          <path d="M 50 23 L 26 50 L 50 77" stroke="#BE1E2D" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <path d="M 50 23 L 74 50 L 50 77" stroke="#BE1E2D" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <line x1="74" y1="50" x2="87" y2="37" stroke="#BE1E2D" strokeWidth="7" strokeLinecap="round" />
+          <line x1="74" y1="50" x2="87" y2="63" stroke="#BE1E2D" strokeWidth="7" strokeLinecap="round" />
         </g>
         
         {/* Nodes - always visible */}
-        <circle cx="50" cy="50" r="4" fill="currentColor" className="logo-center-node" />
-        <circle cx="50" cy="23" r="6.5" fill="currentColor" />
-        <circle cx="50" cy="77" r="6.5" fill="currentColor" />
-        <circle cx="26" cy="50" r="7.5" fill="currentColor" />
-        <circle cx="74" cy="50" r="6.5" fill="currentColor" />
-        <circle cx="87" cy="37" r="6.5" fill="currentColor" />
-        <circle cx="87" cy="63" r="6.5" fill="currentColor" />
+        <circle cx="50" cy="50" r="4" fill="#BE1E2D" className="logo-center-node" />
+        <circle cx="50" cy="23" r="6.5" fill="#BE1E2D" />
+        <circle cx="50" cy="77" r="6.5" fill="#BE1E2D" />
+        <circle cx="26" cy="50" r="7.5" fill="#BE1E2D" />
+        <circle cx="74" cy="50" r="6.5" fill="#BE1E2D" />
+        <circle cx="87" cy="37" r="6.5" fill="#BE1E2D" />
+        <circle cx="87" cy="63" r="6.5" fill="#BE1E2D" />
       </svg>
       
       {/* Welcome Text */}
-      <div className="fade-in slide-in-from-bottom-1 min-w-0 flex-1 animate-in fill-mode-both duration-200">
-        <h1 className="font-semibold text-3xl md:text-4xl lg:text-5xl break-words">
-          Hello {userName}
-        </h1>
-        <p className="mt-2 text-base md:text-lg text-muted-foreground break-words">
-          How can I help you today?
-        </p>
-      </div>
+      <h1 className="font-semibold text-3xl md:text-4xl break-words text-[#2C2825]">
+        Hello {userName}
+      </h1>
     </div>
   );
 };
@@ -136,7 +131,7 @@ const ThreadSuggestionItem: FC = () => {
         <Button
           variant="outline"
           size="sm"
-          className="aui-thread-welcome-suggestion h-9 rounded-full border-border bg-muted/30 px-4 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+          className="aui-thread-welcome-suggestion h-9 rounded-full border border-[#EBE5DF] bg-white px-4 text-sm text-[#2C2825] shadow-sm hover:bg-[#F9F6F0] hover:text-[#2C2825] transition-colors"
         >
           <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" />
         </Button>
@@ -147,7 +142,7 @@ const ThreadSuggestionItem: FC = () => {
 
 const ThreadSuggestions: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestions flex flex-wrap justify-center gap-2 mt-4">
+    <div className="aui-thread-welcome-suggestions flex flex-wrap justify-center gap-2">
       <ThreadPrimitive.Suggestions>{() => <ThreadSuggestionItem />}</ThreadPrimitive.Suggestions>
     </div>
   );
@@ -183,7 +178,7 @@ const NewMessagesPill: FC<{
         onClick={onClick}
         variant="outline"
         size="sm"
-        className="aui-new-messages-pill rounded-full border-zinc-200 bg-background/95 px-4 py-2 text-sm font-medium shadow-lg backdrop-blur-sm transition-colors hover:bg-accent"
+        className="aui-new-messages-pill rounded-full border-[#EBE5DF] bg-white/95 px-4 py-2 text-sm font-medium text-[#2C2825] shadow-lg backdrop-blur-sm transition-colors hover:bg-[#F9F6F0]"
       >
         <ArrowDownIcon className="mr-1.5 size-3.5" />
         New messages ({count})
@@ -253,8 +248,12 @@ export const Thread: FC<{
           >
             <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pt-4">
               <AuiIf condition={(s) => s.thread.isEmpty && shouldShowWelcome}>
-                <div className="flex w-full flex-col items-center gap-6 pt-4">
+                {/* Claude-style empty state: logo, greeting, composer and
+                    suggestions grouped and centered in the viewport instead
+                    of the composer being pinned to the bottom. */}
+                <div className="flex w-full flex-1 flex-col items-center justify-center gap-6 pb-24">
                   <ThreadWelcome />
+                  <ThreadComposer />
                   <ThreadSuggestions />
                 </div>
               </AuiIf>
@@ -279,9 +278,11 @@ export const Thread: FC<{
             />
           </ThreadPrimitive.Viewport>
           
-          <div className="mx-auto w-full max-w-3xl px-4 pb-4 md:pb-6 bg-background">
-            <ThreadComposer />
-          </div>
+          <AuiIf condition={(s) => !(s.thread.isEmpty && shouldShowWelcome)}>
+            <div className="mx-auto w-full max-w-3xl px-4 pb-4 md:pb-6 bg-background">
+              <ThreadComposer />
+            </div>
+          </AuiIf>
           
           <SelectionToolbar />
         </>

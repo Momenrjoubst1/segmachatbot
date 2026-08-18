@@ -23,7 +23,7 @@
 *::-webkit-scrollbar-thumb {
   background: rgba(155, 155, 155, 0.25);
   border-radius: 10px;
-  border: 2px solid transparent;
+  border: none;
   background-clip: padding-box;
   transition: background 0.2s ease;
 }
@@ -31,7 +31,7 @@
 *::-webkit-scrollbar-thumb:hover {
   background: rgba(155, 155, 155, 0.4);
   border-radius: 10px;
-  border: 2px solid transparent;
+  border: none;
   background-clip: padding-box;
 }
 

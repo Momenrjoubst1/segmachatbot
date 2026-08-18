@@ -19,9 +19,11 @@ import type { LoadErrorCode } from "@/lib/load-errors";
 
 import { SidebarView } from "./shadcn/components/Sidebar/SidebarView";
 import { MobileSidebarView } from "./shadcn/components/Sidebar/MobileSidebarView";
+import { SearchDialog } from "./shadcn/components/Sidebar/SearchDialog";
 import { Header } from "./shadcn/components/Header/Header";
 import { useAssistantState } from "./hooks/useAssistantState";
 import { GuestModeProvider, useGuestMode } from "@/context/GuestModeContext";
+import { SendStateProvider } from "@/context/SendStateContext";
 
 
 const WELCOME_SUGGESTIONS = [
@@ -191,27 +193,29 @@ const AssistantChatInner = ({
 
   return (
     <AssistantRuntimeProvider runtime={runtime} aui={aui}>
-      <MessageSyncer />
-      <RAGProvider>
-        <DraftSaver chatKey={chatKey} onDraftSave={onDraftSave} onThreadSwitch={onThreadSwitch} />
-        <DraftRestorer draftText={draftText} />
-        <Shadcn
-          isOnboarded={isGuestMode || isOnboarded}
-          isCoursesLoadingVisible={!isGuestMode && isCoursesLoading && !localOnboarded}
-          coursesError={isGuestMode ? null : coursesError}
-          retryCourses={retryCourses}
-          onActiveCourseChange={setActiveCourse}
-          onCompleteOnboarding={handleCompleteOnboarding}
-          onSkipOnboarding={handleSkipOnboarding}
-          activeView={activeView}
-          onToggleView={onToggleView}
-          artifactPanelOpen={artifactPanelOpen}
-          setArtifactPanelOpen={setArtifactPanelOpen}
-          emailHistoryOpen={emailHistoryOpen}
-          setEmailHistoryOpen={setEmailHistoryOpen}
-          isGuestMode={isGuestMode}
-        />
-      </RAGProvider>
+      <SendStateProvider>
+        <MessageSyncer />
+        <RAGProvider>
+          <DraftSaver chatKey={chatKey} onDraftSave={onDraftSave} onThreadSwitch={onThreadSwitch} />
+          <DraftRestorer draftText={draftText} />
+          <Shadcn
+            isOnboarded={isGuestMode || isOnboarded}
+            isCoursesLoadingVisible={!isGuestMode && isCoursesLoading && !localOnboarded}
+            coursesError={isGuestMode ? null : coursesError}
+            retryCourses={retryCourses}
+            onActiveCourseChange={setActiveCourse}
+            onCompleteOnboarding={handleCompleteOnboarding}
+            onSkipOnboarding={handleSkipOnboarding}
+            activeView={activeView}
+            onToggleView={onToggleView}
+            artifactPanelOpen={artifactPanelOpen}
+            setArtifactPanelOpen={setArtifactPanelOpen}
+            emailHistoryOpen={emailHistoryOpen}
+            setEmailHistoryOpen={setEmailHistoryOpen}
+            isGuestMode={isGuestMode}
+          />
+        </RAGProvider>
+      </SendStateProvider>
     </AssistantRuntimeProvider>
   );
 };
@@ -282,20 +286,20 @@ const AssistantAppContent = () => {
   const draftText = getDraft(chatKey);
 
   return (
-    <div className="assistant-app-shell flex flex-1 h-full w-full overflow-hidden bg-background text-foreground">
+    <div className="assistant-app-shell flex flex-1 h-full w-full overflow-hidden bg-[#FDFBF7] text-foreground">
       <Toaster
         position="top-right"
         toastOptions={{
           style: {
             background: '#ffffff',
-            border: '1px solid #e3e3e3',
-            color: '#3a3a3a',
+            border: '1px solid #EBE5DF',
+            color: '#2C2825',
             padding: '8px 12px',
             fontSize: '13px',
             minWidth: 'auto',
             maxWidth: 'fit-content',
             borderRadius: '8px',
-            fontFamily: 'Tajawal, Inter, sans-serif',
+            fontFamily: 'IBM Plex Sans Arabic, Inter, sans-serif',
           },
           className: 'toast-compact',
         }}
@@ -380,6 +384,7 @@ const AssistantAppContent = () => {
           </div>
         </div>
       </TooltipProvider>
+      <SearchDialog />
     </div>
   );
 };

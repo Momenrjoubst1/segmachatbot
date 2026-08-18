@@ -664,9 +664,7 @@ export const AssistantMessage: FC = () => {
   const chatMessage = activeThreadMessages?.find((m: any) => m.id === messageId) as { interrupted?: boolean } | undefined;
 
   const handleRetryInterrupted = useCallback(() => {
-    const root = document.querySelector('[data-slot="aui_assistant-message-root"]');
-    const reloadBtn = root?.querySelector('[aria-label="Retry"]') as HTMLButtonElement | undefined;
-    reloadBtn?.click();
+    reloadBtnRef.current?.click();
   }, []);
 
   const reloadBtnRef = useRef<HTMLButtonElement | null>(null);

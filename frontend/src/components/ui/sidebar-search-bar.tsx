@@ -6,7 +6,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { SearchIcon, MessageSquareIcon, PlusIcon } from "lucide-react";
+import { SearchIcon } from "lucide-react";
+import { ChatIcon } from "@/components/ui/chat-icon";
 import { cn } from "@/lib/cn";
 import { useChatHistory } from "../../hooks/useChatHistory";
 
@@ -61,14 +62,6 @@ export const SidebarSearchBar: FC<{
     [loadThread, onThreadSelected],
   );
 
-  const handleNewChat = useCallback(() => {
-    loadThread(null);
-    setQuery("");
-    setOpen(false);
-    inputRef.current?.blur();
-    onThreadSelected?.();
-  }, [loadThread, onThreadSelected]);
-
   // Global Ctrl/Cmd+K to focus the search bar
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -102,8 +95,8 @@ export const SidebarSearchBar: FC<{
       <div
         data-testid="sidebar-search-bar"
         className={cn(
-          "group h-9 w-full inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 text-xs text-foreground shadow-none",
-          "transition-colors focus-within:border-foreground/30",
+          "group h-9 w-full inline-flex items-center gap-2 rounded-lg px-3 text-xs text-foreground shadow-none",
+          "transition-colors hover:bg-accent/50",
         )}
       >
         <SearchIcon
@@ -133,18 +126,9 @@ export const SidebarSearchBar: FC<{
           aria-label="Search chats"
           className="flex-1 min-w-0 bg-transparent border-none outline-none text-xs text-foreground placeholder:text-muted-foreground"
         />
-        <kbd className="hidden sm:inline-flex shrink-0 items-center gap-0.5 rounded bg-muted px-1 py-0.5 font-mono text-[9px] text-muted-foreground">
+        <kbd className="hidden sm:inline-flex shrink-0 items-center gap-0.5 rounded text-[9px] text-muted-foreground">
           Ctrl+K
         </kbd>
-        <button
-          type="button"
-          onClick={handleNewChat}
-          aria-label="New chat"
-          title="New chat"
-          className="state-layer shrink-0 inline-flex size-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-        >
-          <PlusIcon className="size-3.5" />
-        </button>
       </div>
 
       {/* Results dropdown */}
@@ -165,7 +149,7 @@ export const SidebarSearchBar: FC<{
                   className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent transition-colors text-xs text-foreground"
                   role="option"
                 >
-                  <MessageSquareIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                  <ChatIcon className="size-4 shrink-0 text-muted-foreground" />
                   <span className="truncate">{thread.title || "New Chat"}</span>
                 </button>
               ))}

@@ -63,7 +63,7 @@ export const Header: FC<HeaderProps> = ({
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 px-4">
       <AnimatedDock
-        className="h-10 px-2 pb-1.5 bg-neutral-900/40 border border-white/5 rounded-xl gap-2 flex items-center justify-center shadow-none mx-0"
+        className="h-10 px-2 pb-1.5 bg-white border border-[#EBE5DF] rounded-xl gap-2 flex items-center justify-center shadow-sm mx-0"
         items={[
           {
             onClick: () => handleFeatureClick('calendar', () => onToggleView(activeView === 'calendar' ? 'chat' : 'calendar')),

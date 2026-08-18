@@ -1,182 +1,47 @@
-import { type FC, useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { type FC, useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/cn";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThreadList } from "../../../ui/thread-list";
 import { type AcademicCourse } from "../../../../../hooks/useCourses";
 import { UserProfileCard, useUserProfile } from "./UserProfileCard";
-import { NewChatButtonIcon } from "./NewChatButton";
+import { NewChatButtonIcon, NewChatButtonFull } from "./NewChatButton";
 import { getUserAvatarUrl } from "@/lib/cn";
-import { LogIn, AlertCircle, SearchIcon, MessageSquareIcon } from "lucide-react";
+import { LogIn, AlertCircle, SearchIcon } from "lucide-react";
 import { useChatHistory } from "../../../../../hooks/useChatHistory";
 import { useGuestMode } from "@/context/GuestModeContext";
+
+const MIN_WIDTH = 200;
+const MAX_WIDTH = 500;
+const DEFAULT_WIDTH = 300;
+const COLLAPSE_THRESHOLD = 150;
 
 const SidebarCollapsedView: FC<{
   onToggle?: () => void;
   onNewChat?: () => void;
 }> = ({ onToggle, onNewChat }) => {
   const profile = useUserProfile();
-  const { threads, loadThread } = useChatHistory();
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  const filteredThreads = useMemo(() => {
-    if (!searchQuery.trim()) return [];
-    const query = searchQuery.toLowerCase();
-    return threads.filter((t) =>
-      t.title?.toLowerCase().includes(query)
-    ).slice(0, 8);
-  }, [threads, searchQuery]);
-
-  const handleSelectThread = useCallback((id: string) => {
-    loadThread(id);
-    setSearchOpen(false);
-    setSearchQuery("");
-  }, [loadThread]);
-
-  useEffect(() => {
-    if (searchOpen && searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-  }, [searchOpen]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && searchOpen) {
-        setSearchOpen(false);
-        setSearchQuery("");
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [searchOpen]);
 
   return (
     <div
       className="flex h-full w-full flex-col items-center gap-3 pt-3 cursor-pointer transition-colors"
-      onClick={() => {
-        if (!searchOpen) onToggle?.();
-      }}
+      onClick={() => onToggle?.()}
     >
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggle?.();
-            }}
-            className="state-layer shrink-0 inline-flex size-10 items-center justify-center rounded-full text-muted-foreground hover:text-foreground group"
-            aria-label="Expand sidebar"
-          >
-            <svg className="size-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <line x1="9" y1="3" x2="9" y2="21" />
-              <polyline points="14 9 18 12 14 15" className="transition-transform duration-300 ease-in-out group-hover:scale-x-[-1]" style={{ transformOrigin: 'center' }} />
-            </svg>
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="right">Expand sidebar</TooltipContent>
-      </Tooltip>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle?.();
+        }}
+        className="state-layer shrink-0 inline-flex size-10 items-center justify-center rounded-full text-muted-foreground hover:text-foreground group"
+        aria-label="Expand sidebar"
+      >
+        <svg className="size-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <line x1="9" y1="3" x2="9" y2="21" />
+          <polyline points="14 9 18 12 14 15" className="transition-transform duration-300 ease-in-out group-hover:scale-x-[-1]" style={{ transformOrigin: 'center' }} />
+        </svg>
+      </button>
 
-      {/* Search shortcut — inline search bar */}
-      <div className="relative flex items-center" onClick={(e) => e.stopPropagation()}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSearchOpen(!searchOpen);
-                if (searchOpen) {
-                  setSearchQuery("");
-                }
-              }}
-              className={cn(
-                "group state-layer shrink-0 inline-flex size-10 items-center justify-center rounded-full transition-all duration-300",
-                searchOpen
-                  ? "text-foreground bg-accent/50 scale-110 shadow-md"
-                  : "text-muted-foreground hover:text-foreground hover:scale-110 hover:bg-accent/50 hover:shadow-md"
-              )}
-              aria-label="Search"
-            >
-              <SearchIcon className={cn(
-                "size-4 transition-transform duration-300",
-                searchOpen ? "rotate-[15deg] scale-110" : "group-hover:rotate-[15deg] group-hover:scale-110"
-              )} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right">Search</TooltipContent>
-        </Tooltip>
-
-        {/* Inline search input + results */}
-        <div
-          className={cn(
-            "absolute left-12 transition-all duration-300 ease-in-out",
-            searchOpen ? "w-64 opacity-100" : "w-0 opacity-0 pointer-events-none"
-          )}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => setSearchOpen(true)}
-            placeholder="Search chats..."
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                setSearchOpen(false);
-                setSearchQuery("");
-              }
-            }}
-            className="w-full h-10 rounded-full border border-zinc-200 bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-zinc-400 focus:ring-2 focus:ring-zinc-200 transition-all duration-200 cursor-text"
-          />
-
-          {/* Search results dropdown */}
-          {searchQuery && filteredThreads.length > 0 && (
-            <div
-              className="absolute top-12 left-0 w-full bg-white border border-zinc-200 rounded-xl shadow-lg overflow-hidden z-50"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="max-h-64 overflow-y-auto">
-                {filteredThreads.map((thread) => (
-                  <button
-                    key={thread.id}
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      handleSelectThread(thread.id);
-                    }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-zinc-100 transition-colors border-b border-zinc-100 last:border-b-0 cursor-text"
-                  >
-                    <MessageSquareIcon className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="text-sm text-foreground truncate">{thread.title || "New Chat"}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* No results */}
-          {searchQuery && filteredThreads.length === 0 && (
-            <div
-              className="absolute top-12 left-0 w-full bg-white border border-zinc-200 rounded-xl shadow-lg overflow-hidden z-50"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="px-4 py-6 text-center">
-                <p className="text-sm text-muted-foreground">No chats found</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* New Chat shortcut — icon-only variant, rendered only while the sidebar is collapsed */}
       <NewChatButtonIcon onClick={onNewChat} />
 
       <div className="mt-auto mb-4 flex flex-col items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -184,14 +49,14 @@ const SidebarCollapsedView: FC<{
           <img
             src={profile.avatar}
             alt={profile.name}
-            className="size-7 rounded-full object-cover ring-1 ring-white/20 cursor-pointer"
+            className="size-7 rounded-full object-cover ring-1 ring-[#EBE5DF] cursor-pointer"
             onError={(e) => {
               e.currentTarget.onerror = null;
               e.currentTarget.src = getUserAvatarUrl(null, profile.name, 28);
             }}
           />
         ) : (
-          <div className="size-7 rounded-full bg-white/10 ring-1 ring-white/20 cursor-pointer" />
+          <div className="size-7 rounded-full bg-[#EBE5DF] ring-1 ring-[#EBE5DF] cursor-pointer" />
         )}
       </div>
     </div>
@@ -223,106 +88,186 @@ export const SidebarView: FC<SidebarViewProps> = ({
   const remaining = Math.max(0, guestMessageLimit - guestMessageCount);
   const isLow = remaining <= 1 && remaining > 0;
 
+  // ── Resizable sidebar state ──────────────────────────────────────────
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isHoveringHandle, setIsHoveringHandle] = useState(false);
+  const dragStartX = useRef(0);
+  const dragStartWidth = useRef(DEFAULT_WIDTH);
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    dragStartX.current = e.clientX;
+    dragStartWidth.current = sidebarWidth;
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientX - dragStartX.current;
+      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, dragStartWidth.current + delta));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      setSidebarWidth((prev) => {
+        if (prev < COLLAPSE_THRESHOLD) {
+          onToggle?.();
+          return DEFAULT_WIDTH;
+        }
+        return prev;
+      });
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isDragging, onToggle]);
+
+  // Reset width when expanding from collapsed
+  useEffect(() => {
+    if (!collapsed) {
+      setSidebarWidth(DEFAULT_WIDTH);
+    }
+  }, [collapsed]);
+
   return (
     <aside
       data-testid="sidebar-view"
       className={cn(
-        "flex h-full flex-col transition-all duration-200 shrink-0",
-        !collapsed ? "w-65 opacity-100" : "w-12 opacity-100 overflow-visible",
+        "relative flex h-full flex-col shrink-0 border-r border-[#EBE5DF] bg-[#F4EFEC]",
+        !collapsed ? "opacity-100" : "w-12 opacity-100 overflow-visible",
       )}
+      style={!collapsed ? { width: sidebarWidth } : undefined}
     >
       <span data-testid="sidebar-collapsed" className="hidden">{String(collapsed)}</span>
       {!collapsed ? (
-        <div className="flex h-full w-65 shrink-0 flex-col">
-          <div className="flex h-14 shrink-0 items-center justify-between pl-4 pr-3 w-full">
-            <span className="text-2xl font-semibold tracking-tight text-foreground select-none">Sigma</span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onToggle}
-                  data-testid="sidebar-toggle"
-                  className="aui-sidebar-toggle text-muted-foreground hover:text-foreground group"
-                >
-                  <svg className="size-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                    <line x1="9" y1="3" x2="9" y2="21" />
-                    <polyline points="18 15 14 12 18 9" className="transition-transform duration-300 ease-in-out group-hover:scale-x-[-1]" style={{ transformOrigin: 'center' }} />
-                  </svg>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Collapse sidebar</TooltipContent>
-            </Tooltip>
+        <div className="flex h-full min-w-0 flex-col">
+          {/* Header */}
+          <div className="flex h-12 shrink-0 items-center justify-between ps-3 pe-2">
+            <span className="text-xl font-semibold tracking-tight text-foreground select-none" style={{ fontFamily: "'Pacifico', cursive" }}>Sigma</span>
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => {
+                  const event = new CustomEvent('open-search');
+                  window.dispatchEvent(event);
+                }}
+                className="state-layer shrink-0 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Search"
+              >
+                <SearchIcon className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={onToggle}
+                data-testid="sidebar-toggle"
+                className="state-layer aui-sidebar-toggle shrink-0 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Collapse sidebar"
+              >
+                <svg className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <line x1="9" y1="3" x2="9" y2="21" />
+                  <polyline points="18 15 14 12 18 9" className="transition-transform duration-300 ease-in-out group-hover:scale-x-[-1]" style={{ transformOrigin: 'center' }} />
+                </svg>
+              </button>
+            </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-3 pb-1">
+
+          {/* New Chat button — fixed, not scrollable */}
+          <div className="shrink-0 px-2 pt-2 pb-1">
+            <NewChatButtonFull onClick={() => {
+              loadThread(null);
+              onActiveCourseChange(null);
+            }} />
+          </div>
+
+          {/* Scrollable thread list area */}
+          <div className="flex-1 min-h-0 overflow-y-auto pr-0 mr-0">
             {isGuestMode ? (
-              <div className="flex flex-col items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-center">
-                {limitReached ? (
-                  <>
-                    <div className="flex items-center gap-2 text-amber-400">
-                      <AlertCircle className="size-4" />
-                      <p className="text-xs font-medium">Free message limit reached</p>
-                    </div>
-                    {retryAfterSeconds !== null && retryAfterSeconds > 0 && (
-                      <p className="text-[10px] text-muted-foreground">
-                        Try again in {Math.ceil(retryAfterSeconds / 60)} minutes
-                      </p>
-                    )}
-                    <button
-                      onClick={() => navigate("/login", { state: { from: `` } })}
-                      className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90 transition-colors"
-                    >
-                      <LogIn className="size-4" />
-                      Sign in for unlimited
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex flex-col gap-1">
-                      <p className="text-xs text-muted-foreground">
-                        {guestMessageCount} of {guestMessageLimit} free messages used
-                      </p>
-                      <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                        <div
-                          className={cn(
-                            "h-full rounded-full transition-all duration-300",
-                            isLow ? "bg-amber-400" : "bg-primary"
-                          )}
-                          style={{ width: `${(guestMessageCount / guestMessageLimit) * 100}%` }}
-                        />
+              <div className="px-2 pt-2 pb-1">
+                <div className="flex flex-col items-center gap-3 rounded-lg border border-[#EBE5DF] bg-white p-3 text-center shadow-sm">
+                  {limitReached ? (
+                    <>
+                      <div className="flex items-center gap-2 text-amber-400">
+                        <AlertCircle className="size-4" />
+                        <p className="text-xs font-medium">Free message limit reached</p>
                       </div>
-                      {isLow && (
-                        <p className="text-[10px] text-amber-400">
-                          {remaining} {remaining === 1 ? "message" : "messages"} remaining
+                      {retryAfterSeconds !== null && retryAfterSeconds > 0 && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Try again in {Math.ceil(retryAfterSeconds / 60)} minutes
                         </p>
                       )}
-                    </div>
-                    <button
-                      onClick={() => navigate("/login", { state: { from: `` } })}
-                      className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm text-foreground hover:bg-white/[0.15] transition-colors"
-                    >
-                      <LogIn className="size-4" />
-                      Sign in
-                    </button>
-                  </>
-                )}
+                      <button
+                        onClick={() => navigate("/login", { state: { from: `` } })}
+                        className="flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90 transition-colors"
+                      >
+                        <LogIn className="size-4" />
+                        Sign in for unlimited
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex flex-col gap-1">
+                        <p className="text-xs text-muted-foreground">
+                          {guestMessageCount} of {guestMessageLimit} free messages used
+                        </p>
+                        <div className="w-full h-1.5 bg-[#EBE5DF] rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all duration-300",
+                              isLow ? "bg-amber-400" : "bg-primary"
+                            )}
+                            style={{ width: `${(guestMessageCount / guestMessageLimit) * 100}%` }}
+                          />
+                        </div>
+                        {isLow && (
+                          <p className="text-[10px] text-amber-400">
+                            {remaining} {remaining === 1 ? "message" : "messages"} remaining
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => navigate("/login", { state: { from: `` } })}
+                        className="flex items-center gap-2 rounded-lg border border-[#EBE5DF] bg-white px-3 py-2 text-sm text-foreground hover:bg-[#F9F6F0] transition-colors"
+                      >
+                        <LogIn className="size-4" />
+                        Sign in
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             ) : threadsError ? (
-              <div className="flex flex-col items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-4 text-center">
-                <p className="text-xs text-destructive">{threadsError}</p>
-                <button
-                  onClick={() => retryFetchThreads()}
-                  className="text-xs font-medium text-destructive underline underline-offset-2 hover:text-destructive/80"
-                >
-                  Retry
-                </button>
+              <div className="px-2 pt-2 pb-1">
+                <div className="flex flex-col items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-center">
+                  <p className="text-xs text-destructive">{threadsError}</p>
+                  <button
+                    onClick={() => retryFetchThreads()}
+                    className="text-xs font-medium text-destructive underline underline-offset-2 hover:text-destructive/80"
+                  >
+                    Retry
+                  </button>
+                </div>
               </div>
             ) : (
               <ThreadList courses={courses} activeCourse={activeCourse} onActiveCourseChange={onActiveCourseChange} />
             )}
           </div>
-          <div className="px-3 pb-3 shrink-0">
+
+          {/* Footer — divider spans full width to touch border-r */}
+          <div className="w-full shrink-0">
             {!isGuestMode && <UserProfileCard />}
           </div>
         </div>
@@ -334,6 +279,31 @@ export const SidebarView: FC<SidebarViewProps> = ({
             onActiveCourseChange(null);
           }}
         />
+      )}
+
+      {/* ── Drag handle ─────────────────────────────────────────────── */}
+      {!collapsed && (
+        <div
+          className={cn(
+            "absolute top-0 right-0 z-50 h-full w-1 cursor-col-resize transition-colors",
+            isDragging
+              ? "bg-[#BE1E2D]/40"
+              : isHoveringHandle
+                ? "bg-[#BE1E2D]/30"
+                : "hover:bg-[#BE1E2D]/20",
+          )}
+          onMouseDown={handleDragStart}
+          onMouseEnter={() => setIsHoveringHandle(true)}
+          onMouseLeave={() => setIsHoveringHandle(false)}
+        >
+          {/* Tooltip on hover */}
+          {isHoveringHandle && !isDragging && (
+            <div className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-[#1a1a1a] px-3 py-2 text-xs text-white shadow-lg">
+              <div className="font-medium">Drag to resize</div>
+              <div className="mt-0.5 text-white/60">Click to collapse <kbd className="ml-1 rounded bg-white/10 px-1 py-0.5 text-[10px]">Ctrl+B</kbd></div>
+            </div>
+          )}
+        </div>
       )}
     </aside>
   );

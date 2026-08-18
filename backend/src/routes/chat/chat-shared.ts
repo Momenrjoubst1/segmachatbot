@@ -107,7 +107,8 @@ function pickFirstAvailableProvider(
 }
 
 export function getProviderAndModel(modelId: string): { provider: ProviderName; modelName: string } {
-  if (modelId === "glm-5.2" || modelId === "glm-4-flash" || modelId.startsWith("glm-")) {
+  const GLM_MODELS = new Set(["glm-5.2", "glm-4-flash"]);
+  if (GLM_MODELS.has(modelId)) {
     return { provider: "bigmodel", modelName: modelId };
   }
   if (modelId === "gpt-5.4") {

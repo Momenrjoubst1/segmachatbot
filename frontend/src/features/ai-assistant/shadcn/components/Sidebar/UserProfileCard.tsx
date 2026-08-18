@@ -78,7 +78,7 @@ export const UserProfileCard: FC = () => {
   if (!profile) return null;
 
   return (
-    <div className="flex items-center gap-2.5 border-t border-border px-1 pt-3">
+    <div className="flex items-center gap-2.5 border-t border-[#EBE5DF] px-2 pt-2.5 pb-2">
       <img
         src={profile.avatar}
         alt={profile.name}

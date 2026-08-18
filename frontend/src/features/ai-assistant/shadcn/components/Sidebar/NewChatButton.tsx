@@ -20,22 +20,22 @@ export const NewChatButtonFull: FC<{
   className?: string;
 }> = ({ onClick, className }) => (
   <Button
-    variant="outline"
+    variant="ghost"
     onClick={onClick}
     aria-label={NEW_CHAT_LABEL}
     data-testid="new-chat-button-full"
     className={cn(
-      "aui-thread-list-new group h-9 justify-between gap-2 rounded-full border-border bg-card px-3 text-xs text-foreground shadow-none disabled:opacity-50",
+      "aui-thread-list-new group h-[34px] w-[calc(100%-8px)] justify-between gap-1.5 rounded-lg -ms-1 px-2 text-sm text-foreground shadow-none disabled:opacity-50 hover:bg-accent transition-colors",
       className,
     )}
   >
-    <span className="flex min-w-0 items-center gap-1.5">
-      <span className="icon-wrapper inline-flex size-3.5 shrink-0 items-center justify-center transition-transform duration-200 ease-out group-hover:rotate-90">
-        <PlusIcon className="size-3.5" />
+    <span className="flex min-w-0 items-center gap-2">
+      <span className="icon-wrapper inline-flex size-6 shrink-0 items-center justify-center rounded-lg bg-[#EBE5DF]/70 transition-transform duration-200 ease-out group-hover:rotate-90 group-hover:bg-[#EBE5DF]">
+        <PlusIcon className="size-4 text-[#7A736E]" />
       </span>
-      <span className="truncate text-start">{NEW_CHAT_LABEL}</span>
+      <span className="truncate text-start font-medium">{NEW_CHAT_LABEL}</span>
     </span>
-    <kbd className="inline-flex shrink-0 items-center gap-0.5 rounded bg-muted px-1 py-0.5 font-mono text-[9px] text-muted-foreground">
+    <kbd className="inline-flex shrink-0 items-center gap-0.5 rounded text-[11px] text-muted-foreground">
       {NEW_CHAT_SHORTCUT}
     </kbd>
   </Button>
