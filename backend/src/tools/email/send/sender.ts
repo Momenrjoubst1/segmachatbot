@@ -223,6 +223,9 @@ function checkInMemoryRateLimit(userId: string): { allowed: boolean; retryAfterM
 // ========================================
 
 const CONFIRMATION_TTL = 5 * 60_000;
+// Minimum age before a confirmation can be used — prevents the model from
+// creating a confirmation and confirming it within the same tool cycle.
+const MIN_CONFIRMATION_AGE_MS = 30_000;
 
 interface PendingConfirmationDB {
   id: string;
@@ -289,6 +292,16 @@ async function getConfirmationDB(confirmationId: string, userId: string): Promis
     .single();
 
   if (error || !data) return null;
+
+  // Reject confirmations created too recently (same tool-cycle abuse)
+  if (data.created_at) {
+    const age = Date.now() - new Date(data.created_at).getTime();
+    if (age < MIN_CONFIRMATION_AGE_MS) {
+      logger.warn('[Email] Confirmation rejected — created too recently', { confirmationId, ageMs: age });
+      return null;
+    }
+  }
+
   return data as PendingConfirmationDB;
 }
 

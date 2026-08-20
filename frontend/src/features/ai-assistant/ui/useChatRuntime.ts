@@ -732,6 +732,7 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
   const feedbackAdapter = useMemo(() => ({
     submit: ({ message, type }: { message: { id: string; role: string }; type: "positive" | "negative" }) => {
       if (message.role !== "assistant") return;
+      if (isGuestMode) return; // Feedback requires authentication
       void (async () => {
         try {
           const headers = await getAssistantAuthHeaders();
@@ -747,7 +748,7 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
         }
       })();
     },
-  }), []);
+  }), [isGuestMode]);
 
   return useChatRuntime({
     transport,

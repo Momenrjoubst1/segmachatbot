@@ -11,7 +11,7 @@ import { buildSystemPrompt, type PromptBuildOptions } from "../../../prompts/ind
 import { UI_ACTION_SYSTEM_PROMPT } from "../ui-action-emitter.js";
 import { isWebSearchAvailable } from "../../../tools/web/search/index.js";
 import { isEmailAvailable } from "../../../tools/email/send/index.js";
-import { TOOL_DEFINITIONS } from "../../../tools/tool-definitions-aggregator.js";
+import { getToolDefinitions } from "../../../tools/tool-definitions-aggregator.js";
 import type { RagContextData } from "./types.js";
 
 export interface AssemblePromptResult {
@@ -26,7 +26,7 @@ export function assembleSystemPrompt(args: {
 }): AssemblePromptResult {
   const basePersona = buildBasePersona();
 
-  const enabledTools = Object.keys(TOOL_DEFINITIONS).filter((name) => {
+  const enabledTools = Object.keys(getToolDefinitions()).filter((name) => {
     if (name === "web_search" && !isWebSearchAvailable()) return false;
     if (name === "send_email" && !isEmailAvailable()) return false;
     return true;

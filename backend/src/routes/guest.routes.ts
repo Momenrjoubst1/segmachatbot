@@ -778,8 +778,7 @@ router.post(
 
     // --- Stream the response with automatic model fallback ---
     const guestCandidateModels = [
-      process.env.GUEST_MODEL || "llama-3.3-70b-versatile",
-      "llama-3.1-8b-instant",
+      process.env.GUEST_MODEL || "qwen/qwen3.6-27b",
     ].filter((v, i, a) => a.indexOf(v) === i);
 
     log.info("Guest chat request", {

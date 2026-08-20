@@ -1,5 +1,7 @@
 const WANDBOX_API = "https://wandbox.org/api/compile.json";
 
+const MAX_OUTPUT_CHARS = 50_000;
+
 const COMPILER_MAPPING: Record<string, string> = {
   python: "cpython-3.13.8",
   javascript: "nodejs-head",
@@ -66,19 +68,31 @@ export async function executeCode(
     const data = (await res.json()) as WandboxResponse;
 
     if (data.compiler_error || (data.status && data.status !== "0" && !data.program_output && data.compiler_message)) {
-      return { status: "compile_error", error: data.compiler_error || data.compiler_message || "خطأ في الترجمة / البناء", language };
+      const errMsg = (data.compiler_error || data.compiler_message || "خطأ في الترجمة / البناء");
+      const truncatedErr = errMsg.length > MAX_OUTPUT_CHARS
+        ? errMsg.substring(0, MAX_OUTPUT_CHARS) + '... (تم الاقتطاع)'
+        : errMsg;
+      return { status: "compile_error", error: truncatedErr, language };
     }
 
     if (data.status && data.status !== "0") {
-      return { status: "runtime_error", error: data.program_error || data.program_message || `فشل التشغيل مع رمز الحالة: ${data.status}`, language };
+      const errMsg = (data.program_error || data.program_message || `فشل التشغيل مع رمز الحالة: ${data.status}`);
+      const truncatedErr = errMsg.length > MAX_OUTPUT_CHARS
+        ? errMsg.substring(0, MAX_OUTPUT_CHARS) + '... (تم الاقتطاع)'
+        : errMsg;
+      return { status: "runtime_error", error: truncatedErr, language };
     }
 
-    const output = data.program_output || data.program_message || "(لا يوجد مخرجات)";
-    return { status: "success", output, language };
+    const output = (data.program_output || data.program_message || "(لا يوجد مخرجات)");
+    const truncated = output.length > MAX_OUTPUT_CHARS
+      ? output.substring(0, MAX_OUTPUT_CHARS) + `\n\n... (تم اقتطاع المخرجات — الأصل ${output.length.toLocaleString()} حرف)`
+      : output;
+    return { status: "success", output: truncated, language };
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
       return { status: "timeout", error: "تجاوز الوقت المسموح للتنفيذ (12 ثانية)", language };
     }
-    return { status: "error", error: `فشل التنفيذ: ${err instanceof Error ? err.message : String(err)}`, language };
+    // Never leak internal error messages to the client
+    return { status: "error", error: "فشل تنفيذ الكود. حاول مرة أخرى.", language };
   }
 }

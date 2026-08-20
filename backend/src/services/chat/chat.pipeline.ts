@@ -23,7 +23,7 @@
 import type { Request, Response } from "express";
 import { log, summarizeMessageForLog, getProviderAndModel, createProviderClient } from "../../routes/chat/chat-shared.js";
 import { generateAndStreamResponse } from "./response-generator.service.js";
-import { TOOL_DEFINITIONS } from "../../tools/tool-definitions-aggregator.js";
+import { getToolDefinitions } from "../../tools/tool-definitions-aggregator.js";
 import { isWebSearchAvailable } from "../../tools/web/search/index.js";
 import { isEmailAvailable } from "../../tools/email/send/index.js";
 import type { ToolDefinition } from "../../tools/shared/types.js";
@@ -53,10 +53,19 @@ function buildEnabledTools(userId: string, intent?: string): Record<string, Tool
     return {};
   }
 
+  // If no specific intent detected, send a minimal tool set to stay under TPM limits
+  const isSpecificIntent = intent && intent !== "small_talk" && intent !== "general";
+
   const enabled: Record<string, ToolDefinition> = {};
-  for (const [name, def] of Object.entries(TOOL_DEFINITIONS) as Array<[string, ToolDefinition]>) {
+  for (const [name, def] of Object.entries(getToolDefinitions()) as Array<[string, ToolDefinition]>) {
     if (name === "web_search" && !isWebSearchAvailable()) continue;
     if (name === "send_email" && !isEmailAvailable()) continue;
+
+    // For general queries, only send essential tools to reduce token usage
+    if (!isSpecificIntent) {
+      const ESSENTIAL_TOOLS = new Set(["get_time", "get_weather", "calculator", "web_search"]);
+      if (!ESSENTIAL_TOOLS.has(name)) continue;
+    }
 
     if (TOOLS_NEEDING_USER_ID.has(name)) {
       enabled[name] = {

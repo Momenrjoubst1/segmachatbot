@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type FC, type ReactNode } from "react";
-import { registerSendStateBridge } from "./sendStateBridge";
+import { registerSendStateBridge, unregisterSendStateBridge } from "./sendStateBridge";
 
 export type SendState = "idle" | "submitting" | "streaming";
 
@@ -19,9 +19,11 @@ export const SendStateProvider: FC<{ children: ReactNode }> = ({ children }) => 
   const setStreaming = useCallback(() => setSendState("streaming"), []);
   const setIdle = useCallback(() => setSendState("idle"), []);
 
-  // Register the bridge so the runtime layer can dispatch state changes
+  // Register the bridge so the runtime layer can dispatch state changes.
+  // Clean up on unmount to avoid stale references.
   useEffect(() => {
     registerSendStateBridge({ setSubmitting, setStreaming, setIdle });
+    return () => { unregisterSendStateBridge(); };
   }, [setSubmitting, setStreaming, setIdle]);
 
   return (

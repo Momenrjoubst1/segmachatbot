@@ -1,6 +1,7 @@
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request } from "express";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createLogger } from "../../utils/logger.js";
 
 // Note: `Request.user` is declared globally by `middleware/auth.middleware.ts`
@@ -76,15 +77,16 @@ export const newChatLimiter = rateLimit({
 
 export const DEFAULT_MODEL =
   process.env.ASSISTANT_DEFAULT_MODEL?.trim() ||
-  "gpt-5.4";
+  "deepseek-v4-flash";
 
 export const ALLOWED_MODELS = [
+  "deepseek-v4-flash",
+  "gemini-3.7-flash",
   "glm-5.2",
   "gpt-5.4",
   "gpt-4o",
   "gpt-4o-mini",
-  "llama-3.3-70b-versatile",
-  "llama-3.1-8b-instant",
+  "qwen/qwen3.6-27b",
   "mixtral-8x7b-32768",
   "google/gemini-2.0-flash-exp:free",
   "qwen/qwen-2.5-72b-instruct:free",
@@ -93,7 +95,7 @@ export const ALLOWED_MODELS = [
   "inclusionai/ling-3.0-tiny",
 ];
 
-export type ProviderName = "openrouter" | "github" | "groq" | "fireworks" | "azure" | "novita" | "bigmodel";
+export type ProviderName = "openrouter" | "github" | "groq" | "fireworks" | "azure" | "novita" | "bigmodel" | "google" | "baichat";
 
 function pickFirstAvailableProvider(
   preferred: Array<{ provider: ProviderName; envKey: string }>,
@@ -107,6 +109,13 @@ function pickFirstAvailableProvider(
 }
 
 export function getProviderAndModel(modelId: string): { provider: ProviderName; modelName: string } {
+  // DeepSeek V4 Flash via B.AI platform
+  if (modelId === "deepseek-v4-flash") {
+    return { provider: "baichat", modelName: "deepseek-v4-flash" };
+  }
+  if (modelId === "gemini-3.7-flash") {
+    return { provider: "google", modelName: "gemini-3.7-flash" };
+  }
   const GLM_MODELS = new Set(["glm-5.2", "glm-4-flash"]);
   if (GLM_MODELS.has(modelId)) {
     return { provider: "bigmodel", modelName: modelId };
@@ -133,7 +142,7 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
   if (modelId === "gpt-4o-mini") {
     return { provider: "github", modelName: "openai/gpt-4o-mini" };
   }
-  if (modelId.includes("llama-") || modelId.includes("mixtral")) {
+  if (modelId.includes("llama-") || modelId.includes("mixtral") || modelId.startsWith("qwen/") || modelId === "qwen/qwen3.6-27b") {
     return { provider: "groq", modelName: modelId };
   }
   if (modelId.startsWith("accounts/fireworks/models/")) {
@@ -146,6 +155,15 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
 }
 
 export function createProviderClient(provider: ProviderName) {
+  if (provider === "baichat") {
+    const baichatKey = process.env.BAICHAT_API_KEY;
+    if (!baichatKey) throw new Error("Missing BAICHAT_API_KEY in environment");
+    return createOpenAI({
+      baseURL: "https://api.chat.b.ai/v1",
+      apiKey: baichatKey,
+    });
+  }
+
   if (provider === "bigmodel") {
     const bigmodelKey = process.env.BIGMODEL_API_KEY;
     if (!bigmodelKey) throw new Error("Missing BIGMODEL_API_KEY in environment");
@@ -201,6 +219,14 @@ export function createProviderClient(provider: ProviderName) {
     return createOpenAI({
       baseURL: "https://api.novita.ai/openai",
       apiKey: process.env.NOVITA_API_KEY,
+    });
+  }
+
+  if (provider === "google") {
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (!geminiKey) throw new Error("Missing GEMINI_API_KEY in environment");
+    return createGoogleGenerativeAI({
+      apiKey: geminiKey,
     });
   }
 

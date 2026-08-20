@@ -1,5 +1,5 @@
 import express from 'express';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { Request } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../utils/express-async-wrapper.js';
@@ -37,7 +37,7 @@ export const codeExecuteLimiter = rateLimit({
   keyGenerator: (req: Request) => {
     const userId = req.user?.id;
     if (userId) return userId;
-    return req.ip || 'unauthenticated';
+    return ipKeyGenerator(req);
   },
 });
 

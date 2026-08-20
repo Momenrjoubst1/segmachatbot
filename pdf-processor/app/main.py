@@ -133,7 +133,7 @@ def _report_progress(textbook_id: str, stage: str, done: int, total: int) -> Non
 
 # Security and limits
 PDF_PROCESSOR_TOKEN = os.environ.get("PDF_PROCESSOR_TOKEN", "")
-MAX_PAGES = int(os.environ.get("PDF_MAX_PAGES", "2000"))
+MAX_PAGES = int(os.environ.get("PDF_MAX_PAGES", "800"))
 UUID_REGEX = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
 )

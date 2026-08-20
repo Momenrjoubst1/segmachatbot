@@ -2,7 +2,7 @@
  * Singleton bridge between the React send-state context and the
  * runtime layer (which lives outside the component tree). The runtime
  * imports `sendStateBridge` and calls its setters directly; the
- * context provider updates the ref on mount.
+ * context provider updates the ref on mount and cleans up on unmount.
  */
 
 interface Bridge {
@@ -23,4 +23,10 @@ export function registerSendStateBridge(b: Bridge) {
   sendStateBridge.setSubmitting = b.setSubmitting;
   sendStateBridge.setStreaming = b.setStreaming;
   sendStateBridge.setIdle = b.setIdle;
+}
+
+export function unregisterSendStateBridge() {
+  sendStateBridge.setSubmitting = noop;
+  sendStateBridge.setStreaming = noop;
+  sendStateBridge.setIdle = noop;
 }

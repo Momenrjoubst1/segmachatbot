@@ -132,18 +132,19 @@ export class CircuitBreaker {
 // ─── Fallback Chain Definition / تعريف سلسلة الاحتياطي ───
 
 const FALLBACK_CHAINS: Record<string, string[]> = {
-  "glm-5.2": ["llama-3.3-70b-versatile", "gpt-4o-mini"],
+  "deepseek-v4-flash": ["gemini-3.7-flash", "gpt-4o-mini"],
+  "gemini-3.7-flash": ["glm-5.2", "gpt-4o-mini"],
+  "glm-5.2": ["qwen/qwen3.6-27b", "gpt-4o-mini"],
   "gpt-5.4": ["gpt-4o", "gpt-4o-mini"],
-  "gpt-4o": ["gpt-4o-mini", "llama-3.3-70b-versatile"],
-  "gpt-4o-mini": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
-  "llama-3.3-70b-versatile": ["llama-3.1-8b-instant", "gpt-4o-mini"],
-  "llama-3.1-8b-instant": ["llama-3.3-70b-versatile", "gpt-4o-mini"],
-  "mixtral-8x7b-32768": ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"],
-  "google/gemini-2.0-flash-exp:free": ["gpt-4o-mini", "llama-3.1-8b-instant"],
-  "qwen/qwen-2.5-72b-instruct:free": ["gpt-4o-mini", "llama-3.1-8b-instant"],
+  "gpt-4o": ["gpt-4o-mini", "qwen/qwen3.6-27b"],
+  "gpt-4o-mini": ["qwen/qwen3.6-27b", "gpt-4o"],
+  "qwen/qwen3.6-27b": ["gpt-4o-mini", "glm-5.2"],
+  "mixtral-8x7b-32768": ["qwen/qwen3.6-27b", "gpt-4o-mini"],
+  "google/gemini-2.0-flash-exp:free": ["gpt-4o-mini", "qwen/qwen3.6-27b"],
+  "qwen/qwen-2.5-72b-instruct:free": ["gpt-4o-mini", "qwen/qwen3.6-27b"],
   "anthropic/claude-3.5-haiku": ["gpt-4o-mini", "gpt-4o"],
-  "accounts/fireworks/models/gemma-4-31b-it": ["gpt-4o-mini", "llama-3.1-8b-instant"],
-  "inclusionai/ling-3.0-tiny": ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"],
+  "accounts/fireworks/models/gemma-4-31b-it": ["gpt-4o-mini", "qwen/qwen3.6-27b"],
+  "inclusionai/ling-3.0-tiny": ["qwen/qwen3.6-27b", "gpt-4o-mini"],
 };
 
 // ─── ModelRouter Class / صنف موجه النماذج ───

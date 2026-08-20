@@ -431,40 +431,79 @@ class UnifiedMemoryManager {
   /**
    * Clean up old memories that exceed TTL thresholds
    * Should be called periodically (e.g., daily cron job)
+   * Iterates per user for defense-in-depth (adds user_id to DELETE queries)
    */
   async cleanupOldMemories(): Promise<{ cleaned: number }> {
     let cleaned = 0;
     const now = Date.now();
-    const FACT_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
-    const CROSS_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+    const factTtlMs = MemoryConfig.memoryBank.maxFactAgeDays * 24 * 60 * 60 * 1000;
+    const crossSessionTtlMs = MemoryConfig.crossSession.maxEntryAgeDays * 24 * 60 * 60 * 1000;
 
     try {
-      // Clean enhanced memory facts older than TTL
       const { supabase } = await import('../rag/rag-supabase-client.js');
-      const cutoffDate = new Date(now - FACT_TTL_MS).toISOString();
-      
-      const { data: oldFacts, error } = await supabase
-        .from('user_memory_facts')
+
+      // --- 1. Clean user_memory rows with explicit expires_at ---
+      const nowIso = new Date(now).toISOString();
+      const { data: expiredRows, error: expiredError } = await supabase
+        .from('user_memory')
         .delete()
-        .lt('created_at', cutoffDate)
+        .not('expires_at', 'is', null)
+        .lt('expires_at', nowIso)
         .select('id');
 
-      if (!error && oldFacts) {
-        cleaned += oldFacts.length;
-        log.info('Cleaned old memory facts', { count: oldFacts.length });
+      if (!expiredError && expiredRows) {
+        cleaned += expiredRows.length;
+        if (expiredRows.length > 0) {
+          log.info('Cleaned expired user_memory rows', { count: expiredRows.length });
+        }
+      } else if (expiredError) {
+        log.warn('Failed to clean expired user_memory rows', { error: expiredError.message });
       }
 
-      // Clean cross-session entries older than TTL
-      const crossSessionCutoff = new Date(now - CROSS_SESSION_TTL_MS).toISOString();
-      const { data: oldSessions, error: sessionError } = await supabase
-        .from('cross_session_memory')
+      // --- 2. Clean old user_memory rows without expires_at (based on maxFactAgeDays) ---
+      const factCutoff = new Date(now - factTtlMs).toISOString();
+      const { data: oldFactUsers, error: oldFactUsersError } = await supabase
+        .from('user_memory')
+        .select('user_id')
+        .is('expires_at', null)
+        .lt('created_at', factCutoff);
+
+      if (!oldFactUsersError && oldFactUsers) {
+        const uniqueUserIds = [...new Set(oldFactUsers.map((u) => u.user_id))];
+
+        for (const userId of uniqueUserIds) {
+          const { data: oldFacts, error } = await supabase
+            .from('user_memory')
+            .delete()
+            .eq('user_id', userId)
+            .is('expires_at', null)
+            .lt('created_at', factCutoff)
+            .select('id');
+
+          if (!error && oldFacts && oldFacts.length > 0) {
+            cleaned += oldFacts.length;
+            log.info('Cleaned old user_memory facts', { userId, count: oldFacts.length });
+          } else if (error) {
+            log.warn('Failed to clean old user_memory facts for user', { userId, error: error.message });
+          }
+        }
+      }
+
+      // --- 3. Clean old chat_sessions (source of cross-session data) ---
+      const crossSessionCutoff = new Date(now - crossSessionTtlMs).toISOString();
+      const { data: oldSessions, error: oldSessionsError } = await supabase
+        .from('chat_sessions')
         .delete()
         .lt('created_at', crossSessionCutoff)
         .select('id');
 
-      if (!sessionError && oldSessions) {
+      if (!oldSessionsError && oldSessions) {
         cleaned += oldSessions.length;
-        log.info('Cleaned old cross-session memories', { count: oldSessions.length });
+        if (oldSessions.length > 0) {
+          log.info('Cleaned old chat_sessions', { count: oldSessions.length });
+        }
+      } else if (oldSessionsError) {
+        log.warn('Failed to clean old chat_sessions', { error: oldSessionsError.message });
       }
     } catch (err) {
       log.warn('Memory cleanup failed', { error: (err as Error)?.message });

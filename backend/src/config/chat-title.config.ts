@@ -62,7 +62,7 @@ export const ChatTitleConfig = {
     { provider: 'azure', model: 'gpt-4o-mini', envKey: 'AZURE_OPENAI_API_KEY' },
     { provider: 'google', model: 'gemini-1.5-flash', envKey: 'GOOGLE_API_KEY' },
     { provider: 'github', model: 'gpt-4o-mini', envKey: 'GITHUB_TOKEN' },
-    { provider: 'groq', model: 'llama-3.1-8b-instant', envKey: 'GROQ_API_KEY' },
+    { provider: 'groq', model: 'qwen/qwen3.6-27b', envKey: 'GROQ_API_KEY' },
   ],
 
   /**

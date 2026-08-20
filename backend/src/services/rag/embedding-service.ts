@@ -21,10 +21,31 @@ if (process.env.GOOGLE_API_KEY && !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
   process.env.GOOGLE_GENERATIVE_AI_API_KEY = process.env.GOOGLE_API_KEY;
 }
 
-const TARGET_DIM = 9692;
+// Target embedding dimension — must match the PostgreSQL vector column size.
+// The pgvector column is defined as vector(9692) in the database schema.
+// Override via EMBEDDING_TARGET_DIM env var if the schema changes.
+const TARGET_DIM = parseInt(process.env.EMBEDDING_TARGET_DIM || '9692', 10);
+
+let detectedDim: number | null = null;
+let dimensionChecked = false;
 
 function fitToTargetDim(vector: number[]): number[] {
   if (vector.length === TARGET_DIM) return vector;
+
+  // Auto-detect dimension from first successful embedding
+  if (!dimensionChecked) {
+    detectedDim = vector.length;
+    dimensionChecked = true;
+
+    if (vector.length !== TARGET_DIM) {
+      const msg = `Embedding dimension mismatch: provider returned ${vector.length} dimensions but database expects ${TARGET_DIM}. ` +
+        `Set EMBEDDING_TARGET_DIM=${vector.length} or update the database schema. ` +
+        `Padding with zeros — this WILL degrade search quality.`;
+      log.error(msg, { actualDim: vector.length, targetDim: TARGET_DIM });
+    }
+  }
+
+  // Still pad/truncate to prevent crashes, but the error above flags it
   if (vector.length > TARGET_DIM) return vector.slice(0, TARGET_DIM);
   return vector.concat(Array(TARGET_DIM - vector.length).fill(0));
 }

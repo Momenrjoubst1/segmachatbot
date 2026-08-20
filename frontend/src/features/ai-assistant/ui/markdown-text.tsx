@@ -480,13 +480,12 @@ const defaultComponents = memoizeMarkdownComponents({
     <li className={cn("aui-md-li leading-8", className)} {...props} />
   ),
   strong: (() => {
-    // Cycle through highlight colors across bold phrases within a render
+    // Cycle through highlight colors across bold phrases within a message
     const COLORS = ["red", "purple", "green"] as const;
-    let counter = 0;
     return function StrongHighlight({ children }: any) {
-      // Each render of this component picks the next color in sequence
-      const color = COLORS[counter % COLORS.length];
-      counter++;
+      const counterRef = useRef(0);
+      const color = COLORS[counterRef.current % COLORS.length];
+      counterRef.current++;
       return <Highlight color={color}>{children}</Highlight>;
     };
   })(),

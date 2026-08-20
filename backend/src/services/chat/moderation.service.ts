@@ -129,15 +129,21 @@ export async function moderateInput(
   const modResult = await invokeModerator(lastUserText);
 
   if (!modResult) {
-    const failClosed = process.env.NODE_ENV === 'test' || process.env.MODERATION_FAIL_CLOSED === 'true';
-    if (failClosed) {
+    // Default: fail-closed in production (block content when moderator is down).
+    // Set MODERATION_FAIL_OPEN=true to explicitly opt-out (not recommended).
+    const failOpen = process.env.MODERATION_FAIL_OPEN === 'true';
+    const isTest = process.env.NODE_ENV === 'test';
+
+    if (isTest || !failOpen) {
+      log.warn('Content moderation service unavailable — blocking request (fail-closed)');
       return {
         blocked: true,
         error: "Content moderation service unavailable",
         messages: coreMessages,
       };
     }
-    log.warn('Content moderation service unavailable — proceeding without it (fail-open)');
+
+    log.warn('Content moderation service unavailable — proceeding without it (fail-open explicitly enabled)');
     return {
       blocked: false,
       messages: coreMessages,
@@ -238,7 +244,26 @@ export async function moderateFull(
   // Supabase moderation
   const modResult = await invokeModerator(content);
   if (!modResult) {
-    // Moderator unavailable â€” fall through with local validation only
+    // Moderator unavailable — fail-closed by default (block content).
+    // Set MODERATION_FAIL_OPEN=true to explicitly opt-out (not recommended).
+    const failOpen = process.env.MODERATION_FAIL_OPEN === 'true';
+    const isTest = process.env.NODE_ENV === 'test';
+
+    if (isTest || !failOpen) {
+      log.warn('Content moderation service unavailable — blocking request in moderateFull (fail-closed)');
+      return {
+        blocked: true,
+        censored: false,
+        flagged: true,
+        action: 'block',
+        reason: 'Content moderation service unavailable',
+        flaggedParts: [],
+        sanitizedContent: content,
+        riskScore: 1.0,
+      };
+    }
+
+    log.warn('Content moderation service unavailable — proceeding with local validation only (fail-open explicitly enabled)');
     return {
       blocked: false,
       censored: validation.sanitizedMessage !== undefined,
