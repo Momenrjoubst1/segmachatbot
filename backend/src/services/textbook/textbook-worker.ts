@@ -9,6 +9,7 @@ import {
   retryDeadLetters,
   reconcileStuckTextbooks,
   requeueTextbookJob,
+  setWorkerHeartbeat,
   type TextbookJobData,
 } from "./textbook-queue.js";
 import { processTextbookJob } from "./textbook-processor.js";
@@ -150,6 +151,10 @@ async function handleJobFailure(job: TextbookJobData & { jobId: string }, err: u
 async function processLoop(): Promise<void> {
   while (!stopRequested) {
     try {
+      // Write heartbeat every iteration so reconcileStuckTextbooks knows
+      // this worker is alive (key expires after 60s if we die).
+      setWorkerHeartbeat().catch(() => {});
+
       const job = await dequeueTextbookJob();
       if (!job) {
         errorCount = 0;

@@ -207,7 +207,12 @@ export async function processTextbookJob(jobData: {
       throw new TransientJobError(`PDF processor error (${processResponse.status}): ${errText}`);
     }
 
-    const result = (await processResponse.json()) as any;
+    const result = (await processResponse.json()) as {
+  page_models: Array<{ page_number: number; width: number; height: number; background_color: string; page_role: string; page_type: string; dominant_script: string; approximate_columns: number; thumbnail_key?: string }>;
+  questions?: Array<{ question_type?: string; number?: number; text: string; page_number?: number; section_path?: string }>;
+  glossary?: Array<{ term: string; definition: string }>;
+  structure?: unknown;
+};
 
     // Write figures to storage (images may already be uploaded by Python)
     const figureUrls: Array<{
@@ -261,7 +266,12 @@ export async function processTextbookJob(jobData: {
       }
     }
 
-    // Insert figures into DB with error handling
+    // ── DB writes (delete → insert per table, idempotent on retry) ───────
+    // Each table is cleared before re-inserting so retries are safe.
+    // Errors are tracked and the worst one is thrown so the worker requeues.
+    let firstCriticalError: string | null = null;
+
+    // 1. Figures
     if (figureUrls.length > 0) {
       const figureRows = figureUrls.map((f) => ({
         textbook_id: textbookId,
@@ -273,13 +283,15 @@ export async function processTextbookJob(jobData: {
         dominant_colors: f.dominant_colors,
         is_colored: f.is_colored,
       }));
+      await supabase.from("textbook_figures").delete().eq("textbook_id", textbookId);
       const { error: figError } = await supabase.from("textbook_figures").insert(figureRows);
       if (figError) {
         log.warn("Failed to insert figure records", { error: figError.message });
+        firstCriticalError ??= `figures: ${figError.message}`;
       }
     }
 
-    // Write structure_tree + book language
+    // 2. Structure tree + book language (UPDATE, not replace)
     const { error: treeError } = await supabase
       .from("textbooks")
       .update({
@@ -289,19 +301,14 @@ export async function processTextbookJob(jobData: {
         updated_at: new Date().toISOString(),
       })
       .eq("id", textbookId);
-
     if (treeError) {
       log.error("Failed to update textbook structure_tree", { error: treeError.message });
+      firstCriticalError ??= `structure: ${treeError.message}`;
     }
 
-    // Write the per-page Book Model (layout digital twin)
+    // 3. Pages (layout digital twin)
     if (Array.isArray(result.page_models) && result.page_models.length > 0) {
-      await supabase
-        .from("textbook_pages")
-        .delete()
-        .eq("textbook_id", textbookId);
-
-      const pageRows = result.page_models.map((pm: any) => ({
+      const pageRows = result.page_models.map((pm) => ({
         textbook_id: textbookId,
         page_number: pm.page_number,
         width: pm.width,
@@ -312,26 +319,23 @@ export async function processTextbookJob(jobData: {
         dominant_script: pm.dominant_script,
         approximate_columns: pm.approximate_columns,
         thumbnail_key: pm.thumbnail_key || null,
-        layout: pm, // full PageModel JSONB (blocks, roles, colors, reading order, figures)
+        layout: pm,
       }));
 
-      for (let i = 0; i < pageRows.length; i += 20) {
+      await supabase.from("textbook_pages").delete().eq("textbook_id", textbookId);
+      // Batch insert in groups of 50 (Supabase single-request body limit)
+      for (let i = 0; i < pageRows.length; i += 50) {
         const { error: pagesError } = await supabase
           .from("textbook_pages")
-          .insert(pageRows.slice(i, i + 20));
+          .insert(pageRows.slice(i, i + 50));
         if (pagesError) {
           log.warn("Failed to insert page models batch", { batch: i, error: pagesError.message });
+          firstCriticalError ??= `pages: ${pagesError.message}`;
         }
       }
     }
 
-    // Write raw chunks (embeddings added in next step by worker)
-    // Delete existing chunks first to prevent duplicates on retry
-    await supabase
-      .from("textbook_chunks")
-      .delete()
-      .eq("textbook_id", textbookId);
-
+    // 4. Chunks
     const chunkData = (result.chunks || []).map(
       (c: {
         page_number: number;
@@ -353,11 +357,13 @@ export async function processTextbookJob(jobData: {
 
     let insertedChunks = 0;
     if (chunkData.length > 0) {
+      await supabase.from("textbook_chunks").delete().eq("textbook_id", textbookId);
       for (let i = 0; i < chunkData.length; i += 100) {
         const batch = chunkData.slice(i, i + 100);
         const { error: chunkError } = await supabase.from("textbook_chunks").insert(batch);
         if (chunkError) {
           log.warn("Failed to insert chunk batch", { batch: i, error: chunkError.message });
+          firstCriticalError ??= `chunks: ${chunkError.message}`;
         } else {
           insertedChunks += batch.length;
         }
@@ -365,22 +371,20 @@ export async function processTextbookJob(jobData: {
     }
 
     if (chunkData.length > 0 && insertedChunks === 0) {
-      // Every batch failed — the book would be "completed" but unsearchable
       throw new TransientJobError("All chunk inserts failed — database write error");
     }
 
-    // Write the curriculum map (units → lessons → topics, questions, glossary)
+    // 5. Curriculum map (units → lessons → topics, questions, glossary)
     const curriculum = result.curriculum;
     if (curriculum) {
       await supabase.from("textbook_sections").delete().eq("textbook_id", textbookId);
       await supabase.from("textbook_questions").delete().eq("textbook_id", textbookId);
       await supabase.from("textbook_glossary").delete().eq("textbook_id", textbookId);
 
-      // root is the book container — store its children (real units)
       await insertSectionTree(textbookId, curriculum.root?.children || [], null);
 
       if (curriculum.questions?.length) {
-        const qRows = curriculum.questions.slice(0, 1000).map((q: any) => ({
+        const qRows = curriculum.questions.slice(0, 1000).map((q) => ({
           textbook_id: textbookId,
           question_type: q.question_type || "lesson_questions",
           number: q.number || null,
@@ -397,7 +401,7 @@ export async function processTextbookJob(jobData: {
       }
 
       if (curriculum.glossary?.length) {
-        const gRows = curriculum.glossary.slice(0, 2000).map((g: any) => ({
+        const gRows = curriculum.glossary.slice(0, 2000).map((g) => ({
           textbook_id: textbookId,
           term: g.term,
           definition: g.definition || null,
@@ -416,6 +420,11 @@ export async function processTextbookJob(jobData: {
         questions: curriculum.questions?.length || 0,
         glossary: curriculum.glossary?.length || 0,
       });
+    }
+
+    // Abort on critical write failure so the worker retries the whole job
+    if (firstCriticalError) {
+      throw new TransientJobError(`Database write failed: ${firstCriticalError}`);
     }
 
     // Don't mark as completed here — worker will do it after embedding

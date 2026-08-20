@@ -1,6 +1,7 @@
 import { supabase } from "../../config/supabase.config.js";
 import { createLogger } from "../../utils/logger.js";
 import { presignR2Get, extractR2KeyFromUrl, isR2Configured } from "./r2-client.js";
+import { TEXTBOOK_CONFIG } from "../../config/constants.js";
 
 const log = createLogger("textbook-search");
 
@@ -48,8 +49,8 @@ class LRUCache<K, V> {
   }
 }
 
-const structureCache = new LRUCache<string, any[]>(CACHE_MAX_SIZE, CACHE_TTL_MS);
-const curriculumCache = new LRUCache<string, Array<{ id: string; level: string; title: string; page_start: number; page_end: number }>>(CACHE_MAX_SIZE, CACHE_TTL_MS);
+const structureCache = new LRUCache<string, Array<{ id: string; level?: string; title?: string; page_start?: number; page_end?: number; textbook_id?: string; children?: unknown[] }>>(CACHE_MAX_SIZE, CACHE_TTL_MS);
+const curriculumCache = new LRUCache<string, Array<{ id: string; level: string; title: string; page_start: number; page_end: number; textbook_id?: string }>>(CACHE_MAX_SIZE, CACHE_TTL_MS);
 
 export function invalidateStructureCache(userId: string): void {
   structureCache.delete(`structure:${userId}`);
@@ -207,14 +208,14 @@ export async function matchCurriculumSection(
       .eq("textbooks.user_id", userId)
       .eq("textbooks.status", "completed")
       .order("order_index");
-    sections = (data || []).map((row: any) => ({
-      id: row.id,
-      level: row.level,
-      title: row.title,
-      page_start: row.page_start,
-      page_end: row.page_end,
-      textbook_id: (row.textbooks as any)?.id || "",
-    })) as any;
+    sections = (data || []).map((row: Record<string, unknown>) => ({
+      id: row.id as string,
+      level: row.level as string,
+      title: row.title as string,
+      page_start: row.page_start as number,
+      page_end: row.page_end as number,
+      textbook_id: (row.textbooks as { id?: string })?.id || "",
+    })) as typeof sections;
     curriculumCache.set(cacheKey, sections as NonNullable<typeof sections>);
   }
 
@@ -229,7 +230,7 @@ export async function matchCurriculumSection(
       bestScore = score;
       bestMatch = {
         matched: true,
-        textbook_id: (section as any).textbook_id || "",
+        textbook_id: section.textbook_id || "",
         section_title: section.title,
         page_start: section.page_start,
         page_end: section.page_end,
@@ -271,11 +272,11 @@ export async function searchTextbookChunks(args: {
   content: string;
   page_number: number;
   structure_path: string;
-  figure_refs: any[];
+  figure_refs: string[];
   similarity: number;
 }>> {
   const { userId, textbookId, query, queryEmbedding, pageStart, pageEnd, matchCount = 10 } = args;
-  const matchThreshold = parseFloat(process.env.TEXTBOOK_MATCH_THRESHOLD || "0.05");
+  const matchThreshold = TEXTBOOK_CONFIG.MATCH_THRESHOLD;
 
   const { data: hybridData, error: hybridError } = await supabase.rpc(
     "hybrid_search_textbook_chunks",
@@ -296,7 +297,7 @@ export async function searchTextbookChunks(args: {
       textbookId,
       count: hybridData.length,
     });
-    return hybridData.map((row: any) => ({
+    return hybridData.map((row: { id: string; content: string; page_number: number; structure_path: string; figure_refs?: unknown[]; final_score: number }) => ({
       id: row.id,
       content: row.content,
       page_number: row.page_number,
@@ -329,7 +330,7 @@ export async function searchTextbookChunks(args: {
     return [];
   }
 
-  return (vectorData as any[]) || [];
+  return (vectorData as unknown[]) || [];
 }
 
 export async function getFiguresForChunks(
@@ -358,7 +359,7 @@ export async function getFiguresForChunks(
   if (!data || data.length === 0) return [];
 
   const figuresWithSignedUrls = await Promise.all(
-    data.map(async (fig: any) => {
+    data.map(async (fig: { image_url?: string; [key: string]: unknown }) => {
       const imageUrl: string = fig.image_url || "";
 
       // R2 figures: stored either as a bare object key ("textbooks/…") or as
@@ -367,7 +368,7 @@ export async function getFiguresForChunks(
         ? imageUrl
         : extractR2KeyFromUrl(imageUrl);
       if (r2Key && isR2Configured()) {
-        const signedR2 = presignR2Get(r2Key, 3600);
+        const signedR2 = await presignR2Get(r2Key, 3600);
         if (signedR2) {
           return { ...fig, image_url: signedR2 };
         }
@@ -430,43 +431,37 @@ export async function searchTextbooksForUser(args: {
     similarity: number;
   }> = [];
 
-  for (const textbook of textbooks) {
-    try {
-      // Check if this textbook has chunks
-      const { data: chunkCheck } = await supabase
-        .from("textbook_chunks")
-        .select("id", { count: "exact", head: true })
-        .eq("textbook_id", textbook.id);
+  // Parallelise across textbooks — each search is independent and the RPC
+  // returns empty results for textbooks with no chunks, so the per-book
+  // "has chunks?" pre-check is unnecessary (saves N round-trips).
+  const perBookLimit = Math.ceil(matchCount / textbooks.length);
 
-      // Note: no cross-user "canonical copy" lookup anymore — the search RPCs
-      // are user-scoped (migration 013), so searching another user's textbook
-      // id would always return empty. Books without chunks are simply skipped.
-      if (!chunkCheck || chunkCheck.length === 0) {
-        continue;
-      }
-
+  const bookResults = await Promise.allSettled(
+    textbooks.map(async (textbook) => {
       const results = await searchTextbookChunks({
         userId,
         textbookId: textbook.id,
         query,
         queryEmbedding,
-        matchCount: Math.ceil(matchCount / textbooks.length),
+        matchCount: perBookLimit,
         pageStart,
         pageEnd,
       });
+      return results.map((r) => ({
+        ...r,
+        id: String(r.id),
+        textbook_id: textbook.id,
+        file_name: textbook.file_name,
+      }));
+    })
+  );
 
-      for (const result of results) {
-        allResults.push({
-          ...result,
-          id: String(result.id),
-          textbook_id: textbook.id,
-          file_name: textbook.file_name,
-        });
-      }
-    } catch (err) {
-      log.warn("Textbook search failed", {
-        textbookId: textbook.id,
-        error: (err as Error).message,
+  for (const settlement of bookResults) {
+    if (settlement.status === "fulfilled") {
+      allResults.push(...settlement.value);
+    } else {
+      log.warn("Textbook search failed (parallel)", {
+        error: settlement.reason instanceof Error ? settlement.reason.message : String(settlement.reason),
       });
     }
   }

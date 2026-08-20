@@ -176,15 +176,38 @@ export function getRedisClient() {
 }
 
 const STUCK_JOB_TIMEOUT_MS = 3600_000; // 1 hour
+const HEARTBEAT_KEY = "textbook:worker:heartbeat";
+const HEARTBEAT_TTL_MS = 60_000; // worker writes every 30s; key expires after 60s
+
+/**
+ * Write a worker heartbeat timestamp to Redis.  Called by the worker loop
+ * every 30 seconds so reconcileStuckTextbooks can detect a dead worker
+ * without waiting the full 75-minute timeout.
+ */
+export async function setWorkerHeartbeat(): Promise<void> {
+  await redis.set(HEARTBEAT_KEY, String(Date.now()), "PX", HEARTBEAT_TTL_MS);
+}
+
+/** Read the last heartbeat; returns null if no worker has written one. */
+async function getWorkerHeartbeat(): Promise<number | null> {
+  const raw = await redis.get(HEARTBEAT_KEY);
+  return raw ? Number(raw) : null;
+}
 
 /**
  * DB-level reconciliation: books stuck in pending/processing with no live
  * queue job (lost after a Redis flush, in-memory mock restart, or a crash
  * between insert and enqueue) are re-enqueued from their stored file_url.
  *
- * - `pending` older than 15 min: the queue should have picked it up within
+ * Heartbeat-aware timeouts:
+ *  - If a worker heartbeat exists and is recent (< 60s), the worker is
+ *    alive and we use the full 75-minute timeout (normal processing).
+ *  - If the heartbeat is stale or missing, the worker is dead and we use
+ *  a shorter 15-minute timeout so lost jobs are recovered faster.
+ *
+ *  - `pending` older than 15 min: the queue should have picked it up within
  *   seconds — if not, the job is gone.
- * - `processing` older than 75 min: beyond the 1h job timeout + slack.
+ *  - `processing` older than the heartbeat-aware cutoff.
  *
  * Books currently present in the Redis processing list are left alone (a
  * worker may legitimately still be chewing on them).
@@ -192,7 +215,13 @@ const STUCK_JOB_TIMEOUT_MS = 3600_000; // 1 hour
 export async function reconcileStuckTextbooks(): Promise<number> {
   const now = Date.now();
   const pendingCutoff = new Date(now - 15 * 60_000).toISOString();
-  const processingCutoff = new Date(now - 75 * 60_000).toISOString();
+
+  const heartbeat = await getWorkerHeartbeat();
+  const workerAlive = heartbeat !== null && now - heartbeat < HEARTBEAT_TTL_MS;
+  // If the worker is alive, use the full 75-minute timeout (normal processing).
+  // If dead, cut to 15 minutes so lost jobs are recovered faster.
+  const processingTimeoutMs = workerAlive ? 75 * 60_000 : 15 * 60_000;
+  const processingCutoff = new Date(now - processingTimeoutMs).toISOString();
 
   const { data: stuck, error } = await supabase
     .from("textbooks")
