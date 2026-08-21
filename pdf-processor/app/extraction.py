@@ -8,45 +8,44 @@ import unicodedata
 import fitz
 
 from .models import BBox, ExtractedImage, PageExtraction, TextBlock, VectorCluster
+from .constants import (
+    ARABIC_PRESENTATION_RE,
+    ARABIC_RE,
+    LATIN_RE,
+    LTR_TOKEN_RE,
+)
 
 logger = logging.getLogger("pdf-processor")
 
-# ── Arabic text normalization ────────────────────────────────────────────────
-# Many Arabic PDFs store text in presentation forms (U+FB50–U+FEFF) in
-# VISUAL order (left-to-right, letters reversed). Downstream logic needs
-# LOGICAL order. Heuristic: presentation forms present → convert to base
-# letters, reverse the line, then restore embedded LTR tokens (digits,
-# Latin, symbols) that the full reversal scrambled.
 
-_PRESENTATION_RE = re.compile(r"[\uFB50-\uFDFF\uFE70-\uFEFF]")
-_LTR_TOKEN_RE = re.compile(r"[0-9A-Za-z%().:/\\+\-]+")
+# ── Arabic normalization ──────────────────────────────────────────────────
+
+# Tashkeel (diacritics):  U+064B–U+065F + U+0610–U+061A
+_ARABIC_DIACRITICS_RE = re.compile(
+    "[\u064B-\u065F\u0610-\u061A\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]"
+)
+_TATWEEL_RE = re.compile("\u0640")
+_ALEF_VARIANTS_RE = re.compile("[\u0622\u0623\u0625]")
+_TEH_MARBUTA_RE = re.compile("\u0629")
+_ALEF_MAQSUR_RE = re.compile("\u0649")
 
 
 def normalize_arabic_visual_text(text: str) -> str:
-    if not _PRESENTATION_RE.search(text):
-        return text
-    base = unicodedata.normalize("NFKC", text)
-    reversed_text = base[::-1]
-
-    # restore LTR runs (numbers, latin, URLs) that the reversal scrambled
-    def _fix(m: re.Match) -> str:
-        return m.group(0)[::-1]
-
-    return _LTR_TOKEN_RE.sub(_fix, reversed_text)
-
-
-# ── script detection ────────────────────────────────────────────────────────
-
-# Arabic LETTERS only (excludes punctuation like ؟ ، ؛ in u0600–u061F and
-# Arabic-Indic digits, which are script-neutral)
-_ARABIC_RE = re.compile(r"[\u0620-\u064A\u066E-\u06D3\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]")
-_LATIN_RE = re.compile(r"[A-Za-z]")
+    """Strip Arabic diacritics (tashkeel), normalize alef/teh-marbuta/alef-maqsura,
+    and remove tatweel.  Mirrors the SQL normalize_arabic() function so the
+    text stored in the DB (and fed to embeddings) is consistent."""
+    result = _TATWEEL_RE.sub("", text)
+    result = _ALEF_VARIANTS_RE.sub("\u0627", result)
+    result = _TEH_MARBUTA_RE.sub("\u0647", result)
+    result = _ALEF_MAQSUR_RE.sub("\u064A", result)
+    result = _ARABIC_DIACRITICS_RE.sub("", result)
+    return result
 
 
 def detect_script(text: str) -> str:
     """Classify the dominant script of a text snippet: ar / en / other."""
-    arabic = len(_ARABIC_RE.findall(text))
-    latin = len(_LATIN_RE.findall(text))
+    arabic = len(ARABIC_RE.findall(text))
+    latin = len(LATIN_RE.findall(text))
     if arabic > 0 and arabic >= latin:
         return "ar"
     if latin > 0:

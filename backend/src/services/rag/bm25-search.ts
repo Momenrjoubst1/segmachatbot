@@ -1,5 +1,6 @@
 import { createLogger } from '../../utils/logger.js';
 import { AsyncMutex } from '../../utils/async-mutex.js';
+import { BM25_CONFIG } from '../../config/constants.js';
 
 const log = createLogger('bm25');
 
@@ -26,15 +27,10 @@ const DEFAULT_STOP_WORDS = [
 ];
 
 function loadStopWords(): Set<string> {
-  const customStopWords = process.env.BM25_STOP_WORDS;
-  if (customStopWords) {
-    try {
-      const words = JSON.parse(customStopWords) as string[];
-      log.info('Using custom BM25 stop words', { count: words.length });
-      return new Set(words);
-    } catch (error) {
-      log.warn('Failed to parse BM25_STOP_WORDS, using defaults', { error });
-    }
+  const customStopWords = BM25_CONFIG.STOP_WORDS;
+  if (customStopWords.length > 0) {
+    log.info('Using custom BM25 stop words', { count: customStopWords.length });
+    return new Set(customStopWords);
   }
   log.info('Using default BM25 stop words', { count: DEFAULT_STOP_WORDS.length });
   return new Set(DEFAULT_STOP_WORDS);
@@ -42,14 +38,32 @@ function loadStopWords(): Set<string> {
 
 const STOP_WORDS = loadStopWords();
 
+// Arabic normalization: strip diacritics (tashkeel), normalize alef variants,
+// teh marbuta → heh, alef maqsura → ya, remove tatweel.  Mirrors the SQL
+// normalize_arabic() and the Python normalize_arabic_visual_text().
+const ARABIC_DIACRITICS_RE = /[\u064B-\u065F\u0610-\u061A\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g;
+const TATWEEL_RE = /\u0640/g;
+const ALEF_VARIANTS_RE = /[\u0622\u0623\u0625]/g;
+const TEH_MARBUTA_RE = /\u0629/g;
+const ALEF_MAQSUR_RE = /\u0649/g;
+
+function normalizeArabic(text: string): string {
+  return text
+    .replace(TATWEEL_RE, "")
+    .replace(ALEF_VARIANTS_RE, "\u0627")
+    .replace(TEH_MARBUTA_RE, "\u0647")
+    .replace(ALEF_MAQSUR_RE, "\u064A")
+    .replace(ARABIC_DIACRITICS_RE, "");
+}
+
 function tokenize(text: string): string[] {
-  const normalized = text.toLowerCase().replace(/[^\w\s\u0600-\u06FF]/g, " ");
+  const normalized = normalizeArabic(text.toLowerCase().replace(/[^\w\s\u0600-\u06FF]/g, " "));
   const tokens = normalized.split(/\s+/).filter(Boolean);
   return tokens.filter((t) => t.length > 1 && !STOP_WORDS.has(t));
 }
 
-const K1 = 1.5;
-const B = 0.75;
+const K1 = BM25_CONFIG.K1;
+const B = BM25_CONFIG.B;
 
 export class BM25Search {
   private docs: BM25Doc[] = [];
@@ -164,6 +178,63 @@ export class BM25Search {
     return this.docs.length;
   }
 
+  /**
+   * Remove a document by ID - cleans up all associated data structures
+   */
+  removeDoc(docId: number): boolean {
+    const idx = this.docs.findIndex(d => d.id === docId);
+    if (idx === -1) return false;
+
+    const doc = this.docs[idx];
+    const tokens = tokenize(doc.content);
+    const seenTerms = new Set<string>();
+
+    for (const token of tokens) {
+      if (!seenTerms.has(token)) {
+        const currentFreq = this.termFreq.get(token) || 0;
+        if (currentFreq <= 1) {
+          this.termFreq.delete(token);
+        } else {
+          this.termFreq.set(token, currentFreq - 1);
+        }
+        seenTerms.add(token);
+      }
+    }
+
+    this.docTermFreqs.delete(docId);
+    this.docs.splice(idx, 1);
+    this.totalDocs--;
+
+    // Recompute avgDocLen
+    if (this.totalDocs > 0) {
+      const totalLen = this.docs.reduce((sum, d) => sum + tokenize(d.content).length, 0);
+      this.avgDocLen = totalLen / this.totalDocs;
+    } else {
+      this.avgDocLen = 0;
+    }
+
+    return true;
+  }
+
+  /**
+   * Remove documents older than a given timestamp (based on metadata.timestamp if present)
+   */
+  removeOldDocs(cutoffTimestamp: number): number {
+    const toRemove = this.docs
+      .filter(d => d.metadata?.timestamp && d.metadata.timestamp < cutoffTimestamp)
+      .map(d => d.id);
+    
+    let removed = 0;
+    for (const id of toRemove) {
+      if (this.removeDoc(id)) removed++;
+    }
+    return removed;
+  }
+
+  getDocCount(): number {
+    return this.docs.length;
+  }
+
   getStats(): { totalDocs: number; avgDocLen: number; vocabSize: number } {
     return {
       totalDocs: this.totalDocs,
@@ -225,7 +296,7 @@ export async function initializeBM25FromDB(): Promise<void> {
     }
 
     if (data && data.length > 0) {
-      const docs: BM25Doc[] = data.map((row: any) => ({
+      const docs: BM25Doc[] = data.map((row: { id: string | number; content: string; metadata?: Record<string, unknown> }) => ({
         id: Number(row.id),
         content: row.content,
         metadata: row.metadata || {},

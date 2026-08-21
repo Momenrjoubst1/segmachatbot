@@ -5,7 +5,7 @@ import fs from "fs/promises";
 import { createReadStream } from "fs";
 import os from "os";
 import { supabase } from "../config/supabase.config.js";
-import { enqueueTextbookJob, getTextbookProgress } from "../services/textbook/textbook-queue.js";
+import { enqueueTextbookJob, getTextbookProgress, getRedisClient } from "../services/textbook/textbook-queue.js";
 import { invalidateStructureCache } from "../services/textbook/textbook-search.js";
 import { deleteR2ObjectsByPrefix, isR2Configured, uploadR2ObjectFromFile } from "../services/textbook/r2-client.js";
 import { invalidateUserTextbookSignal } from "../services/chat/pipeline/rag-retrieval.js";
@@ -336,8 +336,8 @@ router.get("/:id/curriculum", async (req: Request, res: Response) => {
     ]);
 
     // rebuild the tree from flat rows
-    const byId = new Map<string, any>();
-    const roots: any[] = [];
+    const byId = new Map<string, { id: string; title: string; children: unknown[] }>();
+    const roots: { id: string; title: string; children: unknown[] }[] = [];
     for (const s of sections || []) {
       byId.set(s.id, { ...s, children: [] });
     }
@@ -488,6 +488,72 @@ router.get("/:id/status", async (req: Request, res: Response) => {  try {
     log.error("Status route error", { error: (err as Error).message });
     res.status(500).json({ error: "Internal server error" });
   }
+});
+
+// ─── SSE: real-time progress stream (replaces polling) ───────────────────
+router.get("/:id/progress", async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const { id } = req.params;
+
+  // Verify ownership
+  const { data: textbook } = await supabase
+    .from("textbooks")
+    .select("id")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!textbook) {
+    res.status(404).json({ error: "Textbook not found" });
+    return;
+  }
+
+  // Set SSE headers
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  // Send current state immediately
+  const current = await getTextbookProgress(id);
+  if (current) {
+    res.write(`data: ${JSON.stringify(current)}\n\n`);
+    // If already completed/failed, close immediately
+    if (current.stage === "completed" || current.stage === "failed") {
+      res.end();
+      return;
+    }
+  }
+
+  // Subscribe to Redis Pub/Sub for live updates
+  const redis = getRedisClient();
+  const subscriber = redis.duplicate();
+  const channel = `textbook:progress:${id}`;
+
+  await subscriber.subscribe(channel);
+
+  subscriber.on("message", (_ch: string, message: string) => {
+    res.write(`data: ${message}\n\n`);
+  });
+
+  // Heartbeat to keep connection alive (every 15s)
+  const heartbeat = setInterval(() => {
+    res.write(`: heartbeat\n\n`);
+  }, 15_000);
+
+  // Cleanup on client disconnect
+  req.on("close", async () => {
+    clearInterval(heartbeat);
+    await subscriber.unsubscribe(channel);
+    subscriber.disconnect();
+  });
 });
 
 router.get("/", async (req: Request, res: Response) => {

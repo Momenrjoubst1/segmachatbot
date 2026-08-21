@@ -1,7 +1,11 @@
+﻿-- ==========================================
+-- Full Schema — Canonical Reference
 -- ==========================================
--- Full Schema Migration for Chatbot Project
+-- This file reflects the database state AFTER all 19 migrations.
+-- It is a REFERENCE DOCUMENT — do NOT apply it directly.
+-- Use numbered migration files (001-019) for applying changes.
 -- ==========================================
--- نسخ هذا الملف والصقه في SQL Editor في مشروع Supabase الجديد
+-- Last updated: migration 019_fix_vector_dim_and_indexes
 -- ==========================================
 
 -- 0. Enable pgvector extension
@@ -14,33 +18,17 @@ CREATE TABLE IF NOT EXISTS documents (
   id BIGSERIAL PRIMARY KEY,
   content TEXT,
   metadata JSONB,
-  embedding VECTOR(768)
+  embedding VECTOR(9692)
 );
 
--- Match Documents Function (Cosine Similarity Search)
-CREATE OR REPLACE FUNCTION match_documents (
-  query_embedding VECTOR(768),
-  match_threshold FLOAT,
-  match_count INT
-)
-RETURNS TABLE (
-  id BIGINT,
-  content TEXT,
-  metadata JSONB,
-  similarity FLOAT
-)
-LANGUAGE sql STABLE
-AS $$
-  SELECT
-    documents.id,
-    documents.content,
-    documents.metadata,
-    1 - (documents.embedding <=> query_embedding) AS similarity
-  FROM documents
-  WHERE 1 - (documents.embedding <=> query_embedding) > match_threshold
-  ORDER BY similarity DESC
-  LIMIT match_count;
-$$;
+CREATE INDEX IF NOT EXISTS idx_documents_embedding_hnsw
+ON documents USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
+
+CREATE INDEX IF NOT EXISTS idx_documents_metadata ON documents USING gin(metadata);
+
+-- NOTE: match_documents function still uses VECTOR(768) signature (from 001).
+-- This is a known mismatch — the column is VECTOR(9692) but the RPC was never updated.
 
 -- ==========================================
 -- 2. CHAT SESSIONS
@@ -48,13 +36,15 @@ $$;
 CREATE TABLE IF NOT EXISTS chat_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  title TEXT DEFAULT 'محادثة جديدة',
+  title TEXT DEFAULT 'New Chat',
   course_id UUID,
   parent_thread_id UUID REFERENCES chat_sessions(id) ON DELETE SET NULL,
   branched_from_message_id UUID,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_user ON chat_sessions(user_id, updated_at DESC);
 
 -- ==========================================
 -- 3. CHAT MESSAGES
@@ -70,6 +60,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, created_at ASC);
+
 -- ==========================================
 -- 4. BANNED USERS
 -- ==========================================
@@ -80,6 +72,9 @@ CREATE TABLE IF NOT EXISTS banned_users (
   expires_at TIMESTAMPTZ,
   banned_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_banned_users_active ON banned_users(user_id) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_banned_users_active_expires ON banned_users(user_id, expires_at) WHERE is_active = TRUE;
 
 -- ==========================================
 -- 5. USERS
@@ -114,6 +109,9 @@ CREATE TABLE IF NOT EXISTS email_contacts (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_email_contacts_user ON email_contacts(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_contacts_email ON email_contacts(user_id, email_address);
+
 -- ==========================================
 -- 8. EMAIL SIGNATURES
 -- ==========================================
@@ -126,6 +124,8 @@ CREATE TABLE IF NOT EXISTS email_signatures (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_email_signatures_user ON email_signatures(user_id);
 
 -- ==========================================
 -- 9. EMAIL CONFIRMATIONS
@@ -141,6 +141,9 @@ CREATE TABLE IF NOT EXISTS email_confirmations (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   confirmed_at TIMESTAMPTZ
 );
+
+CREATE INDEX IF NOT EXISTS idx_email_confirmations_user ON email_confirmations(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_confirmations_expires ON email_confirmations(expires_at) WHERE expires_at IS NOT NULL;
 
 -- ==========================================
 -- 10. EMAIL AUDIT LOGS
@@ -166,6 +169,8 @@ CREATE TABLE IF NOT EXISTS email_audit_logs (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_email_audit_logs_user ON email_audit_logs(user_id, created_at DESC);
+
 -- ==========================================
 -- 11. EMAIL JOBS
 -- ==========================================
@@ -187,6 +192,9 @@ CREATE TABLE IF NOT EXISTS email_jobs (
   attempts INTEGER DEFAULT 0,
   next_retry_at TIMESTAMPTZ
 );
+
+CREATE INDEX IF NOT EXISTS idx_email_jobs_user ON email_jobs(user_id);
+CREATE INDEX IF NOT EXISTS idx_email_jobs_status_retry ON email_jobs(status, next_retry_at) WHERE status = 'pending';
 
 -- ==========================================
 -- 12. EMAIL SCHEDULES
@@ -211,6 +219,8 @@ CREATE TABLE IF NOT EXISTS email_schedules (
   sent_at TIMESTAMPTZ
 );
 
+CREATE INDEX IF NOT EXISTS idx_email_schedules_user ON email_schedules(user_id);
+
 -- ==========================================
 -- 13. SENT EMAILS
 -- ==========================================
@@ -221,6 +231,8 @@ CREATE TABLE IF NOT EXISTS sent_emails (
   body TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_sent_emails_user ON sent_emails(user_id);
 
 -- ==========================================
 -- 14. USER CALENDAR EVENTS
@@ -242,6 +254,8 @@ CREATE TABLE IF NOT EXISTS user_calendar_events (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_calendar_events_user ON user_calendar_events(user_id, start_time);
+
 -- ==========================================
 -- 15. USER CALENDAR ATTENDEES
 -- ==========================================
@@ -252,6 +266,8 @@ CREATE TABLE IF NOT EXISTS user_calendar_attendees (
   name TEXT,
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'tentative'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_calendar_attendees_event ON user_calendar_attendees(event_id);
 
 -- ==========================================
 -- 16. USER CALENDAR SETTINGS
@@ -279,6 +295,9 @@ CREATE TABLE IF NOT EXISTS analytics_events (
   metadata JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_type ON analytics_events(event_type);
 
 -- ==========================================
 -- 18. ANALYTICS DAILY METRICS
@@ -309,6 +328,8 @@ CREATE TABLE IF NOT EXISTS agent_conversation_events (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_agent_events_room ON agent_conversation_events(room_name, created_at);
+
 -- ==========================================
 -- 20. USER MEMORY
 -- ==========================================
@@ -327,8 +348,24 @@ CREATE TABLE IF NOT EXISTS user_memory (
   UNIQUE(user_id, key)
 );
 
+CREATE INDEX IF NOT EXISTS idx_user_memory_user ON user_memory(user_id, category);
+CREATE INDEX IF NOT EXISTS idx_user_memory_unique ON user_memory(user_id, key);
+CREATE INDEX IF NOT EXISTS idx_user_memory_user_expires ON user_memory(user_id, expires_at) WHERE expires_at IS NOT NULL;
+
 -- ==========================================
--- 21. STUDENT COURSES
+-- 21. CUSTOM INSTRUCTIONS
+-- ==========================================
+CREATE TABLE IF NOT EXISTS custom_instructions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  instruction TEXT NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==========================================
+-- 22. STUDENT COURSES
 -- ==========================================
 CREATE TABLE IF NOT EXISTS student_courses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -338,8 +375,10 @@ CREATE TABLE IF NOT EXISTS student_courses (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_student_courses_user ON student_courses(user_id);
+
 -- ==========================================
--- 22. COURSE RESOURCES
+-- 23. COURSE RESOURCES
 -- ==========================================
 CREATE TABLE IF NOT EXISTS course_resources (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -349,8 +388,10 @@ CREATE TABLE IF NOT EXISTS course_resources (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE INDEX IF NOT EXISTS idx_course_resources_course ON course_resources(course_id);
+
 -- ==========================================
--- 23. FEEDBACK
+-- 24. FEEDBACK
 -- ==========================================
 CREATE TABLE IF NOT EXISTS feedback (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -363,208 +404,10 @@ CREATE TABLE IF NOT EXISTS feedback (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ==========================================
--- INDEXES
--- ==========================================
-CREATE INDEX IF NOT EXISTS idx_chat_sessions_user ON chat_sessions(user_id, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON chat_messages(session_id, created_at ASC);
-CREATE INDEX IF NOT EXISTS idx_email_contacts_user ON email_contacts(user_id);
-CREATE INDEX IF NOT EXISTS idx_email_contacts_email ON email_contacts(user_id, email_address);
-CREATE INDEX IF NOT EXISTS idx_email_signatures_user ON email_signatures(user_id);
-CREATE INDEX IF NOT EXISTS idx_email_confirmations_user ON email_confirmations(user_id);
-CREATE INDEX IF NOT EXISTS idx_email_audit_logs_user ON email_audit_logs(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_email_jobs_user ON email_jobs(user_id);
-CREATE INDEX IF NOT EXISTS idx_email_schedules_user ON email_schedules(user_id);
-CREATE INDEX IF NOT EXISTS idx_sent_emails_user ON sent_emails(user_id);
-CREATE INDEX IF NOT EXISTS idx_calendar_events_user ON user_calendar_events(user_id, start_time);
-CREATE INDEX IF NOT EXISTS idx_calendar_attendees_event ON user_calendar_attendees(event_id);
-CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_analytics_events_type ON analytics_events(event_type);
-CREATE INDEX IF NOT EXISTS idx_agent_events_room ON agent_conversation_events(room_name, created_at);
-CREATE INDEX IF NOT EXISTS idx_user_memory_user ON user_memory(user_id, category);
-CREATE INDEX IF NOT EXISTS idx_user_memory_unique ON user_memory(user_id, key);
-CREATE INDEX IF NOT EXISTS idx_student_courses_user ON student_courses(user_id);
-CREATE INDEX IF NOT EXISTS idx_course_resources_course ON course_resources(course_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id);
-CREATE INDEX IF NOT EXISTS idx_documents_metadata ON documents USING gin(metadata);
-CREATE INDEX IF NOT EXISTS idx_banned_users_active ON banned_users(user_id) WHERE is_active = TRUE;
-
 -- ==========================================
--- ROW LEVEL SECURITY (RLS)
+-- 25. TEXTBOOKS (BYOC feature)
 -- ==========================================
-
-ALTER TABLE chat_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE banned_users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE email_contacts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE email_signatures ENABLE ROW LEVEL SECURITY;
-ALTER TABLE email_confirmations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE email_audit_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE email_jobs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE email_schedules ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sent_emails ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_calendar_events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_calendar_attendees ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_calendar_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE analytics_daily_metrics ENABLE ROW LEVEL SECURITY;
-ALTER TABLE agent_conversation_events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_memory ENABLE ROW LEVEL SECURITY;
-ALTER TABLE student_courses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE course_resources ENABLE ROW LEVEL SECURITY;
-ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
-
--- ==========================================
--- RLS POLICIES
--- ==========================================
-
--- Chat Sessions
-CREATE POLICY "Users can view own sessions" ON chat_sessions FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own sessions" ON chat_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own sessions" ON chat_sessions FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own sessions" ON chat_sessions FOR DELETE USING (auth.uid() = user_id);
-
--- Chat Messages (via session ownership)
-CREATE POLICY "Users can view messages in own sessions" ON chat_messages FOR SELECT
-  USING (EXISTS (SELECT 1 FROM chat_sessions WHERE chat_sessions.id = chat_messages.session_id AND chat_sessions.user_id = auth.uid()));
-CREATE POLICY "Users can insert messages in own sessions" ON chat_messages FOR INSERT
-  WITH CHECK (EXISTS (SELECT 1 FROM chat_sessions WHERE chat_sessions.id = chat_messages.session_id AND chat_sessions.user_id = auth.uid()));
-CREATE POLICY "Users can update messages in own sessions" ON chat_messages FOR UPDATE
-  USING (EXISTS (SELECT 1 FROM chat_sessions WHERE chat_sessions.id = chat_messages.session_id AND chat_sessions.user_id = auth.uid()));
-
--- Users
-CREATE POLICY "Users can view own profile" ON users FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Users can insert own profile" ON users FOR INSERT WITH CHECK (auth.uid() = id);
-
--- Public Profiles (viewable by all, editable by owner)
-CREATE POLICY "Anyone can view profiles" ON public_profiles FOR SELECT USING (true);
-CREATE POLICY "Users can update own profile" ON public_profiles FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Users can insert own profile" ON public_profiles FOR INSERT WITH CHECK (auth.uid() = id);
-
--- Email Contacts
-CREATE POLICY "Users can view own contacts" ON email_contacts FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own contacts" ON email_contacts FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own contacts" ON email_contacts FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own contacts" ON email_contacts FOR DELETE USING (auth.uid() = user_id);
-
--- Email Signatures
-CREATE POLICY "Users can view own signatures" ON email_signatures FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own signatures" ON email_signatures FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own signatures" ON email_signatures FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own signatures" ON email_signatures FOR DELETE USING (auth.uid() = user_id);
-
--- Email Confirmations
-CREATE POLICY "Users can view own confirmations" ON email_confirmations FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own confirmations" ON email_confirmations FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own confirmations" ON email_confirmations FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own confirmations" ON email_confirmations FOR DELETE USING (auth.uid() = user_id);
-
--- Email Audit Logs
-CREATE POLICY "Users can view own audit logs" ON email_audit_logs FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own audit logs" ON email_audit_logs FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own audit logs" ON email_audit_logs FOR UPDATE USING (auth.uid() = user_id);
-
--- Email Jobs
-CREATE POLICY "Users can view own jobs" ON email_jobs FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own jobs" ON email_jobs FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own jobs" ON email_jobs FOR UPDATE USING (auth.uid() = user_id);
-
--- Email Schedules
-CREATE POLICY "Users can view own schedules" ON email_schedules FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own schedules" ON email_schedules FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own schedules" ON email_schedules FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own schedules" ON email_schedules FOR DELETE USING (auth.uid() = user_id);
-
--- Sent Emails
-CREATE POLICY "Users can view own sent emails" ON sent_emails FOR SELECT USING (auth.uid() = user_id);
-
--- Calendar Events
-CREATE POLICY "Users can view own events" ON user_calendar_events FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own events" ON user_calendar_events FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own events" ON user_calendar_events FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own events" ON user_calendar_events FOR DELETE USING (auth.uid() = user_id);
-
--- Calendar Attendees (via event ownership)
-CREATE POLICY "Users can view attendees in own events" ON user_calendar_attendees FOR SELECT
-  USING (EXISTS (SELECT 1 FROM user_calendar_events WHERE user_calendar_events.id = user_calendar_attendees.event_id AND user_calendar_events.user_id = auth.uid()));
-CREATE POLICY "Users can insert attendees in own events" ON user_calendar_attendees FOR INSERT
-  WITH CHECK (EXISTS (SELECT 1 FROM user_calendar_events WHERE user_calendar_events.id = user_calendar_attendees.event_id AND user_calendar_events.user_id = auth.uid()));
-CREATE POLICY "Users can delete attendees in own events" ON user_calendar_attendees FOR DELETE
-  USING (EXISTS (SELECT 1 FROM user_calendar_events WHERE user_calendar_events.id = user_calendar_attendees.event_id AND user_calendar_events.user_id = auth.uid()));
-
--- Calendar Settings
-CREATE POLICY "Users can view own settings" ON user_calendar_settings FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own settings" ON user_calendar_settings FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own settings" ON user_calendar_settings FOR UPDATE USING (auth.uid() = user_id);
-
--- Analytics Events
-CREATE POLICY "Users can view own analytics" ON analytics_events FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own analytics" ON analytics_events FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- Analytics Daily Metrics (admin read only, insert via service role)
-CREATE POLICY "Service role can manage metrics" ON analytics_daily_metrics FOR ALL USING (true);
-
--- Agent Conversation Events (service role only)
-CREATE POLICY "Service role can manage agent events" ON agent_conversation_events FOR ALL USING (true);
-
--- User Memory
-CREATE POLICY "Users can view own memory" ON user_memory FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own memory" ON user_memory FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own memory" ON user_memory FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own memory" ON user_memory FOR DELETE USING (auth.uid() = user_id);
-
--- Student Courses
-CREATE POLICY "Users can view own courses" ON student_courses FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own courses" ON student_courses FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own courses" ON student_courses FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own courses" ON student_courses FOR DELETE USING (auth.uid() = user_id);
-
--- Course Resources (via course ownership)
-CREATE POLICY "Users can view resources in own courses" ON course_resources FOR SELECT
-  USING (EXISTS (SELECT 1 FROM student_courses WHERE student_courses.id = course_resources.course_id AND student_courses.user_id = auth.uid()));
-CREATE POLICY "Users can insert resources in own courses" ON course_resources FOR INSERT
-  WITH CHECK (EXISTS (SELECT 1 FROM student_courses WHERE student_courses.id = course_resources.course_id AND student_courses.user_id = auth.uid()));
-CREATE POLICY "Users can delete resources in own courses" ON course_resources FOR DELETE
-  USING (EXISTS (SELECT 1 FROM student_courses WHERE student_courses.id = course_resources.course_id AND student_courses.user_id = auth.uid()));
-
--- Feedback
-CREATE POLICY "Users can view own feedback" ON feedback FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own feedback" ON feedback FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- Banned Users (service role check, read via middleware)
-CREATE POLICY "Service role can manage bans" ON banned_users FOR ALL USING (true);
-
--- ==========================================
--- STORAGE BUCKETS
--- ==========================================
-INSERT INTO storage.buckets (id, name, public) VALUES ('chat_media', 'chat_media', true)
-  ON CONFLICT (id) DO NOTHING;
-INSERT INTO storage.buckets (id, name, public) VALUES ('email-bodies', 'email-bodies', false)
-  ON CONFLICT (id) DO NOTHING;
-INSERT INTO storage.buckets (id, name, public) VALUES ('course-attachments', 'course-attachments', true)
-  ON CONFLICT (id) DO NOTHING;
-
--- Storage Policies
-CREATE POLICY "Users can upload chat media" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'chat_media' AND auth.uid()::text = (storage.foldername(name))[1]);
-CREATE POLICY "Anyone can view chat media" ON storage.objects FOR SELECT USING (bucket_id = 'chat_media');
-CREATE POLICY "Users can upload email bodies" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'email-bodies' AND auth.uid()::text = (storage.foldername(name))[1]);
-CREATE POLICY "Users can view own email bodies" ON storage.objects FOR SELECT USING (bucket_id = 'email-bodies' AND auth.uid()::text = (storage.foldername(name))[1]);
-CREATE POLICY "Users can upload course attachments" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'course-attachments' AND auth.uid()::text = (storage.foldername(name))[1]);
-CREATE POLICY "Anyone can view course attachments" ON storage.objects FOR SELECT USING (bucket_id = 'course-attachments');
-
--- ==========================================
--- TEXTBOOK UNDERSTANDING PIPELINE
--- ==========================================
--- Tables for BYOC (Bring Your Own Content) textbook feature:
---   textbooks        — uploaded book metadata, processing status, structure tree
---   textbook_chunks  — per-page text chunks with embeddings for hybrid search
---   textbook_figures — extracted figures with captions and bounding boxes
--- ==========================================
-
--- TEXTBOOKS (uploaded book metadata + processing status)
 CREATE TABLE IF NOT EXISTS textbooks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -581,25 +424,51 @@ CREATE TABLE IF NOT EXISTS textbooks (
   processing_started_at TIMESTAMPTZ,
   processing_completed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  book_language TEXT DEFAULT NULL CHECK (book_language IS NULL OR book_language IN ('ar', 'en', 'mixed')),
+  source_thread_id UUID REFERENCES chat_sessions(id) ON DELETE SET NULL
 );
 
--- TEXTBOOK CHUNKS (per-page text with embeddings)
+CREATE INDEX IF NOT EXISTS idx_textbooks_user ON textbooks(user_id);
+CREATE INDEX IF NOT EXISTS idx_textbooks_hash ON textbooks(file_hash);
+CREATE INDEX IF NOT EXISTS idx_textbooks_status ON textbooks(user_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_textbooks_user_hash_unique
+ON textbooks(user_id, file_hash) WHERE status = 'completed';
+CREATE INDEX IF NOT EXISTS idx_textbooks_source_thread ON textbooks(source_thread_id) WHERE source_thread_id IS NOT NULL;
+
+-- ==========================================
+-- 26. TEXTBOOK CHUNKS
+-- ==========================================
 CREATE TABLE IF NOT EXISTS textbook_chunks (
   id BIGSERIAL PRIMARY KEY,
   textbook_id UUID NOT NULL REFERENCES textbooks(id) ON DELETE CASCADE,
   page_number INTEGER NOT NULL,
   structure_path TEXT,
   content TEXT NOT NULL,
-  embedding VECTOR(768),
+  embedding VECTOR(9692),
   figure_refs JSONB DEFAULT '[]'::jsonb,
   content_tsv tsvector GENERATED ALWAYS AS (
     to_tsvector('simple', normalize_arabic(content))
   ) STORED,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  block_role TEXT DEFAULT NULL,
+  text_color TEXT DEFAULT NULL,
+  chunk_bbox JSONB DEFAULT NULL
 );
 
--- TEXTBOOK FIGURES (extracted images with captions)
+CREATE INDEX IF NOT EXISTS idx_textbook_chunks_textbook ON textbook_chunks(textbook_id, page_number);
+CREATE INDEX IF NOT EXISTS idx_textbook_chunks_structure ON textbook_chunks(textbook_id, structure_path);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_textbook_chunks_content_unique
+ON textbook_chunks(textbook_id, page_number, left(content, 100));
+CREATE INDEX IF NOT EXISTS idx_textbook_chunks_embedding_hnsw
+ON textbook_chunks USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
+CREATE INDEX IF NOT EXISTS idx_textbook_chunks_tsv ON textbook_chunks USING gin(content_tsv);
+CREATE INDEX IF NOT EXISTS idx_textbook_chunks_user_textbook ON textbook_chunks(textbook_id) INCLUDE (user_id);
+
+-- ==========================================
+-- 27. TEXTBOOK FIGURES
+-- ==========================================
 CREATE TABLE IF NOT EXISTS textbook_figures (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   textbook_id UUID NOT NULL REFERENCES textbooks(id) ON DELETE CASCADE,
@@ -608,73 +477,104 @@ CREATE TABLE IF NOT EXISTS textbook_figures (
   caption TEXT,
   image_url TEXT NOT NULL,
   bounding_box JSONB,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  vlm_description TEXT DEFAULT NULL,
+  dominant_colors JSONB DEFAULT NULL,
+  is_colored BOOLEAN DEFAULT NULL,
+  kind TEXT DEFAULT 'raster' CHECK (kind IS NULL OR kind IN ('raster', 'vector'))
 );
 
--- TEXTBOOK INDEXES
-CREATE INDEX IF NOT EXISTS idx_textbooks_user ON textbooks(user_id);
-CREATE INDEX IF NOT EXISTS idx_textbooks_hash ON textbooks(file_hash);
-CREATE INDEX IF NOT EXISTS idx_textbooks_status ON textbooks(user_id, status);
--- Per-user unique: only one completed record per file hash per user
-CREATE UNIQUE INDEX IF NOT EXISTS idx_textbooks_user_hash_unique
-ON textbooks(user_id, file_hash) WHERE status = 'completed';
-
-CREATE INDEX IF NOT EXISTS idx_textbook_chunks_textbook ON textbook_chunks(textbook_id, page_number);
-CREATE INDEX IF NOT EXISTS idx_textbook_chunks_structure ON textbook_chunks(textbook_id, structure_path);
 CREATE INDEX IF NOT EXISTS idx_textbook_figures_textbook ON textbook_figures(textbook_id, page_number);
 
--- HNSW index for vector search
-CREATE INDEX IF NOT EXISTS idx_textbook_chunks_embedding_hnsw
-ON textbook_chunks USING hnsw (embedding vector_cosine_ops)
-WITH (m = 16, ef_construction = 64);
+-- ==========================================
+-- 28. TEXTBOOK PAGES
+-- ==========================================
+CREATE TABLE IF NOT EXISTS textbook_pages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  textbook_id UUID NOT NULL REFERENCES textbooks(id) ON DELETE CASCADE,
+  page_number INT NOT NULL,
+  width FLOAT8 NOT NULL DEFAULT 0,
+  height FLOAT8 NOT NULL DEFAULT 0,
+  background_color TEXT NOT NULL DEFAULT '#FFFFFF',
+  page_role TEXT NOT NULL DEFAULT 'interior'
+    CHECK (page_role IN ('cover_front', 'interior', 'cover_back', 'blank')),
+  page_type TEXT NOT NULL DEFAULT 'text_only'
+    CHECK (page_type IN ('blank', 'text_only', 'mixed', 'figure_only', 'table_heavy', 'toc', 'index', 'cover')),
+  dominant_script TEXT NOT NULL DEFAULT 'en'
+    CHECK (dominant_script IN ('ar', 'en', 'mixed')),
+  approximate_columns INT NOT NULL DEFAULT 1,
+  layout JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (textbook_id, page_number),
+  vlm_summary TEXT DEFAULT NULL,
+  vlm_enriched BOOLEAN NOT NULL DEFAULT false,
+  thumbnail_key TEXT DEFAULT NULL
+);
 
--- GIN index for BM25/tsvector search
-CREATE INDEX IF NOT EXISTS idx_textbook_chunks_tsv
-ON textbook_chunks USING gin(content_tsv);
-
--- TEXTBOOK RLS POLICIES
-ALTER TABLE textbooks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE textbook_chunks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE textbook_figures ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view own textbooks" ON textbooks
-  FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own textbooks" ON textbooks
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own textbooks" ON textbooks
-  FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own textbooks" ON textbooks
-  FOR DELETE USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can view chunks in own textbooks" ON textbook_chunks
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_chunks.textbook_id AND textbooks.user_id = auth.uid())
-  );
-CREATE POLICY "Users can insert chunks in own textbooks" ON textbook_chunks
-  FOR INSERT WITH CHECK (
-    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_chunks.textbook_id AND textbooks.user_id = auth.uid())
-  );
-CREATE POLICY "Users can delete chunks in own textbooks" ON textbook_chunks
-  FOR DELETE USING (
-    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_chunks.textbook_id AND textbooks.user_id = auth.uid())
-  );
-
-CREATE POLICY "Users can view figures in own textbooks" ON textbook_figures
-  FOR SELECT USING (
-    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_figures.textbook_id AND textbooks.user_id = auth.uid())
-  );
-CREATE POLICY "Users can insert figures in own textbooks" ON textbook_figures
-  FOR INSERT WITH CHECK (
-    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_figures.textbook_id AND textbooks.user_id = auth.uid())
-  );
-CREATE POLICY "Users can delete figures in own textbooks" ON textbook_figures
-  FOR DELETE USING (
-    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_figures.textbook_id AND textbooks.user_id = auth.uid())
-  );
+CREATE INDEX IF NOT EXISTS idx_textbook_pages_textbook ON textbook_pages(textbook_id, page_number);
+CREATE INDEX IF NOT EXISTS idx_textbook_pages_needs_visual ON textbook_pages(textbook_id) WHERE vlm_enriched = false;
 
 -- ==========================================
--- ARABIC NORMALIZATION FUNCTION
+-- 29. TEXTBOOK SECTIONS
 -- ==========================================
+CREATE TABLE IF NOT EXISTS textbook_sections (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  textbook_id UUID NOT NULL REFERENCES textbooks(id) ON DELETE CASCADE,
+  parent_id UUID REFERENCES textbook_sections(id) ON DELETE CASCADE,
+  level TEXT NOT NULL CHECK (level IN ('unit', 'lesson', 'topic')),
+  title TEXT NOT NULL,
+  page_start INT NOT NULL,
+  page_end INT NOT NULL,
+  order_index INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_textbook_sections_book ON textbook_sections(textbook_id, order_index);
+
+-- ==========================================
+-- 30. TEXTBOOK QUESTIONS
+-- ==========================================
+CREATE TABLE IF NOT EXISTS textbook_questions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  textbook_id UUID NOT NULL REFERENCES textbooks(id) ON DELETE CASCADE,
+  question_type TEXT NOT NULL DEFAULT 'lesson_questions'
+    CHECK (question_type IN ('lesson_questions', 'unit_questions')),
+  number TEXT,
+  text TEXT NOT NULL,
+  page_number INT,
+  section_path TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_textbook_questions_book ON textbook_questions(textbook_id);
+
+-- ==========================================
+-- 31. TEXTBOOK GLOSSARY
+-- ==========================================
+CREATE TABLE IF NOT EXISTS textbook_glossary (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  textbook_id UUID NOT NULL REFERENCES textbooks(id) ON DELETE CASCADE,
+  term TEXT NOT NULL,
+  definition TEXT,
+  page_number INT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_textbook_glossary_book ON textbook_glossary(textbook_id);
+-- ==========================================
+-- VIEWS
+-- ==========================================
+CREATE OR REPLACE VIEW chat_sessions_with_messages
+WITH (security_invoker = true) AS
+SELECT cs.id, cs.user_id, cs.title, cs.updated_at, cs.course_id
+FROM chat_sessions cs
+WHERE EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.session_id = cs.id);
+
+-- ==========================================
+-- FUNCTIONS
+-- ==========================================
+
+-- Arabic normalization (011)
 CREATE OR REPLACE FUNCTION normalize_arabic(text TEXT)
 RETURNS TEXT
 LANGUAGE plpgsql IMMUTABLE
@@ -683,36 +583,37 @@ DECLARE
   result TEXT;
 BEGIN
   result := text;
-  
-  -- Remove tatweel (kashida)
   result := regexp_replace(result, '\u0640', '', 'g');
-  
-  -- Normalize alef variants to plain alef
   result := regexp_replace(result, '[\u0622\u0623\u0625]', '\u0627', 'g');
-  
-  -- Normalize teh marbuta to heh
   result := regexp_replace(result, '\u0629', '\u0647', 'g');
-  
-  -- Normalize yeh variants
   result := regexp_replace(result, '\u0649', '\u064A', 'g');
-  
-  -- Remove diacritics (tashkeel)
   result := regexp_replace(result, '[\u064B-\u065F]', '', 'g');
-  
-  -- Strip "ال" prefix only at word beginnings
   result := regexp_replace(result, '(^| )ال', '\1', 'g');
-  
   RETURN result;
 END;
 $$;
 
--- ==========================================
--- TEXTBOOK VECTOR SEARCH RPC — match_textbook_chunks
--- ==========================================
+-- bump_session_updated_at trigger (008b)
+CREATE OR REPLACE FUNCTION bump_session_updated_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  UPDATE chat_sessions SET updated_at = now() WHERE id = NEW.session_id;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER trigger_bump_session_updated_at
+AFTER INSERT ON chat_messages
+FOR EACH ROW
+EXECUTE FUNCTION bump_session_updated_at();
+
+-- match_textbook_chunks (019 - VECTOR(9692))
 CREATE OR REPLACE FUNCTION match_textbook_chunks (
-  query_embedding VECTOR(768),
+  query_embedding VECTOR(9692),
   p_textbook_id UUID,
-  p_match_threshold FLOAT DEFAULT 0.5,
+  p_match_threshold FLOAT DEFAULT 0.05,
   p_match_count INT DEFAULT 10,
   p_page_start INT DEFAULT NULL,
   p_page_end INT DEFAULT NULL
@@ -720,7 +621,7 @@ CREATE OR REPLACE FUNCTION match_textbook_chunks (
 RETURNS TABLE (
   id BIGINT,
   textbook_id UUID,
-  page_number INTEGER,
+  page_number INT,
   structure_path TEXT,
   content TEXT,
   figure_refs JSONB,
@@ -728,54 +629,23 @@ RETURNS TABLE (
 )
 LANGUAGE sql STABLE
 AS $$
-  SELECT
-    textbook_chunks.id,
-    textbook_chunks.textbook_id,
-    textbook_chunks.page_number,
-    textbook_chunks.structure_path,
-    textbook_chunks.content,
-    textbook_chunks.figure_refs,
-    1 - (textbook_chunks.embedding <=> query_embedding) AS similarity
-  FROM textbook_chunks
-  WHERE textbook_chunks.textbook_id = p_textbook_id
-    AND 1 - (textbook_chunks.embedding <=> query_embedding) > p_match_threshold
-    AND (p_page_start IS NULL OR textbook_chunks.page_number >= p_page_start)
-    AND (p_page_end IS NULL OR textbook_chunks.page_number <= p_page_end)
-  ORDER BY similarity DESC
-  LIMIT p_match_count;
+  SELECT tc.id, tc.textbook_id, tc.page_number, tc.structure_path, tc.content, tc.figure_refs,
+    1 - (tc.embedding <=> query_embedding) AS similarity
+  FROM textbook_chunks tc
+  WHERE tc.textbook_id = p_textbook_id
+    AND tc.embedding IS NOT NULL
+    AND (p_page_start IS NULL OR tc.page_number >= p_page_start)
+    AND (p_page_end IS NULL OR tc.page_number <= p_page_end)
+    AND 1 - (tc.embedding <=> query_embedding) > p_match_threshold
+  ORDER BY tc.embedding <=> query_embedding LIMIT p_match_count;
 $$;
 
--- ==========================================
--- BATCH EMBEDDING UPDATE RPC (scoped by textbook_id)
--- ==========================================
-CREATE OR REPLACE FUNCTION batch_update_embeddings(
-  p_updates JSONB,
-  p_textbook_id UUID
-)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  item JSONB;
-BEGIN
-  FOR item IN SELECT jsonb_array_elements(p_updates)
-  LOOP
-    UPDATE textbook_chunks
-    SET embedding = (item->>'embedding')::vector(768)
-    WHERE id = (item->>'id')::bigint
-      AND textbook_id = p_textbook_id;
-  END LOOP;
-END;
-$$;
-
--- ==========================================
--- HYBRID SEARCH (UNION + RRF) with Arabic normalization
--- ==========================================
+-- hybrid_search_textbook_chunks (014 - VECTOR(9692), with user_id scoping)
 CREATE OR REPLACE FUNCTION hybrid_search_textbook_chunks(
-  query_embedding VECTOR(768),
+  query_embedding VECTOR(9692),
   query_text TEXT,
   p_textbook_id UUID,
+  p_user_id UUID,
   p_match_threshold FLOAT DEFAULT 0.4,
   p_match_count INT DEFAULT 10,
   p_page_start INT DEFAULT NULL,
@@ -799,129 +669,509 @@ AS $$
   ),
   vector_results AS (
     SELECT
-      textbook_chunks.id,
-      textbook_chunks.textbook_id,
-      textbook_chunks.page_number,
-      textbook_chunks.structure_path,
-      textbook_chunks.content,
-      textbook_chunks.figure_refs,
-      1 - (textbook_chunks.embedding <=> query_embedding) AS similarity,
-      ROW_NUMBER() OVER (ORDER BY 1 - (textbook_chunks.embedding <=> query_embedding) DESC) AS rank
-    FROM textbook_chunks
-    WHERE textbook_chunks.textbook_id = p_textbook_id
-      AND textbook_chunks.embedding IS NOT NULL
-      AND 1 - (textbook_chunks.embedding <=> query_embedding) > p_match_threshold
-      AND (p_page_start IS NULL OR textbook_chunks.page_number >= p_page_start)
-      AND (p_page_end IS NULL OR textbook_chunks.page_number <= p_page_end)
-    ORDER BY similarity DESC
-    LIMIT 20
+      tc.id, tc.textbook_id, tc.page_number, tc.structure_path, tc.content, tc.figure_refs,
+      1 - (tc.embedding <=> query_embedding) AS similarity,
+      ROW_NUMBER() OVER (ORDER BY 1 - (tc.embedding <=> query_embedding) DESC) AS rank
+    FROM textbook_chunks tc
+    WHERE tc.textbook_id = p_textbook_id
+      AND tc.user_id = p_user_id
+      AND tc.embedding IS NOT NULL
+      AND 1 - (tc.embedding <=> query_embedding) > p_match_threshold
+      AND (p_page_start IS NULL OR tc.page_number >= p_page_start)
+      AND (p_page_end IS NULL OR tc.page_number <= p_page_end)
+    ORDER BY similarity DESC LIMIT 20
   ),
   bm25_results AS (
     SELECT
-      textbook_chunks.id,
-      textbook_chunks.textbook_id,
-      textbook_chunks.page_number,
-      textbook_chunks.structure_path,
-      textbook_chunks.content,
-      textbook_chunks.figure_refs,
-      ts_rank_cd(
-        textbook_chunks.content_tsv,
-        plainto_tsquery('simple', nq.query_text)
-      ) AS bm25_score,
-      ROW_NUMBER() OVER (
-        ORDER BY ts_rank_cd(
-          textbook_chunks.content_tsv,
-          plainto_tsquery('simple', nq.query_text)
-        ) DESC
-      ) AS rank
-    FROM textbook_chunks
+      tc.id, tc.textbook_id, tc.page_number, tc.structure_path, tc.content, tc.figure_refs,
+      ts_rank_cd(tc.content_tsv, plainto_tsquery('simple', nq.query_text)) AS bm25_score,
+      ROW_NUMBER() OVER (ORDER BY ts_rank_cd(tc.content_tsv, plainto_tsquery('simple', nq.query_text)) DESC) AS rank
+    FROM textbook_chunks tc
     CROSS JOIN normalized_query nq
-    WHERE textbook_chunks.textbook_id = p_textbook_id
-      AND textbook_chunks.content_tsv @@ plainto_tsquery('simple', nq.query_text)
-      AND (p_page_start IS NULL OR textbook_chunks.page_number >= p_page_start)
-      AND (p_page_end IS NULL OR textbook_chunks.page_number <= p_page_end)
-    ORDER BY bm25_score DESC
-    LIMIT 20
+    WHERE tc.textbook_id = p_textbook_id
+      AND tc.user_id = p_user_id
+      AND tc.content_tsv @@ plainto_tsquery('simple', nq.query_text)
+      AND (p_page_start IS NULL OR tc.page_number >= p_page_start)
+      AND (p_page_end IS NULL OR tc.page_number <= p_page_end)
+    ORDER BY bm25_score DESC LIMIT 20
+  ),
+  trgm_results AS (
+    SELECT
+      tc.id, tc.textbook_id, tc.page_number, tc.structure_path, tc.content, tc.figure_refs,
+      similarity(tc.content, nq.query_text) AS trgm_score,
+      ROW_NUMBER() OVER (ORDER BY similarity(tc.content, nq.query_text) DESC) AS rank
+    FROM textbook_chunks tc
+    CROSS JOIN normalized_query nq
+    WHERE tc.textbook_id = p_textbook_id
+      AND tc.user_id = p_user_id
+      AND tc.content % nq.query_text
+      AND (p_page_start IS NULL OR tc.page_number >= p_page_start)
+      AND (p_page_end IS NULL OR tc.page_number <= p_page_end)
+    ORDER BY trgm_score DESC LIMIT 20
   ),
   combined AS (
-    SELECT
-      v.id,
-      v.textbook_id,
-      v.page_number,
-      v.structure_path,
-      v.content,
-      v.figure_refs,
-      v.similarity,
-      COALESCE(b.bm25_score, 0) AS bm25_score,
-      (1.0 / (60 + v.rank)) AS rrf_vector,
-      0.0 AS rrf_bm25
+    SELECT v.id, v.textbook_id, v.page_number, v.structure_path, v.content, v.figure_refs,
+      v.similarity, COALESCE(b.bm25_score, 0) AS bm25_score,
+      COALESCE(t.trgm_score, 0) AS trgm_score,
+      (1.0 / (60 + v.rank)) AS rrf_vector, 0.0 AS rrf_bm25, 0.0 AS rrf_trgm
     FROM vector_results v
     LEFT JOIN bm25_results b ON v.id = b.id
-
+    LEFT JOIN trgm_results t ON v.id = t.id
     UNION
-
-    SELECT
-      b.id,
-      b.textbook_id,
-      b.page_number,
-      b.structure_path,
-      b.content,
-      b.figure_refs,
-      COALESCE(v.similarity, 0) AS similarity,
-      b.bm25_score,
-      0.0 AS rrf_vector,
-      (1.0 / (60 + b.rank)) AS rrf_bm25
+    SELECT b.id, b.textbook_id, b.page_number, b.structure_path, b.content, b.figure_refs,
+      COALESCE(v.similarity, 0) AS similarity, b.bm25_score,
+      COALESCE(t.trgm_score, 0) AS trgm_score,
+      0.0 AS rrf_vector, (1.0 / (60 + b.rank)) AS rrf_bm25, 0.0 AS rrf_trgm
     FROM bm25_results b
     LEFT JOIN vector_results v ON b.id = v.id
+    LEFT JOIN trgm_results t ON b.id = t.id
     WHERE v.id IS NULL
+    UNION
+    SELECT t.id, t.textbook_id, t.page_number, t.structure_path, t.content, t.figure_refs,
+      COALESCE(v.similarity, 0) AS similarity, COALESCE(b.bm25_score, 0) AS bm25_score,
+      t.trgm_score,
+      0.0 AS rrf_vector, 0.0 AS rrf_bm25, (1.0 / (60 + t.rank)) AS rrf_trgm
+    FROM trgm_results t
+    LEFT JOIN vector_results v ON t.id = v.id
+    LEFT JOIN bm25_results b ON t.id = b.id
+    WHERE v.id IS NULL AND b.id IS NULL
   ),
   scored AS (
-    SELECT
-      *,
-      -- Normalize vector similarity to 0-1 range
+    SELECT *,
       GREATEST(0, LEAST(1, similarity)) AS norm_vector,
-      -- Normalize BM25 score using log scaling
       CASE WHEN bm25_score > 0 THEN LEAST(1, bm25_score / (bm25_score + 1)) ELSE 0 END AS norm_bm25,
-      -- RRF scores
-      (rrf_vector + rrf_bm25) AS rrf_score
+      CASE WHEN trgm_score > 0 THEN LEAST(1, trgm_score) ELSE 0 END AS norm_trgm,
+      (rrf_vector + rrf_bm25 + rrf_trgm) AS rrf_score
     FROM combined
   ),
   final_scored AS (
-    SELECT
-      *,
-      -- Combine normalized components with equal weight for vector and BM25
-      -- Then blend with RRF for diversity
-      (0.5 * norm_vector + 0.5 * norm_bm25) AS combined_score
-    FROM scored
+    SELECT *, (0.4 * norm_vector + 0.35 * norm_bm25 + 0.25 * norm_trgm) AS combined_score FROM scored
   )
-  SELECT
-    id,
-    textbook_id,
-    page_number,
-    structure_path,
-    content,
-    figure_refs,
-    similarity,
-    bm25_score,
-    -- Final score: 70% combined similarity + 30% RRF diversity
-    (0.7 * combined_score + 0.3 * rrf_score) AS final_score
+  SELECT id, textbook_id, page_number, structure_path, content, figure_refs,
+    similarity, bm25_score,
+    (0.6 * combined_score + 0.4 * rrf_score) AS final_score
   FROM final_scored
   ORDER BY final_score DESC
   LIMIT p_match_count;
 $$;
 
--- ==========================================
--- TEXTBOOK STORAGE BUCKET (private)
--- ==========================================
-INSERT INTO storage.buckets (id, name, public) VALUES ('textbook-images', 'textbook-images', false)
-  ON CONFLICT (id) DO NOTHING;
+-- batch_update_embeddings (014 - scoped by textbook_id)
+CREATE OR REPLACE FUNCTION batch_update_embeddings(
+  p_updates JSONB,
+  p_textbook_id UUID
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  item JSONB;
+BEGIN
+  FOR item IN SELECT jsonb_array_elements(p_updates)
+  LOOP
+    UPDATE textbook_chunks
+    SET embedding = (item->>'embedding')::vector(9692)
+    WHERE id = (item->>'id')::bigint
+      AND textbook_id = p_textbook_id;
+  END LOOP;
+END;
+$$;
 
-CREATE POLICY "Users can upload textbook images" ON storage.objects
-  FOR INSERT WITH CHECK (bucket_id = 'textbook-images' AND auth.uid()::text = (storage.foldername(name))[1]);
-CREATE POLICY "Users can view own textbook images" ON storage.objects
+-- ANALYZE after bulk embedding: pgvector needs fresh stats for HNSW queries
+CREATE OR REPLACE FUNCTION analyze_textbook_chunks()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  ANALYZE textbook_chunks;
+END;
+$$;
+
+-- pg_trgm for Arabic morphological similarity (supplements BM25 term-matching)
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX IF NOT EXISTS idx_textbook_chunks_content_trgm
+ON textbook_chunks USING gin (content gin_trgm_ops);
+-- ==========================================
+-- ROW-LEVEL SECURITY POLICIES
+-- ==========================================
+ALTER TABLE chat_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_memory ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_signatures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_schedules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE textbooks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE textbook_chunks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE textbook_figures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE textbook_pages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE textbook_sections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE textbook_questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE textbook_glossary ENABLE ROW LEVEL SECURITY;
+ALTER TABLE custom_instructions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE student_courses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE course_resources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_conversation_events ENABLE ROW LEVEL SECURITY;
+
+-- chat_sessions: users manage own sessions
+CREATE POLICY "Users can view their own sessions" ON chat_sessions
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own sessions" ON chat_sessions
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own sessions" ON chat_sessions
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own sessions" ON chat_sessions
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- chat_messages: users manage own messages
+CREATE POLICY "Users can view their own messages" ON chat_messages
   FOR SELECT USING (
-    bucket_id = 'textbook-images'
-    AND auth.uid()::text = (storage.foldername(name))[1]
+    EXISTS (
+      SELECT 1 FROM chat_sessions WHERE chat_sessions.id = chat_messages.session_id
+      AND chat_sessions.user_id = auth.uid()
+    )
   );
-CREATE POLICY "Users can delete own textbook images" ON storage.objects
-  FOR DELETE USING (bucket_id = 'textbook-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+CREATE POLICY "Users can insert messages in their own sessions" ON chat_messages
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM chat_sessions WHERE chat_sessions.id = chat_messages.session_id
+      AND chat_sessions.user_id = auth.uid()
+    )
+  );
+
+-- user_memory: users manage own data
+CREATE POLICY "Users can view their own memory" ON user_memory
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own memory" ON user_memory
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own memory" ON user_memory
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own memory" ON user_memory
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- email_contacts: users manage own contacts
+CREATE POLICY "Users can view their own contacts" ON email_contacts
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own contacts" ON email_contacts
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own contacts" ON email_contacts
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own contacts" ON email_contacts
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- email_signatures: users manage own signatures
+CREATE POLICY "Users can view their own signatures" ON email_signatures
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own signatures" ON email_signatures
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own signatures" ON email_signatures
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own signatures" ON email_signatures
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- email_jobs: users manage own jobs
+CREATE POLICY "Users can view their own jobs" ON email_jobs
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own jobs" ON email_jobs
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- email_schedules: users manage own schedules
+CREATE POLICY "Users can view their own schedules" ON email_schedules
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own schedules" ON email_schedules
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own schedules" ON email_schedules
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- email_audit_logs: users view own logs
+CREATE POLICY "Users can view their own audit logs" ON email_audit_logs
+  FOR SELECT USING (auth.uid() = user_id);
+
+-- analytics_events: users view own events
+CREATE POLICY "Users can view their own events" ON analytics_events
+  FOR SELECT USING (auth.uid() = user_id);
+
+-- textbooks: users manage own textbooks
+CREATE POLICY "Users can view their own textbooks" ON textbooks
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own textbooks" ON textbooks
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own textbooks" ON textbooks
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own textbooks" ON textbooks
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- textbook_chunks: users access own textbook chunks
+CREATE POLICY "Users can view chunks from own textbooks" ON textbook_chunks
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_chunks.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can insert chunks into own textbooks" ON textbook_chunks
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_chunks.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can update chunks in own textbooks" ON textbook_chunks
+  FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_chunks.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can delete chunks from own textbooks" ON textbook_chunks
+  FOR DELETE USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_chunks.textbook_id AND textbooks.user_id = auth.uid())
+  );
+
+-- textbook_figures: users access own textbook figures
+CREATE POLICY "Users can view figures from own textbooks" ON textbook_figures
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_figures.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can insert figures into own textbooks" ON textbook_figures
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_figures.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can update figures in own textbooks" ON textbook_figures
+  FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_figures.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can delete figures from own textbooks" ON textbook_figures
+  FOR DELETE USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_figures.textbook_id AND textbooks.user_id = auth.uid())
+  );
+
+-- textbook_pages: users access own textbook pages
+CREATE POLICY "Users can view pages from own textbooks" ON textbook_pages
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_pages.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can insert pages into own textbooks" ON textbook_pages
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_pages.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can update pages in own textbooks" ON textbook_pages
+  FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_pages.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can delete pages from own textbooks" ON textbook_pages
+  FOR DELETE USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_pages.textbook_id AND textbooks.user_id = auth.uid())
+  );
+
+-- textbook_sections: users access own textbook sections
+CREATE POLICY "Users can view sections from own textbooks" ON textbook_sections
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_sections.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can insert sections into own textbooks" ON textbook_sections
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_sections.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can update sections in own textbooks" ON textbook_sections
+  FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_sections.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can delete sections from own textbooks" ON textbook_sections
+  FOR DELETE USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_sections.textbook_id AND textbooks.user_id = auth.uid())
+  );
+
+-- textbook_questions: users access own textbook questions
+CREATE POLICY "Users can view questions from own textbooks" ON textbook_questions
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_questions.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can insert questions into own textbooks" ON textbook_questions
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_questions.textbook_id AND textbooks.user_id = auth.uid())
+  );
+
+-- textbook_glossary: users access own textbook glossary
+CREATE POLICY "Users can view glossary from own textbooks" ON textbook_glossary
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_glossary.textbook_id AND textbooks.user_id = auth.uid())
+  );
+CREATE POLICY "Users can insert glossary into own textbooks" ON textbook_glossary
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM textbooks WHERE textbooks.id = textbook_glossary.textbook_id AND textbooks.user_id = auth.uid())
+  );
+
+-- custom_instructions: users manage own instructions
+CREATE POLICY "Users can view their own instructions" ON custom_instructions
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own instructions" ON custom_instructions
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own instructions" ON custom_instructions
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own instructions" ON custom_instructions
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- student_courses: users manage own courses
+CREATE POLICY "Users can view their own courses" ON student_courses
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own courses" ON student_courses
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own courses" ON student_courses
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own courses" ON student_courses
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- course_resources: users access own course resources
+CREATE POLICY "Users can view resources for their courses" ON course_resources
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM student_courses WHERE student_courses.id = course_resources.course_id AND student_courses.user_id = auth.uid())
+  );
+CREATE POLICY "Users can insert resources for their courses" ON course_resources
+  FOR INSERT WITH CHECK (
+    EXISTS (SELECT 1 FROM student_courses WHERE student_courses.id = course_resources.course_id AND student_courses.user_id = auth.uid())
+  );
+
+-- feedback: users manage own feedback
+CREATE POLICY "Users can view their own feedback" ON feedback
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own feedback" ON feedback
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- agent_conversation_events: users access own room events
+CREATE POLICY "Users can view events in their own rooms" ON agent_conversation_events
+  FOR SELECT USING (room_name LIKE auth.uid() || ':%');
+CREATE POLICY "Users can insert events in their own rooms" ON agent_conversation_events
+  FOR INSERT WITH CHECK (room_name LIKE auth.uid() || ':%');
+-- ==========================================
+-- STORAGE BUCKETS & POLICIES
+-- ==========================================
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('profile-attachments', 'profile-attachments', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Agents: read/write own folder
+CREATE POLICY "agents: read own files" ON storage.objects
+  FOR SELECT USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'agents' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "agents: insert own files" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'agents' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "agents: update own files" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'agents' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "agents: delete own files" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'agents' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+
+-- Agent avatars: read/write own folder
+CREATE POLICY "agent-avatars: read own files" ON storage.objects
+  FOR SELECT USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'agent-avatars' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "agent-avatars: insert own files" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'agent-avatars' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "agent-avatars: update own files" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'agent-avatars' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "agent-avatars: delete own files" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'agent-avatars' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+
+-- Avatars: read/write own folder (009)
+CREATE POLICY "avatars: read own files" ON storage.objects
+  FOR SELECT USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'avatars' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "avatars: insert own files" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'avatars' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "avatars: update own files" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'avatars' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "avatars: delete own files" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'avatars' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+
+-- User uploads: read/write own folder
+CREATE POLICY "user_uploads: read own files" ON storage.objects
+  FOR SELECT USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'user-uploads' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "user_uploads: insert own files" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'user-uploads' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "user_uploads: update own files" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'user-uploads' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "user_uploads: delete own files" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'user-uploads' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+
+-- Covers: public read, owner write
+CREATE POLICY "covers: public read" ON storage.objects
+  FOR SELECT USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'covers'
+  );
+CREATE POLICY "covers: insert own files" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'covers' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "covers: update own files" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'covers' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "covers: delete own files" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'covers' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+
+-- Textbooks: read/write own folder
+CREATE POLICY "textbooks: read own files" ON storage.objects
+  FOR SELECT USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'textbooks' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "textbooks: insert own files" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'textbooks' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "textbooks: update own files" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'textbooks' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );
+CREATE POLICY "textbooks: delete own files" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'profile-attachments' AND (storage.foldername(name))[1] = 'textbooks' AND
+    (storage.foldername(name))[2] = auth.uid()::text
+  );

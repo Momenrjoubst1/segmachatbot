@@ -96,4 +96,54 @@ router.post(
   }),
 );
 
+// ── Retrieval quality feedback (thumbs up/down on RAG answers) ──────────
+// Writes to retrieval_feedback table for active learning analysis.
+const retrievalFeedbackSchema = z.object({
+  textbookId: z.string().uuid().optional(),
+  queryText: z.string().min(1).max(2000),
+  matchedSectionId: z.string().uuid().optional(),
+  matchedPages: z.array(z.number().int().positive()).optional(),
+  chunksRetrieved: z.number().int().nonnegative().optional(),
+  satisfied: z.boolean(),
+  feedbackText: z.string().max(2000).optional(),
+});
+
+router.post(
+  '/retrieval',
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const parsed = retrievalFeedbackSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid payload', details: parsed.error.flatten().fieldErrors });
+      return;
+    }
+
+    const { textbookId, queryText, matchedSectionId, matchedPages, chunksRetrieved, satisfied, feedbackText } = parsed.data;
+
+    const { error } = await supabase.from('retrieval_feedback').insert({
+      user_id: userId,
+      textbook_id: textbookId || null,
+      query_text: queryText,
+      matched_section_id: matchedSectionId || null,
+      matched_pages: matchedPages || null,
+      chunks_retrieved: chunksRetrieved || 0,
+      user_satisfied: satisfied,
+      feedback_text: feedbackText || null,
+    });
+
+    if (error) {
+      log.error('Retrieval feedback insert failed', { error: error.message });
+      res.status(500).json({ error: 'Failed to save feedback' });
+      return;
+    }
+
+    res.json({ success: true });
+  }),
+);
+
 export default router;

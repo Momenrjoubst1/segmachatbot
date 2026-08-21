@@ -335,7 +335,14 @@ export async function processTextbookJob(jobData: {
       }
     }
 
-    // 4. Chunks
+    // 4. Chunks — link figures from the same page into figure_refs
+    const figuresByPage = new Map<number, string[]>();
+    for (const f of figureUrls) {
+      const list = figuresByPage.get(f.page_number) || [];
+      list.push(f.figure_id);
+      figuresByPage.set(f.page_number, list);
+    }
+
     const chunkData = (result.chunks || []).map(
       (c: {
         page_number: number;
@@ -352,6 +359,7 @@ export async function processTextbookJob(jobData: {
         block_role: c.block_role || null,
         text_color: c.text_color || null,
         chunk_bbox: c.bbox || null,
+        figure_refs: figuresByPage.get(c.page_number) || [],
       })
     );
 

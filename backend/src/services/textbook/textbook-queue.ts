@@ -71,7 +71,16 @@ export async function setTextbookProgress(
   textbookId: string,
   progress: { stage: string; pages_done: number; total_pages: number }
 ): Promise<void> {
-  await redis.set(`${PROGRESS_PREFIX}${textbookId}`, JSON.stringify(progress), "EX", JOB_TIMEOUT);
+  const payload = JSON.stringify(progress);
+  // Write to Redis key (for polling) and publish to Pub/Sub (for SSE).
+  // publish() may not exist on MockRedis — safe to ignore.
+  const tasks: Promise<unknown>[] = [
+    redis.set(`${PROGRESS_PREFIX}${textbookId}`, payload, "EX", JOB_TIMEOUT),
+  ];
+  if (typeof (redis as { publish?: Function }).publish === "function") {
+    tasks.push((redis as { publish: Function }).publish(`textbook:progress:${textbookId}`, payload));
+  }
+  await Promise.allSettled(tasks);
 }
 
 export async function getTextbookProgress(
