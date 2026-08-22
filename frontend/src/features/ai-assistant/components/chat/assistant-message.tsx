@@ -1,5 +1,5 @@
 
-import { type FC, useState, useCallback } from "react";
+import { type FC, useState, useCallback, useEffect } from "react";
 import {
   MessagePrimitive,
   ActionBarPrimitive,
@@ -28,20 +28,28 @@ import {
 } from "@/components/ui/tooltip";
 import { MarkdownText } from "../../ui/markdown-text";
 import { MessageTiming } from "../../ui/message-timing";
+import { SourcesPanel } from "./SourcesPanel";
 import { TooltipIconButton } from "../../ui/tooltip-icon-button";
 import { useChatHistory } from "@/hooks/useChatHistory";
-import type { AgentChatMessage } from "@/hooks/useAgentWebSocket";
+import type { AgentChatMessage, AgentStep } from "@/hooks/useAgentWebSocket";
 import { useConnectionContext } from "@/context/ConnectionContext";
+import { ragSourcesBridge, type RagSource } from "@/context/ragSourcesBridge";
 
 export const AssistantMessage: FC = () => {
   const messageId = useAuiState((s) => s.message.id);
-  const { activeThreadMessages } = useChatHistory() as any;
+  const { activeThreadMessages } = useChatHistory();
   const { retryMessage, sendApprovalDecision } = useConnectionContext();
-  const chatMessage = activeThreadMessages?.find((m: any) => m.id === messageId) as AgentChatMessage | undefined;
+  const chatMessage = activeThreadMessages?.find((m) => m.id === messageId) as AgentChatMessage | undefined;
 
 
   const [feedbackText, setFeedbackText] = useState("");
   const [showDenyInput, setShowDenyInput] = useState(false);
+  const [ragSources, setRagSources] = useState<RagSource[]>([]);
+
+  useEffect(() => {
+    setRagSources(ragSourcesBridge.getSources());
+    return ragSourcesBridge.subscribe((s) => setRagSources(s));
+  }, []);
   // Double-click race-condition protection: once submitted, lock all buttons
   const [hasSubmitted, setHasSubmitted] = useState(false);
 
@@ -93,7 +101,7 @@ export const AssistantMessage: FC = () => {
         {chatMessage?.agent_steps && chatMessage.agent_steps.length > 0 && (
           <div className="mb-4 space-y-1.5 rounded-xl bg-muted/30 border border-border/30 p-3 text-sm">
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Agent Execution Steps</div>
-            {chatMessage.agent_steps.map((step: any) => (
+            {chatMessage.agent_steps.map((step: AgentStep) => (
               <div key={step.id} className="flex items-center gap-2 text-muted-foreground">
                 {step.status === "running" && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-400" />}
                 {step.status === "success" && <CheckIcon className="h-3.5 w-3.5 text-emerald-400" />}
@@ -240,6 +248,12 @@ export const AssistantMessage: FC = () => {
             )}
           </div>
         )}
+
+        {/* Sources / Citations Panel */}
+        {(() => {
+          const text = chatMessage?.content || "";
+          return text ? <SourcesPanel messageContent={text} structuredSources={ragSources} /> : null;
+        })()}
       </div>
 
       <div

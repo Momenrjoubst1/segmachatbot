@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabaseClient";
 import type { AcademicCourse } from "../../../hooks/useCourses";
 import { useRAGContext } from "../../../context/RAGContext";
 import { sendStateBridge } from "../../../context/sendStateBridge";
+import { ragSourcesBridge } from "../../../context/ragSourcesBridge";
 import { toast } from "sonner";
 import {
   dispatchUIAction,
@@ -619,6 +620,23 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
 
       // Capture new thread ID from backend after stream completes
       const serverThreadId = res.headers.get("X-Thread-Id");
+
+      // Capture structured RAG sources from header
+      const ragSourcesHeader = res.headers.get("X-RAG-Sources");
+      if (ragSourcesHeader) {
+        try {
+          const parsed = JSON.parse(ragSourcesHeader);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            ragSourcesBridge.setSources(parsed);
+          } else {
+            ragSourcesBridge.clear();
+          }
+        } catch {
+          ragSourcesBridge.clear();
+        }
+      } else {
+        ragSourcesBridge.clear();
+      }
 
       const isNewThread = !!serverThreadId && serverThreadId !== activeThreadId && !threadCreatedRef.current;
 
