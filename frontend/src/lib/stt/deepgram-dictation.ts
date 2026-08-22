@@ -21,6 +21,8 @@ export interface DictationCallbacks {
   onInterim?: (text: string) => void;
   /** A finalized segment (sentence/phrase). */
   onFinalSegment?: (text: string) => void;
+  /** Low-level diagnostic events for debugging overlays. */
+  onEvent?: (evt: { kind: string; detail?: string }) => void;
 }
 
 interface RelayServerMessage {
@@ -145,6 +147,7 @@ export class DictationController {
       ) => {
         const msg = e.data;
         if (msg.type === "frame" && msg.buffer && ws.readyState === WebSocket.OPEN) {
+          this.callbacks.onEvent?.({ kind: "frame" });
           ws.send(msg.buffer);
         }
       };
@@ -177,6 +180,7 @@ export class DictationController {
       4029: "limit",
     };
     const reason = ev.reason || known[ev.code] || "closed";
+    this.callbacks.onEvent?.({ kind: "ws_close", detail: `${ev.code} ${reason}` });
 
     // If we were waiting for "ready" when the socket died -> start failed.
     if (this.readyReject && !this.readyResolveDone) {
@@ -212,13 +216,16 @@ export class DictationController {
     switch (msg.type) {
       case "ready":
         this.readyResolveDone = true;
+        this.callbacks.onEvent?.({ kind: "relay_ready" });
         this.readyResolve?.();
         break;
       case "partial":
+        this.callbacks.onEvent?.({ kind: "partial", detail: msg.text });
         this.interimText = msg.text ?? "";
         this.callbacks.onInterim?.(this.interimText);
         break;
       case "final":
+        this.callbacks.onEvent?.({ kind: "final", detail: msg.text });
         if (msg.text) {
           this.finalSegments.push(msg.text);
           this.interimText = "";

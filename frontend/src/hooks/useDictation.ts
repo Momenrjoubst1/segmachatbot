@@ -10,6 +10,8 @@ export interface UseDictationOptions {
   /** Called on every interim/final change with the FULL live transcript. */
   onTranscript?: (fullText: string) => void;
   onFinalSegment?: (segment: string) => void;
+  /** Low-level diagnostic events (frames, relay msgs, close codes). */
+  onEvent?: (evt: { kind: string; detail?: string }) => void;
 }
 
 export type DictationStatus =
@@ -59,6 +61,7 @@ export function useDictation(options: UseDictationOptions = {}) {
         optionsRef.current.onFinalSegment?.(seg);
         emitCumulative();
       },
+      onEvent: (evt) => optionsRef.current.onEvent?.(evt),
     });
   }, [emitCumulative]);
 
