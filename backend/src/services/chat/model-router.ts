@@ -132,6 +132,8 @@ export class CircuitBreaker {
 // ─── Fallback Chain Definition / تعريف سلسلة الاحتياطي ───
 // Config-driven: can be overridden via MODEL_FALLBACK_CHAINS env var (JSON)
 const DEFAULT_FALLBACK_CHAINS: Record<string, string[]> = {
+  // Primary: OpenRouter stealth ox-alpha; NVIDIA NIM is first backup
+  "stealth/ox-alpha": ["nvidia/llama-3.3-70b-instruct", "qwen/qwen3.6-27b", "gpt-4o-mini"],
   // Baichat
   "deepseek-v4-flash": ["gemini-3.7-flash", "gemini-2.5-flash", "nvidia/nemotron-3.5-lightning-30b-a3b:free", "gpt-4o-mini"],
   // Google Gemini (direct) - gemini-3.7-flash is alias for gemini-2.5-flash
