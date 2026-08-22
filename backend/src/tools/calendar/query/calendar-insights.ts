@@ -1,9 +1,16 @@
 import { z } from "zod";
 import { registerTool } from "../../tool-registry.js";
+import { createToolMetadata } from "../../tool-metadata.js";
 import { supabase } from "../../../services/rag/rag-supabase-client.js";
 import { createLogger } from '../../../utils/logger.js';
 
 const log = createLogger('calendar-insights');
+
+createToolMetadata("get_calendar_insights", "Analyze the user's calendar and return insights", {
+  requiresUserId: true,
+  category: "productivity",
+  enabledByDefault: true,
+});
 
 // ============================================
 // Tool: get_calendar_insights

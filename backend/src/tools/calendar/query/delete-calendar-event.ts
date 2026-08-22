@@ -1,43 +1,42 @@
 import { z } from "zod";
 import { registerTool } from "../../tool-registry.js";
+import { createToolMetadata } from "../../tool-metadata.js";
 import { supabase } from "../../../services/rag/rag-supabase-client.js";
 import { getGoogleCalendarAccessToken } from "../../shared/ics-and-google-auth.js";
 import { createLogger } from '../../../utils/logger.js';
 
 const log = createLogger('calendar-delete');
 
+createToolMetadata("delete_calendar_event", "Delete a calendar event for the user", {
+  requiresUserId: true,
+  category: "productivity",
+  enabledByDefault: true,
+});
+
+createToolMetadata("update_calendar_event", "Update/reschedule a calendar event for the user", {
+  requiresUserId: true,
+  category: "productivity",
+  enabledByDefault: true,
+});
+
 // ============================================
 // Tool: delete_calendar_event
 // ============================================
 registerTool("delete_calendar_event", {
-  description: "Delete a calendar event. Can delete from local storage and/or Google Calendar. Requires event ID or event details for identification.",
+  description: "Delete a calendar event. Removes it from local storage and, if synced, from Google Calendar too. Requires event ID or event details for identification.",
   inputSchema: z.object({
     event_id: z.string().optional().describe("Local event ID (UUID)"),
     google_event_id: z.string().optional().describe("Google Calendar event ID"),
-    confirm: z.boolean().optional().describe("Confirmation flag (must be true to delete)"),
-    delete_forever: z.boolean().optional().describe("Skip soft-delete and remove permanently (default: false)"),
   }),
   execute: async (args: {
     event_id?: string;
     google_event_id?: string;
-    confirm?: boolean;
-    delete_forever?: boolean;
     __userId?: string;
   }) => {
     try {
       const userId = args.__userId;
       if (!userId) {
         return JSON.stringify({ status: "error", message: "User not authenticated" });
-      }
-
-      // Require confirmation
-      if (!args.confirm) {
-        return JSON.stringify({
-          status: "needs_confirmation",
-          message: "Please confirm deletion by setting confirm=true",
-          event_id: args.event_id || null,
-          google_event_id: args.google_event_id || null,
-        });
       }
 
       const results: { deleted: Array<Record<string, unknown>>; failed: Array<Record<string, unknown>> } = {
@@ -215,7 +214,6 @@ registerTool("update_calendar_event", {
       email: z.string(),
       status: z.enum(["pending", "accepted", "declined", "tentative"]).optional(),
     })).optional().describe("Update attendees"),
-    confirm: z.boolean().optional().describe("Confirmation flag (must be true to update)"),
   }),
   execute: async (args: {
     event_id: string;
@@ -227,38 +225,12 @@ registerTool("update_calendar_event", {
     is_all_day?: boolean;
     color?: string;
     attendees?: { email: string; status?: string }[];
-    confirm?: boolean;
     __userId?: string;
   }) => {
     try {
       const userId = args.__userId;
       if (!userId) {
         return JSON.stringify({ status: "error", message: "User not authenticated" });
-      }
-
-      // Require confirmation
-      if (!args.confirm) {
-        const { data: event } = await supabase
-          .from("user_calendar_events")
-          .select("title, start_time, end_time, location")
-          .eq("id", args.event_id)
-          .eq("user_id", userId)
-          .single();
-
-        return JSON.stringify({
-          status: "needs_confirmation",
-          message: "Please confirm the update by setting confirm=true",
-          current_values: event,
-          new_values: {
-            title: args.title,
-            description: args.description,
-            location: args.location,
-            start_time: args.start_time,
-            end_time: args.end_time,
-            is_all_day: args.is_all_day,
-            color: args.color,
-          },
-        });
       }
 
       // Build update object
@@ -309,6 +281,45 @@ registerTool("update_calendar_event", {
           .insert(attendeeRecords);
       }
 
+      // Best-effort Google sync when the event is linked to Google Calendar.
+      let googleSynced = false;
+      if (updatedEvent.external_id) {
+        try {
+          const settingsQuery = await supabase
+            .from("user_calendar_settings")
+            .select("google_calendar_id")
+            .eq("user_id", userId)
+            .single();
+          const accessToken = await getGoogleCalendarAccessToken();
+          const calendarId = settingsQuery.data?.google_calendar_id || process.env.GOOGLE_CALENDAR_ID;
+
+          if (accessToken && calendarId) {
+            const googleUpdates: Record<string, unknown> = {};
+            if (args.title !== undefined) googleUpdates.summary = args.title;
+            if (args.description !== undefined) googleUpdates.description = args.description;
+            if (args.location !== undefined) googleUpdates.location = args.location;
+            if (args.start_time !== undefined) googleUpdates.start = { dateTime: args.start_time };
+            if (args.end_time !== undefined) googleUpdates.end = { dateTime: args.end_time };
+
+            if (Object.keys(googleUpdates).length > 0) {
+              const res = await fetch(
+                `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(updatedEvent.external_id)}`,
+                {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+                  body: JSON.stringify(googleUpdates),
+                }
+              );
+              googleSynced = res.ok;
+            } else {
+              googleSynced = true;
+            }
+          }
+        } catch (googleErr: unknown) {
+          log.warn("[Calendar] Google sync on update failed (local update kept):", googleErr instanceof Error ? googleErr.message : String(googleErr));
+        }
+      }
+
       return JSON.stringify({
         status: "success",
         event: {
@@ -318,6 +329,7 @@ registerTool("update_calendar_event", {
           end_time: updatedEvent.end_time,
           location: updatedEvent.location,
         },
+        google_synced: googleSynced,
         message: "Calendar event updated successfully!",
       });
     } catch (err: unknown) {

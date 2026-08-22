@@ -1,10 +1,17 @@
 import { z } from "zod";
 import { registerTool } from "../../tool-registry.js";
+import { createToolMetadata } from "../../tool-metadata.js";
 import { supabase } from "../../../services/rag/rag-supabase-client.js";
 import { getGoogleCalendarAccessToken } from "../../shared/ics-and-google-auth.js";
 import { createLogger } from '../../../utils/logger.js';
 
 const log = createLogger('find-optimal-time');
+
+createToolMetadata("find_optimal_time", "Find the best time slot to schedule something", {
+  requiresUserId: true,
+  category: "productivity",
+  enabledByDefault: true,
+});
 
 // ============================================
 // Helper: Check for conflicts

@@ -1,10 +1,17 @@
 import { z } from "zod";
 import { registerTool } from "../../tool-registry.js";
+import { createToolMetadata } from "../../tool-metadata.js";
 import { getGoogleCalendarAccessToken } from "../../shared/ics-and-google-auth.js";
 import { supabase } from "../../../services/rag/rag-supabase-client.js";
 import { createLogger } from '../../../utils/logger.js';
 
 const log = createLogger('calendar-free-slots');
+
+createToolMetadata("find_free_slots", "Find free time slots in the user's calendar", {
+  requiresUserId: true,
+  category: "productivity",
+  enabledByDefault: true,
+});
 
 // ============================================
 // Helper: Get user's calendar settings

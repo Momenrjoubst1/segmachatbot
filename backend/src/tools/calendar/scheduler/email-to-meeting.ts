@@ -1,11 +1,18 @@
 import { z } from "zod";
 import { registerTool } from "../../tool-registry.js";
+import { createToolMetadata } from "../../tool-metadata.js";
 import { supabase } from "../../../services/rag/rag-supabase-client.js";
 import { streamText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { createLogger } from '../../../utils/logger.js';
 
 const log = createLogger('email-to-meeting');
+
+createToolMetadata("email_to_meeting", "Convert an email into a calendar meeting draft", {
+  requiresUserId: true,
+  category: "productivity",
+  enabledByDefault: true,
+});
 
 // ============================================
 // Helper: Extract meeting info using AI

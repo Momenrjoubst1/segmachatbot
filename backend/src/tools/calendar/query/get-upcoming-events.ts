@@ -1,10 +1,17 @@
 import { z } from "zod";
 import { registerTool } from "../../tool-registry.js";
+import { createToolMetadata } from "../../tool-metadata.js";
 import { getGoogleCalendarAccessToken } from "../../shared/ics-and-google-auth.js";
 import { supabase } from "../../../services/rag/rag-supabase-client.js";
 import { createLogger } from '../../../utils/logger.js';
 
 const log = createLogger('calendar-events');
+
+createToolMetadata("get_upcoming_events", "Fetch the user's upcoming calendar events", {
+  requiresUserId: true,
+  category: "productivity",
+  enabledByDefault: true,
+});
 
 // ============================================
 // Helper: Get events from Google Calendar
