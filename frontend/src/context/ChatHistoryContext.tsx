@@ -5,18 +5,31 @@ import { authFetch } from "@/lib/auth";
 import { useAuthContext } from "@/context/AuthContext";
 import type { LoadErrorCode } from "@/lib/load-errors";
 
+/** Attachment metadata hydrated by GET /api/chat/threads/:id (r2 references). */
+export interface ChatAttachmentMeta {
+  r2Key: string;
+  fileName: string;
+  mimeType: string;
+  kind?: string;
+  sizeBytes?: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system" | "data";
   content: string;
   is_pinned: boolean;
   created_at: string;
+  /** Thumbs rating restored from the DB (1 = like, -1 = dislike, null/absent = none). */
+  feedback?: number | null;
   /** Set by markStreamInterrupted when the assistant stream is cancelled. */
   interrupted?: boolean;
   /** Present when the assistant requests tool approval. */
   require_approval?: { toolCallId: string } | null;
   /** User's approval decision on a tool call. */
   approval_status?: "approved" | "denied" | "pending";
+  /** Files attached to a user message (restored across reloads). */
+  attachments?: ChatAttachmentMeta[];
 }
 
 export interface ChatThread {

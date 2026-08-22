@@ -1,6 +1,6 @@
 
 import { type PropsWithChildren, useEffect, useState, type FC } from "react";
-import { XIcon, PlusIcon, FileText, Loader2Icon, AlertCircleIcon } from "lucide-react";
+import { XIcon, PlusIcon, FileText, FilmIcon, MusicIcon, Loader2Icon, AlertCircleIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
   AttachmentPrimitive,
@@ -25,6 +25,12 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { cn } from "@/lib/cn";
 
+/**
+ * Video/audio/documents are streamed to R2 before send (server tiers:
+ * video 500MB, audio/documents 200MB — see attachment-kinds.ts); images
+ * inline and get downscaled at send time; text/code files inline as text
+ * (2MB adapter cap — see chat-file-attachments.ts).
+ */
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
 
 const ACCEPTED_FILE_TYPES: Record<string, string[]> = {
@@ -32,16 +38,43 @@ const ACCEPTED_FILE_TYPES: Record<string, string[]> = {
   "image/png": [".png"],
   "image/gif": [".gif"],
   "image/webp": [".webp"],
+  "video/mp4": [".mp4"],
+  "video/mpeg": [".mpeg", ".mpg"],
+  "video/quicktime": [".mov"],
+  "video/webm": [".webm"],
+  "video/x-msvideo": [".avi"],
+  "video/x-ms-wmv": [".wmv"],
+  "video/3gpp": [".3gp"],
+  "audio/mpeg": [".mp3"],
+  "audio/wav": [".wav"],
+  "audio/x-wav": [".wav"],
+  "audio/ogg": [".ogg"],
+  "audio/flac": [".flac"],
+  "audio/x-flac": [".flac"],
+  "audio/aac": [".aac"],
+  "audio/mp4": [".m4a"],
+  "audio/x-m4a": [".m4a"],
+  "audio/aiff": [".aiff"],
+  "audio/x-aiff": [".aiff"],
   "application/pdf": [".pdf"],
   "application/msword": [".doc"],
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+  "application/vnd.ms-excel": [".xls"],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+  "application/vnd.ms-powerpoint": [".ppt"],
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": [".pptx"],
   "text/plain": [".txt"],
+  "text/markdown": [".md"],
+  "text/csv": [".csv"],
+  "text/html": [".html"],
+  "text/xml": [".xml"],
+  "text/css": [".css"],
+  "application/json": [".json"],
   "text/x-python": [".py"],
   "text/javascript": [".js"],
   "application/javascript": [".js"],
   "text/typescript": [".ts"],
   "application/typescript": [".ts"],
-  "application/json": [".json"],
 };
 
 function isAcceptedFileType(file: File): boolean {
@@ -127,19 +160,41 @@ const useFileSrc = (file: File | undefined) => {
   return src;
 };
 
-const useAttachmentSrc = () => {
-  const { file, src } = useAuiState(
-    useShallow((s): { file?: File; src?: string } => {
-      if (s.attachment.type !== "image") return {};
-      if (s.attachment.file) return { file: s.attachment.file };
-      const src = s.attachment.content?.filter((c) => c.type === "image")[0]
-        ?.image;
-      if (!src) return {};
-      return { src };
+type MediaKind = "image" | "video" | "audio" | null;
+
+/**
+ * Resolve an attachment's local object URL and media kind for previews.
+ * Video/audio previews only work while the source File is still in memory
+ * (composer attachments); sent attachments carry r2:// references only.
+ */
+const useAttachmentMedia = (): { src?: string; kind: MediaKind } => {
+  const { file, contentType, imageSrc } = useAuiState(
+    useShallow((s): { file?: File; contentType?: string; imageSrc?: string } => {
+      const a = s.attachment;
+      const ct = a.contentType ?? "";
+      if (a.type === "image") {
+        if (a.file) return { file: a.file, contentType: ct };
+        const img = a.content?.filter((c) => c.type === "image")[0]?.image;
+        return img ? { imageSrc: img, contentType: "image/" } : {};
+      }
+      if ((ct.startsWith("video/") || ct.startsWith("audio/")) && a.file) {
+        return { file: a.file, contentType: ct };
+      }
+      return {};
     }),
   );
 
-  return useFileSrc(file) ?? src;
+  const objectUrl = useFileSrc(file);
+  const kind: MediaKind = file
+    ? contentType?.startsWith("video/")
+      ? "video"
+      : contentType?.startsWith("audio/")
+        ? "audio"
+        : "image"
+    : imageSrc
+      ? "image"
+      : null;
+  return { src: objectUrl ?? imageSrc, kind };
 };
 
 type AttachmentPreviewProps = {
@@ -164,9 +219,9 @@ const AttachmentPreview: FC<AttachmentPreviewProps> = ({ src }) => {
 };
 
 const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
-  const src = useAttachmentSrc();
+  const { src, kind } = useAttachmentMedia();
 
-  if (!src) return children;
+  if (!src || !kind) return children;
 
   return (
     <Dialog>
@@ -178,10 +233,16 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
       </DialogTrigger>
       <DialogContent className="aui-attachment-preview-dialog-content p-2 sm:max-w-3xl [&>button]:rounded-full [&>button]:bg-foreground/60 [&>button]:p-1 [&>button]:opacity-100 [&>button]:ring-0! [&_svg]:text-background [&>button]:hover:[&_svg]:text-destructive">
         <DialogTitle className="aui-sr-only sr-only">
-          Image Attachment Preview
+          Attachment Preview
         </DialogTitle>
         <div className="aui-attachment-preview relative mx-auto flex max-h-[80dvh] w-full items-center justify-center overflow-hidden bg-background">
-          <AttachmentPreview src={src} />
+          {kind === "image" && <AttachmentPreview src={src} />}
+          {kind === "video" && (
+            <video src={src} controls autoPlay className="max-h-[75dvh] w-auto max-w-full rounded-lg" />
+          )}
+          {kind === "audio" && (
+            <audio src={src} controls autoPlay className="w-full max-w-md py-8" />
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -189,7 +250,7 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
 };
 
 const AttachmentThumb: FC = () => {
-  const src = useAttachmentSrc();
+  const { src, kind } = useAttachmentMedia();
 
   return (
     <Avatar className="aui-attachment-tile-avatar h-full w-full rounded-none">
@@ -199,7 +260,13 @@ const AttachmentThumb: FC = () => {
         className="aui-attachment-tile-image object-cover"
       />
       <AvatarFallback>
-        <FileText className="aui-attachment-tile-fallback-icon size-8 text-muted-foreground" />
+        {kind === "video" ? (
+          <FilmIcon className="aui-attachment-tile-fallback-icon size-8 text-muted-foreground" />
+        ) : kind === "audio" ? (
+          <MusicIcon className="aui-attachment-tile-fallback-icon size-8 text-muted-foreground" />
+        ) : (
+          <FileText className="aui-attachment-tile-fallback-icon size-8 text-muted-foreground" />
+        )}
       </AvatarFallback>
     </Avatar>
   );
@@ -247,6 +314,9 @@ const AttachmentUI: FC = () => {
 
   const isImage = useAuiState((s) => s.attachment.type === "image");
   const typeLabel = useAuiState((s) => {
+    const ct = s.attachment.contentType ?? "";
+    if (ct.startsWith("video/")) return "Video";
+    if (ct.startsWith("audio/")) return "Audio";
     const type = s.attachment.type;
     switch (type) {
       case "image":

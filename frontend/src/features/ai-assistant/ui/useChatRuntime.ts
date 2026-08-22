@@ -1,10 +1,12 @@
 
 import { AssistantChatTransport, useChatRuntime, useAISDKChat } from "@assistant-ui/react-ai-sdk";
+import { CompositeAttachmentAdapter, SimpleImageAttachmentAdapter } from "@assistant-ui/react";
 import type { UIMessage, UIMessageChunk } from "ai";
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { flushSync } from "react-dom";
 import { useChatHistory } from "../../../hooks/useChatHistory";
+import type { ChatAttachmentMeta } from "@/context/ChatHistoryContext";
 import { supabase } from "@/lib/supabaseClient";
 import type { AcademicCourse } from "../../../hooks/useCourses";
 import { useRAGContext } from "../../../context/RAGContext";
@@ -17,6 +19,7 @@ import {
 } from "../../../context/AgenticUIBus";
 import { getAssistantAuthHeaders } from "@/lib/auth";
 import { useGuestMode } from "@/context/GuestModeContext";
+import { createUploadAttachmentAdapter, createTextSnippetAdapter } from "./adapters/chat-file-attachments";
 import i18n from "@/i18n/i18next";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3004";
@@ -257,6 +260,33 @@ class UIActionStreamParser {
 // runtime (initial-mount-only messages). For authenticated sessions only.
 // Guest sessions are fully in-memory and must not be overwritten.
 
+type RuntimeUIMessagePart =
+  | { type: "text"; text: string }
+  | { type: "file"; url: string; mimeType: string; filename: string };
+
+/**
+ * Context message → UIMessage parts. Attachment metadata (hydrated from
+ * GET /threads/:id after reload) becomes r2:// file parts so the backend can
+ * re-resolve media/document context on subsequent turns.
+ */
+function contextMessageToRuntimeParts(msg: {
+  content: string;
+  attachments?: ChatAttachmentMeta[];
+}): RuntimeUIMessagePart[] {
+  const parts: RuntimeUIMessagePart[] = [];
+  if (msg.content) parts.push({ type: "text", text: msg.content });
+  for (const a of msg.attachments ?? []) {
+    if (!a.r2Key) continue;
+    parts.push({
+      type: "file",
+      url: `r2://${a.r2Key}`,
+      mimeType: a.mimeType || "application/octet-stream",
+      filename: a.fileName,
+    });
+  }
+  return parts.length > 0 ? parts : [{ type: "text", text: " " }];
+}
+
 const AuthenticatedMessageSyncer = () => {
   const chat = useAISDKChat();
   const { activeThreadMessages, activeThreadId, appendMessage, upsertMessage } = useChatHistory();
@@ -273,7 +303,7 @@ const AuthenticatedMessageSyncer = () => {
         const mapped = activeThreadMessages.map((msg) => ({
           id: msg.id,
           role: msg.role as "user" | "assistant" | "system",
-          parts: [{ type: "text" as const, text: msg.content }],
+          parts: contextMessageToRuntimeParts(msg),
         }));
         chat.setMessages(mapped);
       }
@@ -295,7 +325,7 @@ const AuthenticatedMessageSyncer = () => {
     const mapped = activeThreadMessages.map((msg) => ({
       id: msg.id,
       role: msg.role as "user" | "assistant" | "system",
-      parts: [{ type: "text" as const, text: msg.content }],
+      parts: contextMessageToRuntimeParts(msg),
     }));
     chat.setMessages(mapped);
     lastAiCountRef.current = mapped.length;
@@ -314,6 +344,15 @@ const AuthenticatedMessageSyncer = () => {
     for (const m of aiMessages) {
       const textPart = m.parts?.find((p: { type: string }) => p.type === "text");
       const content = textPart && "text" in textPart ? textPart.text : "";
+      // Keep attachment refs so the UI (and next turns' history) keep them.
+      const attachments = (m.parts ?? [])
+        .filter((p: { type?: string }) => p.type === "file")
+        .map((p: { url?: string; mimeType?: string; mediaType?: string; filename?: string }) => ({
+          r2Key: typeof p.url === "string" && p.url.startsWith("r2://") ? p.url.slice("r2://".length) : "",
+          fileName: p.filename || "attachment",
+          mimeType: p.mimeType || p.mediaType || "application/octet-stream",
+        }))
+        .filter((a: { r2Key: string }) => a.r2Key.length > 0);
       const existing = existingMap.get(m.id);
       if (!existing) {
         appendMessage({
@@ -322,9 +361,10 @@ const AuthenticatedMessageSyncer = () => {
           content,
           is_pinned: false,
           created_at: new Date().toISOString(),
+          ...(attachments.length > 0 ? { attachments } : {}),
         });
-      } else if (existing.content !== content && content) {
-        upsertMessage(m.id, (msg) => ({ ...msg, content }));
+      } else if ((existing.content !== content && content) || attachments.length > 0) {
+        upsertMessage(m.id, (msg) => ({ ...msg, content, ...(attachments.length > 0 ? { attachments } : {}) }));
       }
     }
     lastAiCountRef.current = aiMessages.length;
@@ -341,7 +381,7 @@ const AuthenticatedMessageSyncer = () => {
         const mapped = activeThreadMessages.map((msg) => ({
           id: msg.id,
           role: msg.role as "user" | "assistant" | "system",
-          parts: [{ type: "text" as const, text: msg.content }],
+          parts: contextMessageToRuntimeParts(msg),
         }));
         chat.setMessages(mapped);
         lastSyncedRef.current = activeThreadMessages;
@@ -760,7 +800,7 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
   const mappedMessages = activeThreadMessages.map((msg) => ({
     id: msg.id,
     role: msg.role as "user" | "assistant" | "system",
-    parts: [{ type: "text" as const, text: msg.content }],
+    parts: contextMessageToRuntimeParts(msg),
   }));
 
   // Thumbs up/down on assistant messages is handled by the message feedback
@@ -768,9 +808,22 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
   // feedback adapter — so the store owns optimistic state, toggle-off, and the
   // dislike reason dialog.
 
+  // Attachments: images stay inline, small text/code inlines as text, and
+  // PDFs stream to R2 while composing — the message carries only an r2://
+  // reference instead of a ~GB base64 data URL (renderer OOM fix).
+  const attachmentsAdapter = useMemo(
+    () =>
+      new CompositeAttachmentAdapter([
+        new SimpleImageAttachmentAdapter(),
+        createUploadAttachmentAdapter({ enabled: !isGuestMode }),
+        createTextSnippetAdapter(),
+      ]),
+    [isGuestMode],
+  );
 
   return useChatRuntime({
     transport,
     messages: mappedMessages,
+    adapters: { attachments: attachmentsAdapter },
   });
 };
