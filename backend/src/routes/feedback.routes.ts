@@ -95,21 +95,23 @@ router.post(
     // ── Retrieval feedback loop: negative feedback → log miss ──────────────
     if (!isPositive) {
       try {
-        // Get the session_id for this message to find the preceding user query
+        // Get the session + timestamp for this message to find the preceding user query
         const { data: msgRow } = await supabase
           .from('chat_messages')
-          .select('session_id')
+          .select('session_id, created_at')
           .eq('id', messageId)
           .maybeSingle();
 
         if (msgRow?.session_id) {
-          // Get the last user message before this assistant message
+          // Get the last user message BEFORE the rated assistant message —
+          // not before "now", or a newer question would be misattributed
+          // when the user keeps chatting and rates an older answer later.
           const { data: lastUserMsg } = await supabase
             .from('chat_messages')
             .select('content')
             .eq('session_id', msgRow.session_id)
             .eq('role', 'user')
-            .lt('created_at', new Date().toISOString())
+            .lt('created_at', msgRow.created_at)
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();

@@ -203,21 +203,27 @@ router.get(
       .limit(5);
 
     // 3. Suggested questions from textbook_questions
+    // NOTE: schema column is `text` (migration 016), not `question`.
     let suggestedQuestions: Array<{ text: string; page_number: number | null; section_path: string | null }> = [];
     if (weakTopics && weakTopics.length > 0) {
-      // Try to find questions matching weak topic section paths (up to 2 per topic, max 8)
-      const topicNames = weakTopics.map((w) => w.topic);
-      const { data: topicQuestions } = await supabase
+      // PostgREST .or() treats commas/parens as syntax — strip them from
+      // user/LLM-generated topic names before building the filter.
+      const safeTopics = weakTopics
+        .map((w) => w.topic.replace(/[,()"'\\%]/g, " ").trim())
+        .filter((t) => t.length > 1);
+      const { data: topicQuestions, error: tqErr } = await supabase
         .from("textbook_questions")
-        .select("question, page_number, section_path, textbooks!inner(user_id, status)")
+        .select("text, page_number, section_path, textbooks!inner(user_id, status)")
         .eq("textbooks.user_id", userId)
         .eq("textbooks.status", "completed")
-        .or(topicNames.map((t) => `section_path.ilike.%${t}%`).join(","))
+        .or(safeTopics.map((t) => `section_path.ilike.%${t}%`).join(","))
         .limit(8);
 
-      if (topicQuestions && topicQuestions.length > 0) {
+      if (tqErr) {
+        log.warn("daily-plan: topic question lookup failed", { error: tqErr.message });
+      } else if (topicQuestions && topicQuestions.length > 0) {
         suggestedQuestions = topicQuestions.map((q) => ({
-          text: q.question,
+          text: q.text,
           page_number: q.page_number ?? null,
           section_path: q.section_path ?? null,
         }));
@@ -226,16 +232,18 @@ router.get(
 
     // Fallback: if no questions matched topics, grab first general questions
     if (suggestedQuestions.length === 0) {
-      const { data: generalQuestions } = await supabase
+      const { data: generalQuestions, error: gqErr } = await supabase
         .from("textbook_questions")
-        .select("question, page_number, section_path, textbooks!inner(user_id, status)")
+        .select("text, page_number, section_path, textbooks!inner(user_id, status)")
         .eq("textbooks.user_id", userId)
         .eq("textbooks.status", "completed")
         .limit(8);
 
-      if (generalQuestions) {
+      if (gqErr) {
+        log.warn("daily-plan: general question lookup failed", { error: gqErr.message });
+      } else if (generalQuestions) {
         suggestedQuestions = generalQuestions.map((q) => ({
-          text: q.question,
+          text: q.text,
           page_number: q.page_number ?? null,
           section_path: q.section_path ?? null,
         }));
