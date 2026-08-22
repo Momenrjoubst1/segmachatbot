@@ -49,6 +49,8 @@ const TOOL_GROUP_MAP: Record<string, ToolGroup> = {
   get_weather: 'general',
   get_course_info: 'general',
   generate_flashcards: 'general',
+  record_quiz_result: 'general',
+  generate_image: 'general',
   create_artifact: 'general',
 };
 
@@ -141,63 +143,15 @@ function buildFontsToolInstructions(): string {
 /** IDE-specific tool instructions */
 function buildIDEToolInstructions(): string {
   return `
-## IDE Tool Instructions — تعليمات بيئة التطوير المتكاملة
+## IDE Tool Instructions — تعليمات بيئة التطوير
 
-عند طلب المستخدم إنشاء بيئة تطوير متكاملة (IDE)، استخدم \`create_artifact\` مع \`type: "ide"\`.
+When the user requests a full IDE, use \`create_artifact\` with \`type: "ide"\` and a \`projectFiles\` array defining the file/folder tree. The IDE provides: code editor, file tree, integrated terminal, code execution (\`ide_execute_code\`), file management (\`ide_manage_files\`), and package installation (\`ide_install_packages\`).
 
-### الميزات المتاحة في الـ IDE:
-
-1. **محرر أكواد كامل**: محرر نصوص متطور مع دعم لغات البرمجة المختلفة
-2. **شجرة ملفات ومجلدات**: عرض هيكل المشروع مع إمكانية التنقل والإدارة
-3. **Terminal متكامل**: تيرمينال يعمل داخل الـ IDE لتنفيذ الأوامر
-4. **تنفيذ الأكواد**: تشغيل الأكواد مباشرة داخل البيئة
-5. **إدارة المتطلبات**: تثبيت المكتبات والحزم المطلوبة تلقائياً
-
-### طريقة الاستخدام:
-
-\`\`\`typescript
-create_artifact({
-  type: "ide",
-  title: "مشروع Python",
-  content: "", // يمكن تركه فارغ
-  projectFiles: [
-    {
-      name: "main.py",
-      type: "file",
-      path: "/main.py",
-      content: "print('Hello World')"
-    },
-    {
-      name: "utils",
-      type: "folder",
-      path: "/utils",
-      children: [
-        {
-          name: "helper.py",
-          type: "file",
-          path: "/utils/helper.py",
-          content: "def helper(): pass"
-        }
-      ]
-    }
-  ]
-})
-\`\`\`
-
-### أدوات إدارة الـ IDE:
-
-- **ide_execute_code**: تنفيذ كود برمجي مع إمكانية تثبيت المتطلبات
-- **ide_manage_files**: إدارة الملفات والمجلدات (إنشاء، حذف، تحديث)
-- **ide_install_packages**: تثبيت الحزم والمكتبات
-
-### القواعد:
-
-- استخدم \`type: "ide"\` فقط عندما يطلب المستخدم بيئة تطوير كاملة
-- قم بإنشاء هيكل ملفات منطقي ومنظم للمشروع
-- أضف ملفات README.md لتوضيح المشروع
-- استخدم أسماء ملفات واضحة ومعبرة
-- اجعل الكود قابل للتشغيل مباشرة
-- أضف تعليقات توضيحية في الكود`;
+Rules:
+- Use \`type: "ide"\` only for full IDE requests
+- Create logical, organized project structure with runnable code
+- Include README.md and clear file names
+- Add explanatory comments in code`;
 }
 
 /**

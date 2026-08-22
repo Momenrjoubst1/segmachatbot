@@ -14,6 +14,8 @@ const TOOL_IMPORTS: Array<{ name: string; importFn: () => Promise<unknown> }> = 
   { name: "create_event", importFn: () => import("./calendar/create-event/index.js") },
   { name: "course_info", importFn: () => import("./education/course-info/index.js") },
   { name: "flashcards", importFn: () => import("./education/flashcards/index.js") },
+  { name: "quiz_tracker", importFn: () => import("./education/quiz-tracker/index.js") },
+  { name: "generate_image", importFn: () => import("./media/generate-image/index.js") },
   { name: "code_executor", importFn: () => import("./code/executor/index.js") },
   { name: "create_artifact", importFn: () => import("./files/create-artifact/index.js") },
   { name: "fonts", importFn: () => import("./utils/fonts/index.js") },
