@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   PlusIcon,
   TrashIcon,
@@ -9,10 +8,12 @@ import {
   PencilIcon,
   MoreVerticalIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { FC } from "react";
 import { useChatHistory, ChatThread } from "../../../hooks/useChatHistory";
 import type { AcademicCourse } from "../../../hooks/useCourses";
 import { useState, useEffect, useRef, useCallback } from "react";
+import { BotStatusPulseDot } from "./bot-activity/components/BotStatusPulseDot";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +31,11 @@ import {
 import { toast } from "sonner";
 import { TextbookUpload } from "../components/TextbookUpload";
 import { CurriculumPanel } from "../components/CurriculumPanel";
+import { FlashcardsStudy } from "../components/chat/FlashcardsStudy";
+import { StudyProgressPanel } from "../components/chat/StudyProgressPanel";
+import { DailyPlanPanel } from "../components/chat/DailyPlanPanel";
+import { useDueFlashcardsCount } from "@/hooks/useStudy";
+import { GraduationCapIcon } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ThreadList (main export)
@@ -45,7 +51,6 @@ export const ThreadList: FC<{
 
   const {
     threads,
-    isLoadingThreads,
     getThreadsByCourse,
     loadThread,
     activeThreadId,
@@ -98,6 +103,10 @@ export const ThreadList: FC<{
 
   const [bookUploadCourseId, setBookUploadCourseId] = useState<string | null>(null);
   const [bookUploadDialogOpen, setBookUploadDialogOpen] = useState(false);
+  type StudyTab = "curriculum" | "flashcards" | "progress" | "daily";
+  const [studyTab, setStudyTab] = useState<StudyTab>("curriculum");
+  const { count: dueCount, refresh: refreshDueCount } = useDueFlashcardsCount();
+  const { t } = useTranslation("study");
 
   const handleBookUploadClick = (courseId: string) => {
     setBookUploadCourseId(courseId);
@@ -162,6 +171,24 @@ export const ThreadList: FC<{
                     >
                       <BookOpenIcon className={`size-4 shrink-0 ${isActive ? "text-foreground" : "text-muted-foreground"}`} />
                     </button>
+                    {dueCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBookUploadCourseId(course.id);
+                          setStudyTab("flashcards");
+                          setBookUploadDialogOpen(true);
+                        }}
+                        className="relative p-1 rounded-md hover:bg-accent/50 transition-colors"
+                        aria-label={t("threadList.dueFlashcards", { count: dueCount })}
+                      >
+                        <GraduationCapIcon className="size-4 shrink-0 text-amber-500" />
+                        <span className="absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-amber-500 text-[8px] font-bold text-white">
+                          {dueCount > 99 ? "99+" : dueCount}
+                        </span>
+                      </button>
+                    )}
                     <span className="truncate font-medium">{course.course_name}</span>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -266,7 +293,44 @@ export const ThreadList: FC<{
                 toast.success("Textbook uploaded successfully!", { duration: 2500 });
               }}
             />
-            <CurriculumPanel />
+            <div className="space-y-3">
+              {/* Study tools tabs: curriculum / flashcards / progress */}
+              <div className="flex items-center gap-1 rounded-lg bg-[#F9F6F0] p-1">
+                {([
+                    { id: "curriculum", label: t("threadList.tabCurriculum") },
+                    { id: "flashcards", label: t("threadList.tabFlashcards") },
+                    { id: "progress", label: t("threadList.tabProgress") },
+                    { id: "daily", label: t("threadList.tabDaily") },
+                ] as Array<{ id: StudyTab; label: string }>).map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setStudyTab(tab.id)}
+                    className={
+                      "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors " +
+                      (studyTab === tab.id
+                        ? "bg-white text-[#2C2825] shadow-sm"
+                        : "text-[#7A736E] hover:text-[#2C2825]")
+                    }
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {studyTab === "curriculum" && <CurriculumPanel />}
+              {studyTab === "flashcards" && (
+                <FlashcardsStudy courseId={bookUploadCourseId || undefined} onReviewComplete={refreshDueCount} />
+              )}
+              {studyTab === "progress" && (
+                <StudyProgressPanel courseId={bookUploadCourseId || undefined} />
+              )}
+              {studyTab === "daily" && (
+                <DailyPlanPanel
+                  onNavigateToFlashcards={() => setStudyTab("flashcards")}
+                  onQuestionSent={() => setBookUploadDialogOpen(false)}
+                />
+              )}
+            </div>
           </div>
 
           <DialogFooter className="flex-row gap-2 sm:gap-2">
@@ -410,9 +474,15 @@ const ThreadListItem: FC<{
             maxLength={120}
           />
         ) : (
-          <span className="flex-1 truncate text-start pointer-events-none">
-            {thread.title || "New Chat"}
-          </span>
+          <>
+            <span className="flex-1 truncate text-start pointer-events-none">
+              {thread.title || "New Chat"}
+            </span>
+            {/* Per-thread live status dot — only for the active thread
+                (other threads don't have a live activity feed in this
+                iteration; historical status would need its own cache). */}
+            {isActive && <BotStatusPulseDot />}
+          </>
         )}
 
         {/* Three-dot menu — appears on hover or when active */}
