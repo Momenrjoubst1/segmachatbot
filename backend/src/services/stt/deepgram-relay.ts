@@ -76,6 +76,10 @@ export class SttRelaySession {
   private sessionTimer: NodeJS.Timeout | null = null;
   private startedAt = Date.now();
   private closed = false;
+  private bytesForwarded = 0;
+  private deepgramReady = false;
+  private pendingAudio: Buffer[] = [];
+  private static readonly MAX_PENDING_BYTES = 5 * 1024 * 1024;
 
   constructor(userId: string, clientWs: WebSocket, sampleRateHint: number, events: RelaySessionEvents) {
     this.userId = userId;
@@ -107,8 +111,20 @@ export class SttRelaySession {
       } catch { /* ignore malformed control frames */ }
       return;
     }
-    if (this.deepgramWs?.readyState === WebSocket.OPEN) {
-      this.deepgramWs.send(data as Buffer);
+    if (this.deepgramReady && this.deepgramWs?.readyState === WebSocket.OPEN) {
+      const buf = data as Buffer;
+      this.bytesForwarded += buf.length;
+      this.deepgramWs.send(buf);
+    } else {
+      // Deepgram handshake still in flight — buffer so the FIRST words are
+      // never dropped (leading-speech loss). Bounded for memory safety.
+      const buf = data as Buffer;
+      const pendingBytes = this.pendingAudio.reduce((a, b) => a + b.length, 0);
+      if (pendingBytes + buf.length <= SttRelaySession.MAX_PENDING_BYTES) {
+        this.pendingAudio.push(buf);
+      } else {
+        log.warn("STT pending buffer overflow — dropping frame", { userId: this.userId });
+      }
     }
   }
 
@@ -120,12 +136,30 @@ export class SttRelaySession {
     const elapsedSec = (Date.now() - this.startedAt) / 1000;
     void addUsedSeconds(this.userId, elapsedSec);
 
-    try { this.clientWs.close(code, reason.slice(0, 120)); } catch { /* noop */ }
+    try {
+      if (this.clientWs.readyState === WebSocket.OPEN) {
+        // Final usage frame so clients/tests can verify the audio actually
+        // traversed the relay to Deepgram.
+        this.clientWs.send(
+          JSON.stringify({
+            type: "usage",
+            seconds: Math.round(elapsedSec),
+            bytesForwarded: this.bytesForwarded,
+          }),
+        );
+      }
+      this.clientWs.close(code, reason.slice(0, 120));
+    } catch { /* noop */ }
     try {
       this.deepgramWs?.send(JSON.stringify({ type: "CloseStream" }));
       this.deepgramWs?.close(1000);
     } catch { /* noop */ }
-    log.info("STT session closed", { userId: this.userId, seconds: Math.round(elapsedSec), reason });
+    log.info("STT session closed", {
+      userId: this.userId,
+      seconds: Math.round(elapsedSec),
+      reason,
+      bytesForwarded: this.bytesForwarded,
+    });
   }
 
   private openDeepgram(_sampleRateHint: number, events: RelaySessionEvents): void {
@@ -142,7 +176,17 @@ export class SttRelaySession {
 
     dg.on("open", () => {
       this.deepgramWs = dg;
-      log.info("Deepgram stream opened", { userId: this.userId });
+      this.deepgramReady = true;
+      // Flush audio buffered during the handshake (leading speech!)
+      for (const buf of this.pendingAudio) {
+        if (dg.readyState === WebSocket.OPEN) {
+          this.bytesForwarded += buf.length;
+          dg.send(buf);
+        }
+      }
+      const flushed = this.pendingAudio.length;
+      this.pendingAudio = [];
+      log.info("Deepgram stream opened", { userId: this.userId, bufferedFramesFlushed: flushed });
     });
 
     dg.on("message", (raw: WebSocket.RawData) => {

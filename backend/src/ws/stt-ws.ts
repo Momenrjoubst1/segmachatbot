@@ -32,7 +32,17 @@ export function isSttEnabled(): boolean {
   return Boolean(process.env.DEEPGRAM_API_KEY?.trim());
 }
 
-async function verifyToken(token: string): Promise<{ userId: string } | null> {
+async function verifyToken(
+  token: string,
+  allowAnonDev: boolean,
+  socket: Duplex,
+): Promise<{ userId: string } | null> {
+  // Dev escape hatch: STT_ALLOW_ANON_DEV=true lets localhost clients open a
+  // session without a JWT so the full relay chain is testable headlessly.
+  if (!token && allowAnonDev) {
+    const ip = (socket as import("net").Socket).remoteAddress || "local";
+    return { userId: `anon:${ip}` };
+  }
   if (!token) return null;
   try {
     const { data, error } = await supabase.auth.getUser(token);
@@ -66,10 +76,13 @@ function cleanupActive(userId: string): void {
 
 function handleSttUpgrade(req: import("http").IncomingMessage, socket: Duplex, head: Buffer): void {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  const allowAnonDev =
+    process.env.STT_ALLOW_ANON_DEV === "true" &&
+    /localhost|127\.0\.0\.1/.test(req.headers.host || "");
   const token = url.searchParams.get("token") || "";
 
   wss.handleUpgrade(req, socket, head, async (clientWs) => {
-    const auth = await verifyToken(token);
+    const auth = await verifyToken(token, allowAnonDev, socket);
 
     if (!auth) { clientWs.close(4401, "unauthorized"); return; }
 
