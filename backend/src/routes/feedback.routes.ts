@@ -92,6 +92,43 @@ router.post(
       return;
     }
 
+    // ── Retrieval feedback loop: negative feedback → log miss ──────────────
+    if (!isPositive) {
+      try {
+        // Get the session_id for this message to find the preceding user query
+        const { data: msgRow } = await supabase
+          .from('chat_messages')
+          .select('session_id')
+          .eq('id', messageId)
+          .maybeSingle();
+
+        if (msgRow?.session_id) {
+          // Get the last user message before this assistant message
+          const { data: lastUserMsg } = await supabase
+            .from('chat_messages')
+            .select('content')
+            .eq('session_id', msgRow.session_id)
+            .eq('role', 'user')
+            .lt('created_at', new Date().toISOString())
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (lastUserMsg?.content) {
+            await supabase.from('retrieval_feedback').insert({
+              user_id: userId,
+              query_text: lastUserMsg.content.slice(0, 2000),
+              chunks_retrieved: 0,
+              user_satisfied: false,
+            });
+          }
+        }
+      } catch (err) {
+        // Silent — retrieval feedback failure must never break the main flow
+        log.error('Retrieval feedback insert failed (passive)', { error: (err as Error).message });
+      }
+    }
+
     res.json({ success: true });
   }),
 );

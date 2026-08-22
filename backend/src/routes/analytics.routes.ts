@@ -60,6 +60,22 @@ router.get('/user-dashboard', asyncHandler(async (req, res) => {
     .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 
+  // RAG misses in the last 7 days (passive retrieval feedback)
+  let ragMissesLast7Days = 0;
+  try {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const { count } = await supabase
+      .from('retrieval_feedback')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('user_satisfied', false)
+      .gte('created_at', sevenDaysAgo.toISOString());
+    ragMissesLast7Days = count ?? 0;
+  } catch {
+    // Silent — analytics enrichment must not break the dashboard
+  }
+
   res.json({
     success: true,
     data: {
@@ -71,6 +87,7 @@ router.get('/user-dashboard', asyncHandler(async (req, res) => {
         totalTokens,
         avgFeedbackScore: Math.round(avgFeedbackScore * 100) / 100,
         totalCost: Math.round(totalCost * 100) / 100,
+        ragMissesLast7Days,
         dateRange: {
           start: startDate.toISOString().split('T')[0],
           end: endDate.toISOString().split('T')[0],
