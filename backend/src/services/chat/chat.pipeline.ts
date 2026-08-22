@@ -29,10 +29,13 @@ import { isEmailAvailable } from "../../tools/email/send/index.js";
 import type { ToolDefinition } from "../../tools/shared/types.js";
 import { getToolsRequiringUserId } from "../../tools/tool-metadata.js";
 import { withTimeout, TIMEOUTS } from "../../utils/timeout-wrapper.js";
+import { StepEventEmitter } from "./step-event-emitter.js";
+import { getTextbookQAModel, getVisionModel } from "./model-router.js";
+import { isVisionCapableModel } from "./message-processor.service.js";
 
 import { validateAndPrepareRequest } from "./pipeline/validation.js";
 import { processAndModerate } from "./pipeline/input-processing.js";
-import { fetchUserCoursesContext } from "./pipeline/user-courses.js";
+import { fetchCombinedUserContext } from "./pipeline/user-courses.js";
 import { detectUserIntent } from "./pipeline/intent.js";
 import { runRagPipeline } from "./pipeline/rag-retrieval.js";
 import { buildMemoryContext } from "./pipeline/memory.js";
@@ -47,7 +50,7 @@ import type { CoreMessage } from "./moderation.service.js";
 const TOOLS_NEEDING_USER_ID: ReadonlySet<string> = new Set(getToolsRequiringUserId());
 
 /** Builds the `enabledTools` map for the response generator. Filtered by intent to prevent token overflows. */
-function buildEnabledTools(userId: string, intent?: string): Record<string, ToolDefinition> {
+function buildEnabledTools(userId: string, intent?: string, hasTextbookChunks?: boolean): Record<string, ToolDefinition> {
   // For small talk or knowledge queries without specific tool needs, send NO tools to save tokens
   if (intent === "small_talk") {
     return {};
@@ -64,7 +67,9 @@ function buildEnabledTools(userId: string, intent?: string): Record<string, Tool
     // For general queries, only send essential tools to reduce token usage
     if (!isSpecificIntent) {
       const ESSENTIAL_TOOLS = new Set(["get_time", "get_weather", "calculator", "web_search"]);
-      if (!ESSENTIAL_TOOLS.has(name)) continue;
+      // Education tools always pass when textbook chunks are present
+      const EDUCATION_TOOLS = new Set(["record_quiz_result", "generate_flashcards"]);
+      if (!ESSENTIAL_TOOLS.has(name) && !(hasTextbookChunks && EDUCATION_TOOLS.has(name))) continue;
     }
 
     if (TOOLS_NEEDING_USER_ID.has(name)) {
@@ -99,6 +104,7 @@ export async function executeChatPipeline(
   req: Request,
   res: Response,
 ): Promise<void> {
+  const steps = new StepEventEmitter();
   try {
     // ---- Step 1: Validation ----
     const validation = validateAndPrepareRequest(req);
@@ -124,9 +130,9 @@ export async function executeChatPipeline(
     });
 
     // Provider / model
-    const { provider, modelName } = getProviderAndModel(selectedModel);
+    let { provider, modelName } = getProviderAndModel(selectedModel);
     log.info("Using model", { model: modelName, provider });
-    const client = createProviderClient(provider as Parameters<typeof createProviderClient>[0]);
+    let client = createProviderClient(provider as Parameters<typeof createProviderClient>[0]);
 
     // ---- Step 2+3: Process & moderate ----
     const processed = await withTimeout(
@@ -141,11 +147,11 @@ export async function executeChatPipeline(
       res.status(400).json({ error: processed.blockError });
       return;
     }
-    const { coreMessages, hasImages: _hasImages } = processed;
+    const { coreMessages, hasImages } = processed;
 
-    // ---- Step 4: User courses ----
+    // ---- Step 4: User courses + study progress ----
     const userCoursesContext = await withTimeout(
-      fetchUserCoursesContext(userId),
+      fetchCombinedUserContext(userId),
       {
         timeoutMs: TIMEOUTS.DB_QUERY,
         operationName: 'fetch_user_courses',
@@ -204,6 +210,44 @@ export async function executeChatPipeline(
     metrics.ragDocsCount = ragResult.rankedDocs.length;
     metrics.ragSources = ragResult.ragSources;
 
+    // ---- Step 5b: Textbook QA model override ----
+    // When textbook chunks are present, use a stronger model for better answers.
+    if (ragResult.hasTextbookChunks) {
+      const textbookModel = getTextbookQAModel();
+      if (textbookModel && textbookModel !== modelName) {
+        try {
+          const { provider: tbProvider, modelName: tbModelName } = getProviderAndModel(textbookModel);
+          client = createProviderClient(tbProvider as Parameters<typeof createProviderClient>[0]);
+          modelName = tbModelName;
+          res.setHeader("X-Study-Mode", "true");
+          log.info("Textbook QA model activated", { model: tbModelName, provider: tbProvider });
+        } catch {
+          log.warn("Textbook QA model unavailable, using default", { model: textbookModel });
+        }
+      }
+    }
+
+    // ---- Step 5c: Vision model routing ----
+    // When the latest user message contains images, ensure the answering
+    // model accepts them natively; otherwise switch to VISION_MODEL so the
+    // image reaches the LLM instead of being degraded to a text description.
+    if (hasImages) {
+      if (!isVisionCapableModel(modelName)) {
+        const visionModel = getVisionModel();
+        if (visionModel && visionModel !== modelName) {
+          try {
+            const { provider: vProvider, modelName: vName } = getProviderAndModel(visionModel);
+            client = createProviderClient(vProvider as Parameters<typeof createProviderClient>[0]);
+            modelName = vName;
+            log.info("Vision model activated", { model: vName, provider: vProvider });
+          } catch {
+            log.warn("Vision model unavailable, keeping selected model", { model: visionModel });
+          }
+        }
+      }
+      res.setHeader("X-Vision-Mode", "true");
+    }
+
     // ---- Step 6: Memory context ----
     const memResult = await withTimeout(
       buildMemoryContext({ userId, lastUserText, threadId }),
@@ -215,12 +259,34 @@ export async function executeChatPipeline(
     );
     const memoryPrompt = memResult.prompt;
 
-    // ---- Step 6b: System prompt ----
-    const { systemPrompt: augmentedSystemPrompt, basePersona } = assembleSystemPrompt({
+    // ---- Step 6b: System prompt (with A/B + metrics) ----
+    steps.begin("system_prompt" as never, "system_prompt" as never);
+    const { systemPrompt: augmentedSystemPrompt, basePersona, promptVariant, promptLength, promptTokensEstimate, buildTimeMs } = assembleSystemPrompt({
       ragContext: ragResult.ragContext,
       userCoursesContext: userCoursesContext + threadFileContext,
       memoryPrompt,
+      userId,
+      selectedModel,
     });
+    metrics.promptVariant = promptVariant;
+    metrics.promptLength = promptLength;
+    metrics.promptTokensEstimate = promptTokensEstimate;
+    metrics.promptBuildTimeMs = buildTimeMs;
+    steps.complete("system_prompt" as never, {
+      label: `Prompt: ${promptVariant} (${promptTokensEstimate} tok)`,
+      detail: `${promptLength} chars in ${buildTimeMs}ms`,
+    } as never);
+
+    // ---- Step 6c: Image grounding instruction ----
+    // When the student photographs a problem AND has textbook material
+    // indexed, instruct the model to prefer book-grounded solving.
+    const systemPromptForGeneration =
+      hasImages && ragResult.hasTextbookChunks
+        ? augmentedSystemPrompt +
+          `\n\n## Image Question Grounding\nThe user's latest message includes a photo (e.g. a photographed exercise or page). ` +
+          `If the photo shows a question covered by the retrieved textbook excerpts, solve it using those excerpts and cite the page number(s). ` +
+          `If it is not covered by the book, still solve it step by step in the user's language.`
+        : augmentedSystemPrompt;
 
     // ---- Step 7: Thread management ----
     const threadResult = await withTimeout(
@@ -249,7 +315,7 @@ export async function executeChatPipeline(
     // pipeline, or binds the text to this thread. Streams a canned reply.
     try {
       const { handleChatFileFlow } = await import("./chat-file-router.js");
-      const handled = await handleChatFileFlow({ userId, threadId: activeThreadId, messages, res });
+      const handled = await handleChatFileFlow({ userId, threadId: activeThreadId, messages: messages as Array<{ role: string; content?: string | Array<Record<string, unknown>>; parts?: Array<Record<string, unknown>> }>, res });
       if (handled) {
         metrics.chatFileRouted = true;
         return;
@@ -289,6 +355,8 @@ export async function executeChatPipeline(
       manageContextWindow({
         coreMessages,
         userId,
+        threadId: activeThreadId ?? threadId,
+        selectedModel,
       }),
       {
         timeoutMs: TIMEOUTS.PIPELINE_STEP,
@@ -310,7 +378,7 @@ export async function executeChatPipeline(
     metrics.uiActionInjected = fastPass.injected;
 
     // ---- Step 10: Stream final response ----
-    const enabledTools = buildEnabledTools(userId, intentResult.intent);
+    const enabledTools = buildEnabledTools(userId, intentResult.intent, ragResult.hasTextbookChunks);
     
     // Include model fallback information in the response
     const responseMetadata = validation.modelFallback 
@@ -321,14 +389,14 @@ export async function executeChatPipeline(
       client,
       modelName,
       finalMessages,
-      finalSystemPrompt: augmentedSystemPrompt,
+      finalSystemPrompt: systemPromptForGeneration,
       basePersona,
       enabledTools,
       activeThreadId,
       userId,
       coreMessages,
       conversationSummary,
-      augmentedSystemPrompt,
+      augmentedSystemPrompt: systemPromptForGeneration,
       reqMetrics: metrics,
       res,
       cacheMetadata: ragResult.cacheMetadata,

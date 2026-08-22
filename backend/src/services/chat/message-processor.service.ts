@@ -32,8 +32,13 @@ const isBase64Image = (data: string): boolean => {
   );
 };
 
-const isImagePart = (p: Record<string, unknown>): boolean => {
-  if (p.type === "image") return true;
+/** Vision fallback analyses must answer in the user's language, not English. */
+const visionReplyLanguage = (userText: string): string =>
+  /[\u0600-\u06FF]/.test(userText)
+    ? "Reply in Arabic."
+    : "Reply in the same language as the user's question.";
+
+const isImagePart = (p: Record<string, unknown>): boolean => {  if (p.type === "image") return true;
   const file = p.file as Record<string, unknown> | undefined;
   const mime = (p.mimeType as string) || (file?.type as string) || "";
   if (mime.startsWith("image/")) return true;
@@ -90,6 +95,39 @@ const formatImageAsDataUrl = (
 };
 
 // ---------------------------------------------------------------------------
+// Vision capability
+// ---------------------------------------------------------------------------
+
+/** Model-family patterns that accept image parts natively. */
+const DEFAULT_VISION_MODEL_PATTERNS = [
+  "gpt-4o",
+  "gpt-5",
+  "chatgpt-4o",
+  "gemini",
+  "claude-3",
+  "claude-4",
+  "grok-2-vision",
+  "pixtral",
+];
+
+/**
+ * True when the model can receive image parts directly (native vision).
+ * Exact names from VISION_NATIVE_MODELS env always win; otherwise we match
+ * known vision-capable model families by substring.
+ */
+export function isVisionCapableModel(modelName: string): boolean {
+  const configured = (process.env.VISION_NATIVE_MODELS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  const haystack = modelName.toLowerCase();
+  if (configured.length > 0) {
+    return configured.includes(haystack) || configured.some((n) => haystack.includes(n));
+  }
+  return DEFAULT_VISION_MODEL_PATTERNS.some((p) => haystack.includes(p));
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -139,6 +177,15 @@ export async function processMessages(
       ["system", "user", "assistant", "tool"].includes(m.role ?? ""),
     )
     .map((m) => {
+      // Handle content as object (e.g., { type: "text", text: "..." })
+      let contentStr = " ";
+      if (typeof m.content === "string") {
+        contentStr = m.content;
+      } else if (typeof m.content === "object" && m.content !== null && !Array.isArray(m.content)) {
+        const obj = m.content as Record<string, unknown>;
+        contentStr = (obj.text as string) || (obj.content as string) || JSON.stringify(obj);
+      }
+
       const partsArray = Array.isArray(m.content)
         ? m.content
         : Array.isArray(m.parts)
@@ -212,6 +259,10 @@ export async function processMessages(
         }
       } else if (typeof m.content === "string") {
         msg.content = m.content;
+      } else if (typeof m.content === "object" && m.content !== null && !Array.isArray(m.content)) {
+        // Handle content as object (e.g., { type: "text", text: "..." })
+        const obj = m.content as Record<string, unknown>;
+        msg.content = (obj.text as string) || (obj.content as string) || JSON.stringify(obj);
       } else if (typeof m.text === "string") {
         msg.content = m.text;
       } else {
@@ -325,15 +376,10 @@ export async function processMessages(
   }
 
   // ---- Step 4: Image pre-processing (vision analysis or fallback) ----
-  const nativeVisionModels = [
-    "gpt-5.4",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "google/gemini-2.0-flash-exp:free",
-  ];
-  const supportsNativeVision = nativeVisionModels.includes(selectedModel);
-
-  if (hasImages && !supportsNativeVision) {
+  // Native vision detection is pattern-based (model families, not a stale
+  // exact-name list) and can be extended via VISION_NATIVE_MODELS env
+  // (comma-separated exact model names).
+  if (hasImages && !isVisionCapableModel(selectedModel)) {
     try {
       const visionModelId =
         process.env.VISION_MODEL_ID?.trim() || "openai/gpt-4o";
@@ -367,8 +413,8 @@ export async function processMessages(
           }
 
           const textPrompt = userText
-            ? `\n\nUser question: ${userText}\nDescribe all visible details in the image(s) and answer the question if possible. Reply in English.`
-            : "\n\nDescribe all visible details in the image(s). Reply in English.";
+            ? `\n\nUser question: ${userText}\nDescribe all visible details in the image(s) and answer the question if possible. ${visionReplyLanguage(userText)}`
+            : `\n\nDescribe all visible details in the image(s). ${visionReplyLanguage("")}`;
           const { text: analysis } = await generateText({
             model: visionModel,
             messages: [
