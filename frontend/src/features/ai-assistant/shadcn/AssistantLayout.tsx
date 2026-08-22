@@ -7,8 +7,10 @@ import { LOAD_ERROR_I18N, type LoadErrorCode } from "@/lib/load-errors";
 import { useKeyboardShortcuts } from "../../../hooks/useKeyboardShortcuts";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import { toast } from "sonner";
+import { startOfMonth, endOfYear } from "date-fns";
 import type { CalendarEvent } from "@/features/calendar/types";
 import useCalendarSync from "@/features/calendar/hooks/useCalendarSync";
+import { expandRecurringEvents } from "@/features/calendar/utils/recurrence";
 import { Thread } from "./components/Thread/ThreadWelcome";
 import { useAgenticAction } from "../../../context/AgenticUIBus";
 import { useAssistantLayout } from "../context/AssistantLayoutContext";
@@ -16,6 +18,15 @@ import { BarsSpinner } from "@/components/ui/BarsSpinner";
 import { LoadingSpinner } from "@/components/ui/LoadingStates";
 import { ErrorBoundary } from "@/components/ui/core/ErrorBoundary";
 import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 // Lazy load heavy components
 const EmailHistoryPanel = lazy(() => import("../components/EmailHistoryPanel").then(m => ({ default: m.EmailHistoryPanel })));
@@ -46,6 +57,7 @@ export const Shadcn: FC<{
 }> = ({ isOnboarded, isCoursesLoadingVisible, coursesError, retryCourses, onActiveCourseChange, onCompleteOnboarding, onSkipOnboarding, isGuestMode = false }) => {
   const { activeView, onToggleView, artifactPanelOpen, setArtifactPanelOpen, emailHistoryOpen, setEmailHistoryOpen } = useAssistantLayout();
   const { t } = useTranslation("errors");
+  const { t: tCal } = useTranslation("calendar");
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const { loadThread, goToPreviousThread, goToNextThread } = useChatHistory();
@@ -89,7 +101,12 @@ export const Shadcn: FC<{
   // Calendar state
   const [calendarUserId, setCalendarUserId] = useState<string | undefined>();
   const [showScheduler, setShowScheduler] = useState(false);
-  const [selectedDate, _setSelectedDate] = useState(new Date());
+  /** Event being edited; null = create mode. */
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  /** Day chosen in the grid — prefills the create form. */
+  const [selectedDay, setSelectedDay] = useState(new Date());
+  /** Pending delete awaiting confirmation. */
+  const [deleteTarget, setDeleteTarget] = useState<CalendarEvent | null>(null);
 
   // Get user ID for calendar
   useEffect(() => {
@@ -118,29 +135,59 @@ export const Shadcn: FC<{
     return () => window.removeEventListener("sigma:calendar-refresh", handleRefresh);
   }, [calendarUserId, calendar.fetchEvents]);
 
+  const closeScheduler = useCallback(() => {
+    setShowScheduler(false);
+    setEditingEvent(null);
+  }, []);
+
   const handleCreateEvent = useCallback(async (event: Partial<CalendarEvent>) => {
     const result = await calendar.createEvent(event);
     if (result.success) {
-      setShowScheduler(false);
-      toast.success("Event created successfully!");
+      closeScheduler();
+      toast.success(tCal("toastCreated"));
     } else {
-      toast.error(result.error || "Failed to create event");
+      toast.error(result.error || tCal("toastSaveFailed"));
     }
-  }, [calendar]);
+  }, [calendar, closeScheduler, tCal]);
 
-  const handleDeleteEvent = useCallback(async (eventId: string) => {
-    const result = await calendar.deleteEvent(eventId);
+  const handleUpdateEvent = useCallback(async (event: Partial<CalendarEvent>) => {
+    if (!editingEvent?.id) return;
+    const result = await calendar.updateEvent(editingEvent.id, event);
     if (result.success) {
-      toast.success("Event deleted");
+      closeScheduler();
+      toast.success(tCal("toastUpdated"));
     } else {
-      toast.error(result.error || "Failed to delete event");
+      toast.error(result.error || tCal("toastSaveFailed"));
     }
-  }, [calendar]);
+  }, [calendar, editingEvent, closeScheduler, tCal]);
 
-  // Convert CalendarEvent[] to FullScreenCalendar's CalendarData[] format
+  // Confirmation happens here (single choke point); both the grid modal and
+  // the scheduler panel route their deletes through this.
+  const requestDeleteEvent = useCallback((eventId: string) => {
+    const base = calendar.events.find((e) => e.id === eventId);
+    setDeleteTarget(base ?? { id: eventId, title: "" } as CalendarEvent);
+  }, [calendar.events]);
+
+  const confirmDeleteEvent = useCallback(async () => {
+    if (!deleteTarget) return;
+    const result = await calendar.deleteEvent(deleteTarget.id);
+    if (result.success) {
+      toast.success(tCal("toastDeleted"));
+    } else {
+      toast.error(result.error || tCal("toastDeleteFailed"));
+    }
+    setDeleteTarget(null);
+    setShowScheduler(false);
+    setEditingEvent(null);
+  }, [calendar, deleteTarget, t]);
+
+  // Convert CalendarEvent[] to the grid's CalendarData[] format, expanding
+  // recurring bases into concrete occurrences for the visible window.
   const calendarData = useMemo(() => {
+    const now = new Date();
+    const expanded = expandRecurringEvents(calendar.events, startOfMonth(now), endOfYear(now));
     const grouped = new Map<string, CalendarEvent[]>();
-    for (const event of calendar.events) {
+    for (const event of expanded) {
       const dateKey = new Date(event.start_time).toDateString();
       if (!grouped.has(dateKey)) grouped.set(dateKey, []);
       grouped.get(dateKey)!.push(event);
@@ -149,16 +196,39 @@ export const Shadcn: FC<{
       day: new Date(dateKey),
       events: dayEvents.map((e) => ({
         id: e.id,
+        baseId: e.id.split(':')[0],
         title: e.title,
         description: e.description,
         location: e.location,
-        time: new Date(e.start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+        time: new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(e.start_time)),
         datetime: e.start_time,
+        end_datetime: e.end_time,
+        is_all_day: e.is_all_day,
         color: e.color,
-        attendees: e.attendees,
+        attendees: e.attendees?.map((a) => ({ email: a.email, name: a.name, status: a.status })),
       })),
     }));
   }, [calendar.events]);
+
+  // Month navigation inside the grid refetches the visible window (including
+  // recurring bases that started before it).
+  const handleVisibleRangeChange = useCallback((range: { start: Date; end: Date }) => {
+    if (!calendarUserId) return;
+    calendar.fetchEvents('this_month', undefined, range);
+  }, [calendarUserId, calendar.fetchEvents]);
+
+  const openEditEvent = useCallback((gridEvent: { baseId?: string; id: string }) => {
+    const baseId = gridEvent.baseId ?? gridEvent.id;
+    const full = calendar.events.find((e) => e.id === baseId);
+    if (!full) return;
+    setEditingEvent(full);
+    setShowScheduler(true);
+  }, [calendar.events]);
+
+  const openCreateAtSelectedDay = useCallback(() => {
+    setEditingEvent(null);
+    setShowScheduler(true);
+  }, []);
 
   useEffect(() => {
     const openArtifacts = (event: Event) => {
@@ -283,12 +353,11 @@ export const Shadcn: FC<{
                         <ErrorBoundary componentName="FullScreenCalendar">
                           <FullScreenCalendar
                             data={calendarData}
-                            onCreateEvent={() => setShowScheduler(true)}
-                            onEditEvent={(_event) => {
-                              // Open the scheduler with the event data
-                              setShowScheduler(true)
-                            }}
-                            onDeleteEvent={handleDeleteEvent}
+                            onCreateEvent={openCreateAtSelectedDay}
+                            onEditEvent={openEditEvent}
+                            onDeleteEvent={requestDeleteEvent}
+                            onVisibleRangeChange={handleVisibleRangeChange}
+                            onSelectedDayChange={setSelectedDay}
                           />
                         </ErrorBoundary>
                       </Suspense>
@@ -296,16 +365,21 @@ export const Shadcn: FC<{
 
                     {/* Scheduling Panel Slide-in */}
                     {showScheduler && (
-                      <div className="fixed right-0 top-0 bottom-0 w-[420px] border-l border-white/[0.08] bg-[#0f0f10] z-50 overflow-y-auto shadow-2xl">
+                      <div className="fixed right-0 top-0 bottom-0 w-[420px] max-w-full border-s border-border bg-background z-50 overflow-y-auto shadow-2xl">
                         <Suspense fallback={<PanelLoading />}>
                           <ErrorBoundary componentName="SchedulingPanel">
                             <SchedulingPanel
-                              onSubmit={handleCreateEvent}
-                              onCancel={() => setShowScheduler(false)}
-                              initialData={{
-                                start_time: selectedDate.toISOString(),
-                                end_time: new Date(selectedDate.getTime() + 60 * 60 * 1000).toISOString(),
-                              }}
+                              key={editingEvent?.id ?? "new"}
+                              onSubmit={editingEvent ? handleUpdateEvent : handleCreateEvent}
+                              onDelete={requestDeleteEvent}
+                              onCancel={closeScheduler}
+                              existingEvents={calendar.events}
+                              initialData={
+                                editingEvent ?? {
+                                  start_time: selectedDay.toISOString(),
+                                  end_time: new Date(selectedDay.getTime() + 60 * 60 * 1000).toISOString(),
+                                }
+                              }
                             />
                           </ErrorBoundary>
                         </Suspense>
@@ -394,6 +468,26 @@ export const Shadcn: FC<{
               open={shortcutsModalOpen}
               onOpenChange={setShortcutsModalOpen}
             />
+
+            {/* Delete-event confirmation — single choke point for grid + panel */}
+            <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+              <DialogContent className="sm:max-w-[420px]" dir="auto">
+                <DialogHeader>
+                  <DialogTitle>{tCal("deleteTitle")}</DialogTitle>
+                  <DialogDescription>
+                    {tCal("deleteMessage", { title: deleteTarget?.title ?? "" })}
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter className="gap-2">
+                  <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+                    {tCal("keepEvent")}
+                  </Button>
+                  <Button variant="destructive" onClick={confirmDeleteEvent}>
+                    {tCal("delete")}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
     </div>
   );

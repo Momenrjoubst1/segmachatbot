@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { startOfDay, format, addDays, isSameDay } from 'date-fns';
+import { startOfDay, endOfDay, format, addDays, isSameDay } from 'date-fns';
 import type { CalendarEvent, CalendarInsights, FreeSlotDay, FreeSlot } from '../types';
 
 const USER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -9,14 +9,19 @@ interface UseCalendarSyncOptions {
   userId?: string;
 }
 
+export interface EventRange {
+  start: Date;
+  end: Date;
+}
+
 interface UseCalendarSyncReturn {
   events: CalendarEvent[];
   insights: CalendarInsights | null;
   isCalendarLoading: boolean;
   error: string | null;
-  
+
   // Actions
-  fetchEvents: (period?: 'today' | 'tomorrow' | 'this_week' | 'next_week' | 'this_month', days?: number) => Promise<void>;
+  fetchEvents: (period?: 'today' | 'tomorrow' | 'this_week' | 'next_week' | 'this_month', days?: number, range?: EventRange) => Promise<void>;
   fetchInsights: (period?: 'today' | 'tomorrow' | 'this_week' | 'this_month') => Promise<void>;
   createEvent: (event: Partial<CalendarEvent>) => Promise<{ success: boolean; event?: CalendarEvent; error?: string }>;
   updateEvent: (eventId: string, updates: Partial<CalendarEvent>) => Promise<{ success: boolean; error?: string }>;
@@ -32,7 +37,8 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
 
   const fetchEvents = useCallback(async (
     period: 'today' | 'tomorrow' | 'this_week' | 'next_week' | 'this_month' = 'this_week',
-    days?: number
+    days?: number,
+    range?: EventRange
   ) => {
     if (!options?.userId) {
       setError('User not authenticated');
@@ -43,41 +49,47 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
     setError(null);
 
     try {
-      // Calculate date range in user's local timezone
+      // Calculate date range in user's local timezone.
+      // An explicit `range` (e.g. the visible month after navigation) wins.
       const now = new Date();
       let startDate = startOfDay(now);
       let endDate = startOfDay(addDays(now, 1));
 
-      switch (period) {
-        case 'today':
-          startDate = startOfDay(now);
-          endDate = startOfDay(addDays(now, 1));
-          break;
-        case 'tomorrow':
-          startDate = startOfDay(addDays(now, 1));
-          endDate = startOfDay(addDays(now, 2));
-          break;
-        case 'this_week': {
-          const dayOfWeek = now.getDay();
-          startDate = startOfDay(addDays(now, -dayOfWeek));
-          endDate = startOfDay(addDays(startDate, 7));
-          break;
+      if (range) {
+        startDate = startOfDay(range.start);
+        endDate = endOfDay(range.end);
+      } else {
+        switch (period) {
+          case 'today':
+            startDate = startOfDay(now);
+            endDate = startOfDay(addDays(now, 1));
+            break;
+          case 'tomorrow':
+            startDate = startOfDay(addDays(now, 1));
+            endDate = startOfDay(addDays(now, 2));
+            break;
+          case 'this_week': {
+            const dayOfWeek = now.getDay();
+            startDate = startOfDay(addDays(now, -dayOfWeek));
+            endDate = startOfDay(addDays(startDate, 7));
+            break;
+          }
+          case 'next_week': {
+            const dayOfWeek2 = now.getDay();
+            const nextSunday = addDays(now, 7 - dayOfWeek2);
+            endDate = startOfDay(addDays(nextSunday, 7));
+            startDate = startOfDay(nextSunday);
+            break;
+          }
+          case 'this_month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+            break;
         }
-        case 'next_week': {
-          const dayOfWeek2 = now.getDay();
-          const nextSunday = addDays(now, 7 - dayOfWeek2);
-          endDate = startOfDay(addDays(nextSunday, 7));
-          startDate = startOfDay(nextSunday);
-          break;
-        }
-        case 'this_month':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-          break;
-      }
 
-      if (days) {
-        endDate = startOfDay(addDays(startDate, days));
+        if (days) {
+          endDate = startOfDay(addDays(startDate, days));
+        }
       }
 
       const { data, error: fetchError } = await supabase
@@ -218,6 +230,8 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
           end_time: event.end_time,
           is_all_day: event.is_all_day || false,
           color: event.color || '#3B82F6',
+          is_recurring: event.is_recurring || false,
+          recurrence_rule: event.recurrence_rule || null,
           provider: 'local',
         })
         .select()
@@ -265,6 +279,8 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
           end_time: updates.end_time,
           is_all_day: updates.is_all_day,
           color: updates.color,
+          is_recurring: updates.is_recurring,
+          recurrence_rule: updates.recurrence_rule || null,
         })
         .eq('id', eventId)
         .eq('user_id', options.userId);
@@ -355,12 +371,23 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
       const startDate = now;
       const endDate = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
 
-      const { data: allEvents } = await supabase
+      // NOTE: `is_recurring` was previously selected here but the column did
+      // not exist — PostgREST rejected the whole query and free-slot finding
+      // silently returned nothing. Columns must match the live schema.
+      const { data: allEvents, error: eventsError } = await supabase
         .from('user_calendar_events')
-        .select('id, title, start_time, end_time, is_all_day, provider, is_recurring')
+        .select('id, title, start_time, end_time, is_all_day, provider')
         .eq('user_id', options.userId)
         .gte('start_time', startDate.toISOString())
         .lte('end_time', endDate.toISOString());
+
+      if (eventsError) {
+        console.error('[Calendar] findFreeSlots query error:', eventsError.message);
+        return [];
+      }
+
+      // The narrow select omits optional fields — widen for the helpers below.
+      const userEvents = (allEvents || []) as CalendarEvent[];
 
       const freeSlots: FreeSlotDay[] = [];
 
@@ -380,7 +407,7 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
         dayEnd.setHours(endHour, endMin, 0, 0);
 
         // Find busy slots for this day
-        const dayEvents = (allEvents || []).filter((e: CalendarEvent) => {
+        const dayEvents = userEvents.filter((e: CalendarEvent) => {
           const eventStart = new Date(e.start_time);
           return isSameDay(eventStart, currentDay);
         });

@@ -1,10 +1,46 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import SchedulingPanel from '@/features/calendar/components/SchedulingPanel';
+import type { CalendarEvent } from '@/features/calendar/types';
+import enCalendar from '@/i18n/locales/en/calendar.json';
+
+// Resolve translations from the real calendar namespace so assertions exercise
+// actual copy, falling back to defaultValue like production i18next would.
+vi.mock('react-i18next', async () => {
+  const actual = await vi.importActual<typeof import('react-i18next')>('react-i18next');
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string, opts?: { defaultValue?: string; count?: number }) => {
+        // Emulate i18next plural resolution (_one/_other suffixes).
+        const dict = enCalendar as Record<string, string>;
+        const count = opts?.count;
+        const entry =
+          (count !== undefined
+            ? dict[`${key}_${count === 1 ? 'one' : 'other'}`]
+            : undefined) ??
+          dict[key] ??
+          opts?.defaultValue ??
+          key;
+        return typeof entry === 'string' && count !== undefined
+          ? entry.replace('{{count}}', String(count))
+          : entry;
+      },
+      i18n: { language: 'en', changeLanguage: vi.fn() },
+    }),
+  };
+});
 
 vi.mock('@/lib/cn', () => ({
   cn: (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' '),
 }));
+
+const baseEvent = (): Partial<CalendarEvent> => ({
+  id: 'evt-1',
+  title: 'Existing meeting',
+  start_time: '2026-08-10T09:00:00.000Z',
+  end_time: '2026-08-10T10:00:00.000Z',
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -13,203 +49,145 @@ beforeEach(() => {
 describe('SchedulingPanel', () => {
   it('renders the scheduling form header', () => {
     render(<SchedulingPanel />);
-    expect(screen.getByText('Schedule a Meeting')).toBeInTheDocument();
-    expect(screen.getByText('Create a new calendar event')).toBeInTheDocument();
+    expect(screen.getByText(enCalendar.scheduleMeeting)).toBeInTheDocument();
+    expect(screen.getByText(enCalendar.scheduleCreateSubtitle)).toBeInTheDocument();
+  });
+
+  it('renders edit header when editing', () => {
+    render(<SchedulingPanel initialData={baseEvent()} />);
+    expect(screen.getByText(enCalendar.editEvent)).toBeInTheDocument();
+    expect(screen.getByText(enCalendar.update)).toBeInTheDocument();
   });
 
   it('renders all form fields', () => {
     render(<SchedulingPanel />);
-    expect(screen.getByLabelText(/Event Title/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Date/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Start Time/)).toBeInTheDocument();
-    expect(screen.getByText('Duration')).toBeInTheDocument();
-    expect(screen.getByLabelText(/Location/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Description/)).toBeInTheDocument();
-    expect(screen.getByText('Attendees')).toBeInTheDocument();
+    expect(screen.getByLabelText(/title \*/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/date \*/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/start time \*/i)).toBeInTheDocument();
+    expect(screen.getAllByText(enCalendar.durationLabel).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText(/location/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/notes/i)).toBeInTheDocument();
+    expect(screen.getByText(enCalendar.attendeesLabel)).toBeInTheDocument();
   });
 
   it('renders duration buttons', () => {
     render(<SchedulingPanel />);
-    expect(screen.getByText('15 min')).toBeInTheDocument();
-    expect(screen.getByText('30 min')).toBeInTheDocument();
-    expect(screen.getByText('1 hour')).toBeInTheDocument();
-    expect(screen.getByText('2 hours')).toBeInTheDocument();
+    expect(screen.getByText(enCalendar.d15)).toBeInTheDocument();
+    expect(screen.getByText(enCalendar.d30)).toBeInTheDocument();
+    expect(screen.getByText(enCalendar.d60)).toBeInTheDocument();
+    expect(screen.getByText(enCalendar.d120)).toBeInTheDocument();
   });
 
   it('renders recurrence buttons', () => {
     render(<SchedulingPanel />);
-    expect(screen.getByText('No Repeat')).toBeInTheDocument();
-    expect(screen.getByText('Daily')).toBeInTheDocument();
-    expect(screen.getByText('Weekly')).toBeInTheDocument();
-    expect(screen.getByText('Monthly')).toBeInTheDocument();
+    expect(screen.getByText(enCalendar.recurrenceNone)).toBeInTheDocument();
+    expect(screen.getByText(enCalendar.recurrenceDaily)).toBeInTheDocument();
+    expect(screen.getByText(enCalendar.recurrenceWeekly)).toBeInTheDocument();
+    expect(screen.getByText(enCalendar.recurrenceMonthly)).toBeInTheDocument();
   });
 
-  it('renders color picker', () => {
+  it('renders color swatches', () => {
     const { container } = render(<SchedulingPanel />);
     const colorButtons = container.querySelectorAll('.rounded-full[style]');
     expect(colorButtons.length).toBeGreaterThan(0);
   });
 
-  it('renders create button', () => {
+  it('renders create button in create mode', () => {
     render(<SchedulingPanel />);
-    expect(screen.getByText('Create Event')).toBeInTheDocument();
+    expect(screen.getByText(enCalendar.create)).toBeInTheDocument();
   });
 
-  it('renders cancel button and calls onCancel when clicked', () => {
+  it('calls onCancel', () => {
     const onCancel = vi.fn();
     render(<SchedulingPanel onCancel={onCancel} />);
-    fireEvent.click(screen.getByText('Cancel'));
-    expect(onCancel).toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole('button', { name: enCalendar.cancel })[0]);
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('renders close button when onCancel is provided', () => {
-    const onCancel = vi.fn();
-    render(<SchedulingPanel onCancel={onCancel} />);
-    const buttons = screen.getAllByRole('button');
-    const closeButton = buttons.find((btn) => btn.querySelector('svg'));
-    expect(closeButton).toBeInTheDocument();
-  });
-
-  it('disables create button when title is empty', () => {
+  it('disables create until a title exists', () => {
     render(<SchedulingPanel />);
-    const submitButton = screen.getByText('Create Event');
-    expect(submitButton.closest('button')).toBeDisabled();
+    const submit = screen.getByRole('button', { name: enCalendar.create });
+    expect(submit).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/title \*/i), { target: { value: 'Sync' } });
+    expect(submit).toBeEnabled();
   });
 
-  it('enables create button when title is entered', () => {
-    render(<SchedulingPanel />);
-    const titleInput = screen.getByLabelText(/Event Title/);
-    fireEvent.change(titleInput, { target: { value: 'Team Meeting' } });
-    const submitButton = screen.getByText('Create Event');
-    expect(submitButton.closest('button')).not.toBeDisabled();
-  });
-
-  it('calls onSubmit with correct data when form is submitted', () => {
+  it('submits a full payload including end time and recurrence', () => {
     const onSubmit = vi.fn();
     render(<SchedulingPanel onSubmit={onSubmit} />);
-    fireEvent.change(screen.getByLabelText(/Event Title/), { target: { value: 'Standup' } });
-    fireEvent.click(screen.getByText('Create Event'));
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'Standup',
-        provider: 'manual',
-      })
-    );
+
+    fireEvent.change(screen.getByLabelText(/title \*/i), { target: { value: 'Team sync' } });
+    fireEvent.change(screen.getByLabelText(/date \*/i), { target: { value: '2026-09-01' } });
+    fireEvent.click(screen.getByText(enCalendar.d90));
+    fireEvent.click(screen.getByText(enCalendar.recurrenceWeekly));
+    fireEvent.click(screen.getByRole('button', { name: enCalendar.create }));
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    const payload = onSubmit.mock.calls[0][0] as Partial<CalendarEvent>;
+    expect(payload.title).toBe('Team sync');
+    expect(payload.is_recurring).toBe(true);
+    expect(payload.recurrence_rule).toBe('RRULE:FREQ=WEEKLY');
+    const duration =
+      (new Date(payload.end_time!).getTime() - new Date(payload.start_time!).getTime()) / 60000;
+    expect(duration).toBe(90);
   });
 
-  it('changes duration when duration button is clicked', () => {
+  it('derives duration from the event being edited', () => {
     const onSubmit = vi.fn();
-    render(<SchedulingPanel onSubmit={onSubmit} />);
-    fireEvent.change(screen.getByLabelText(/Event Title/), { target: { value: 'Quick sync' } });
-    fireEvent.click(screen.getByText('30 min'));
-    fireEvent.click(screen.getByText('Create Event'));
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'Quick sync',
-      })
-    );
+    // Edited event runs 60 minutes; do NOT touch duration controls.
+    render(<SchedulingPanel onSubmit={onSubmit} initialData={baseEvent()} />);
+    fireEvent.click(screen.getByRole('button', { name: enCalendar.update }));
+    const payload = onSubmit.mock.calls[0][0] as Partial<CalendarEvent>;
+    const duration =
+      (new Date(payload.end_time!).getTime() - new Date(payload.start_time!).getTime()) / 60000;
+    expect(duration).toBe(60);
   });
 
-  it('adds attendee when email is entered and add button clicked', () => {
+  it('shows the delete action only when editing with a handler', () => {
+    const onDelete = vi.fn();
+    const { rerender } = render(<SchedulingPanel />);
+    expect(screen.queryByRole('button', { name: enCalendar.delete })).not.toBeInTheDocument();
+
+    rerender(<SchedulingPanel onDelete={onDelete} />);
+    expect(screen.queryByRole('button', { name: enCalendar.delete })).not.toBeInTheDocument();
+
+    rerender(<SchedulingPanel onDelete={onDelete} initialData={baseEvent()} />);
+    fireEvent.click(screen.getByRole('button', { name: enCalendar.delete }));
+    expect(onDelete).toHaveBeenCalledWith('evt-1');
+  });
+
+  it('adds and removes attendees', () => {
     render(<SchedulingPanel />);
-    const emailInput = screen.getByPlaceholderText('Add email address');
-    fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
-    const addButton = emailInput.parentElement?.querySelector('button');
-    fireEvent.click(addButton!);
-    expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    const input = screen.getByPlaceholderText(enCalendar.addAttendeePlaceholder);
+    fireEvent.change(input, { target: { value: 'peer@uni.edu' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(screen.getByText('peer@uni.edu')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove peer@uni.edu' }));
+    expect(screen.queryByText('peer@uni.edu')).not.toBeInTheDocument();
   });
 
-  it('adds attendee on Enter key', () => {
-    render(<SchedulingPanel />);
-    const emailInput = screen.getByPlaceholderText('Add email address');
-    fireEvent.change(emailInput, { target: { value: 'alice@corp.com' } });
-    fireEvent.keyDown(emailInput, { key: 'Enter' });
-    expect(screen.getByText('alice@corp.com')).toBeInTheDocument();
-  });
-
-  it('removes attendee when remove button is clicked', () => {
-    render(<SchedulingPanel />);
-    const emailInput = screen.getByPlaceholderText('Add email address');
-    fireEvent.change(emailInput, { target: { value: 'bob@test.com' } });
-    const addButton = emailInput.parentElement?.querySelector('button');
-    fireEvent.click(addButton!);
-    expect(screen.getByText('bob@test.com')).toBeInTheDocument();
-    const badge = screen.getByText('bob@test.com').closest('[class*="Badge"]') || screen.getByText('bob@test.com').parentElement!;
-    const removeBtn = badge.querySelector('button');
-    fireEvent.click(removeBtn!);
-    expect(screen.queryByText('bob@test.com')).not.toBeInTheDocument();
-  });
-
-  it('does not add attendee without @ symbol', () => {
-    render(<SchedulingPanel />);
-    const emailInput = screen.getByPlaceholderText('Add email address');
-    fireEvent.change(emailInput, { target: { value: 'notanemail' } });
-    const addButton = emailInput.parentElement?.querySelector('button');
-    fireEvent.click(addButton!);
-    expect(screen.queryByText('notanemail')).not.toBeInTheDocument();
-  });
-
-  it('renders edit mode header when initialData has id', () => {
+  it('warns about conflicting events live', () => {
+    const existing = [
+      {
+        id: 'other',
+        title: 'Overlap source',
+        start_time: '2026-08-10T09:30:00.000Z',
+        end_time: '2026-08-10T10:30:00.000Z',
+        is_all_day: false,
+        provider: 'local' as const,
+        is_recurring: false,
+      },
+    ];
     render(
       <SchedulingPanel
-        initialData={{ id: 'evt-1', title: 'Existing Event' }}
-      />
+        initialData={{ ...baseEvent(), start_time: '2026-08-10T08:00:00Z', end_time: '2026-08-10T09:45:00Z' }}
+        existingEvents={existing}
+      />,
     );
-    expect(screen.getByText('Edit Event')).toBeInTheDocument();
-    expect(screen.getByText('Update event details')).toBeInTheDocument();
-  });
-
-  it('renders delete button in edit mode', () => {
-    render(
-      <SchedulingPanel
-        initialData={{ id: 'evt-1', title: 'Existing Event' }}
-      />
-    );
-    expect(screen.getByText('Delete')).toBeInTheDocument();
-    expect(screen.getByText('Update Event')).toBeInTheDocument();
-  });
-
-  it('pre-fills title from initialData', () => {
-    render(
-      <SchedulingPanel
-        initialData={{ id: 'evt-1', title: 'Sprint Planning' }}
-      />
-    );
-    expect(screen.getByDisplayValue('Sprint Planning')).toBeInTheDocument();
-  });
-
-  it('pre-fills location from initialData', () => {
-    render(
-      <SchedulingPanel
-        initialData={{ id: 'evt-1', title: 'Meeting', location: 'Room 42' }}
-      />
-    );
-    expect(screen.getByDisplayValue('Room 42')).toBeInTheDocument();
-  });
-
-  it('toggles all-day checkbox', () => {
-    render(<SchedulingPanel />);
-    const allDayCheckbox = screen.getByLabelText('All-day event');
-    fireEvent.click(allDayCheckbox);
-    expect(allDayCheckbox).toBeChecked();
-  });
-
-  it('changes recurrence when button is clicked', () => {
-    render(<SchedulingPanel />);
-    const weeklyBtn = screen.getByText('Weekly');
-    fireEvent.click(weeklyBtn);
-    expect(weeklyBtn).toBeInTheDocument();
-    fireEvent.click(screen.getByText('No Repeat'));
-    expect(screen.getByText('No Repeat')).toBeInTheDocument();
-  });
-
-  it('renders all-day event checkbox', () => {
-    render(<SchedulingPanel />);
-    expect(screen.getByLabelText('All-day event')).toBeInTheDocument();
-  });
-
-  it('renders event color label', () => {
-    render(<SchedulingPanel />);
-    expect(screen.getByText('Event Color')).toBeInTheDocument();
+    // Editing evt-1 excludes itself but "Overlap source" collides.
+    const alerts = screen.getAllByRole('alert');
+    expect(alerts.some((a) => /conflicts with/i.test(a.textContent ?? ''))).toBe(true);
+    expect(screen.getByText(/Overlap source/)).toBeInTheDocument();
   });
 });

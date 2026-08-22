@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   content TEXT NOT NULL,
   is_pinned BOOLEAN DEFAULT FALSE,
   feedback SMALLINT CHECK (feedback IN (-1, 1)),
+  model TEXT,
   parent_message_id UUID REFERENCES chat_messages(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -247,6 +248,8 @@ CREATE TABLE IF NOT EXISTS user_calendar_events (
   end_time TIMESTAMPTZ NOT NULL,
   is_all_day BOOLEAN DEFAULT FALSE,
   color TEXT DEFAULT '#3B82F6',
+  is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
+  recurrence_rule TEXT,
   provider TEXT DEFAULT 'local',
   external_id TEXT,
   external_link TEXT,
@@ -281,6 +284,29 @@ CREATE TABLE IF NOT EXISTS user_calendar_settings (
   working_days INTEGER[] DEFAULT '{0,1,2,3,4}',
   timezone TEXT DEFAULT 'Asia/Amman'
 );
+
+-- Calendar RLS (migration 030) — the frontend writes these tables directly
+-- with the user's JWT, so they must be locked to their owners.
+ALTER TABLE user_calendar_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_calendar_attendees ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_calendar_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their own calendar events" ON user_calendar_events
+  FOR ALL USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
+CREATE POLICY "Attendees managed via parent event owner" ON user_calendar_attendees
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM user_calendar_events e
+      WHERE e.id = event_id AND e.user_id = (select auth.uid())
+    )
+  ) WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM user_calendar_events e
+      WHERE e.id = event_id AND e.user_id = (select auth.uid())
+    )
+  );
+CREATE POLICY "Users can manage their own calendar settings" ON user_calendar_settings
+  FOR ALL USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
 
 -- ==========================================
 -- 17. ANALYTICS EVENTS
@@ -405,6 +431,36 @@ CREATE TABLE IF NOT EXISTS feedback (
 );
 
 CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id);
+
+-- ==========================================
+-- 24b. MESSAGE FEEDBACK (like/dislike on bot messages)
+-- ==========================================
+-- Source of truth for per-message ratings (see migration 028). The legacy
+-- chat_messages.feedback SMALLINT is kept in sync by the API but not
+-- authoritative. UNIQUE(message_id, user_id): one rating per user per message.
+CREATE TABLE IF NOT EXISTS message_feedback (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id UUID NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+  message_id UUID NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  feedback_type TEXT NOT NULL CHECK (feedback_type IN ('like', 'dislike')),
+  reason_category TEXT CHECK (reason_category IN ('inaccurate', 'harmful', 'not_helpful', 'off_topic', 'other')),
+  comment TEXT,
+  prompt_snapshot TEXT,
+  response_snapshot TEXT,
+  model_version TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (message_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_message_feedback_user ON message_feedback(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_message_feedback_conversation ON message_feedback(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_message_feedback_dislikes ON message_feedback(created_at DESC) WHERE feedback_type = 'dislike';
+
+ALTER TABLE message_feedback ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can manage their own message feedback" ON message_feedback
+  FOR ALL USING ((select auth.uid()) = user_id) WITH CHECK ((select auth.uid()) = user_id);
 -- ==========================================
 -- 25. TEXTBOOKS (BYOC feature)
 -- ==========================================

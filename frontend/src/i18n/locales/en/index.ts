@@ -9,6 +9,7 @@ import messages from "./messages.json";
 import errors from "./errors.json";
 import validation from "./validation.json";
 import botStatus from "./botStatus.json";
+import calendar from "./calendar.json";
 
 export const en = {
   ...common,
@@ -22,4 +23,5 @@ export const en = {
   ...errors,
   ...validation,
   ...botStatus,
+  ...calendar,
 };
