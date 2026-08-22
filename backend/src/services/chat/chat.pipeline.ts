@@ -55,11 +55,11 @@ function cleanSourceName(source?: string): string {
     .trim() || "Knowledge Base";
 }
 
-/** Tools that receive `__userId` in their execute args - now from metadata system */
-const TOOLS_NEEDING_USER_ID: ReadonlySet<string> = new Set(getToolsRequiringUserId());
-
 /** Builds the `enabledTools` map for the response generator. Filtered by intent to prevent token overflows. */
 function buildEnabledTools(userId: string, intent?: string, hasTextbookChunks?: boolean): Record<string, ToolDefinition> {
+  // Resolved per call: tool modules register their metadata during initTools(),
+  // which may run after this module is first imported.
+  const TOOLS_NEEDING_USER_ID: ReadonlySet<string> = new Set(getToolsRequiringUserId());
   // For small talk or knowledge queries without specific tool needs, send NO tools to save tokens
   if (intent === "small_talk") {
     return {};

@@ -142,14 +142,16 @@ export function ToolDecorator(metadata: ToolMetadata) {
 
 /**
  * Helper function to create tool metadata
- * For use in tool files that can't use decorators
+ * For use in tool files that can't use decorators.
+ * Registers the metadata so getToolsRequiringUserId()/getEnabledTools()
+ * see it — call sites invoke this at module top level.
  */
 export function createToolMetadata(
   name: string,
   description: string,
   options: Partial<Omit<ToolMetadata, 'name' | 'description'>> = {}
 ): ToolMetadata {
-  return {
+  const metadata: ToolMetadata = {
     name,
     description,
     requiresUserId: options.requiresUserId ?? false,
@@ -158,4 +160,6 @@ export function createToolMetadata(
     requiresConfig: options.requiresConfig,
     dangerous: options.dangerous ?? false,
   };
+  registerTool(metadata);
+  return metadata;
 }
