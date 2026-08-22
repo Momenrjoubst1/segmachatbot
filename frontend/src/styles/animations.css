@@ -13,6 +13,11 @@
   50% { opacity: 1; transform: scale(1.2); }
 }
 
+@keyframes botPulse {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.25); opacity: 1; }
+}
+
 @keyframes bannedBgPulse {
   0%, 100% {
     background: radial-gradient(ellipse at center, rgba(220, 38, 38, 0.05) 0%, #000 70%);

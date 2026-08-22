@@ -142,7 +142,7 @@ function HtmlViewer({ content }: { content: string }) {
       srcDoc={srcDoc}
       className="h-full min-h-[620px] w-full rounded-lg border border-border bg-card"
       title="HTML Preview"
-      sandbox="allow-scripts allow-forms allow-modals"
+      sandbox="allow-forms allow-modals"
     />
   );
 }

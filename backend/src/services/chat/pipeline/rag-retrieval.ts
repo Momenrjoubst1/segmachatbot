@@ -17,6 +17,7 @@ import { Response } from "express";
 import { createLogger } from "../../../utils/logger.js";
 const ragLog = createLogger("pipeline:rag-retrieval");
 import { ragCache } from "../../rag/rag-cache.service.js";
+import { RAG_CONFIG, BM25_CONFIG } from "../../../config/constants.js";
 import { rewriteQuery } from "../query-rewriter.js";
 import { responseCache, type CacheMetadata } from "../response-cache.service.js";
 import { triggerChatTitlingAsync } from "../../chat-title-generator.service.js";
@@ -24,6 +25,10 @@ import { UserIntent, type IntentResult } from "../intent-detector.js";
 import type { CoreMessage, RagContextData, RankedDoc } from "./types.js";
 import type { IntentResult as IntentResultType } from "../intent-detector.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import redis from "../../../config/redis/client.js";
+import { truncateRAGSources, calculateRAGBudget } from "../../rag/rag-context-truncator.js";
+import { getModelContextWindow, estimateTokens } from "../../memory/token-estimator.js";
+import { truncateWithBoundaries } from "../../rag/rag-context-truncator.js";
 
 const DEFAULT_INTENT: IntentResultType = {
   intent: UserIntent.KNOWLEDGE_QUERY,
@@ -42,6 +47,7 @@ export interface RagStepResult {
   cacheMetadata: CacheMetadata | undefined;
   ragSuccess: boolean;
   ragSources: string[];
+  hasTextbookChunks: boolean;
   /** True when the response cache returned a hit that we should stream. */
   responseCacheHit: {
     response: string;
@@ -78,6 +84,7 @@ export async function runRagPipeline(args: {
     cacheMetadata: undefined,
     ragSuccess: false,
     ragSources: [],
+    hasTextbookChunks: false,
     responseCacheHit: null,
   };
 
@@ -99,7 +106,7 @@ export async function runRagPipeline(args: {
     // 1. Rewrite query (intent-aware)
     const rewritten = rewriteQuery(
       lastUserText,
-      coreMessages,
+      coreMessages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : undefined })),
       intentResult ?? DEFAULT_INTENT,
     );
     const searchQuery = rewritten.rewritten;
@@ -125,7 +132,7 @@ export async function runRagPipeline(args: {
 
     if (!queryEmbedding) {
       ragLog.info("Embedding returned null. Trying BM25 fallback");
-      return runBM25Fallback(searchQuery);
+      return runBM25Fallback(searchQuery, userId);
     }
 
     ragLog.info("Embedding generated. Searching vector DB", {
@@ -183,7 +190,10 @@ export async function runRagPipeline(args: {
     let scopedPageEnd: number | undefined;
     try {
       const mod = await import("../../textbook/textbook-search.js");
-      let structureMatch = await mod.matchCurriculumSection(userId, searchQuery);
+      // Use semantic matching when we have an embedding (much better for paraphrases)
+      let structureMatch = queryEmbedding
+        ? await mod.matchCurriculumSectionSemantic(userId, searchQuery, queryEmbedding)
+        : await mod.matchCurriculumSection(userId, searchQuery);
       if (!structureMatch || !structureMatch.matched) {
         structureMatch = await mod.matchStructureTree(userId, searchQuery);
       }
@@ -209,6 +219,7 @@ export async function runRagPipeline(args: {
             cacheMetadata,
             ragSuccess: true,
             ragSources: ["Textbook Structure"],
+            hasTextbookChunks: false,
             responseCacheHit: null,
           };
         }
@@ -233,9 +244,9 @@ export async function runRagPipeline(args: {
     }
 
     // 4. Hybrid retrieval
-    const matchThreshold = parseFloat(process.env.RAG_MATCH_THRESHOLD || "0.5");
-    const initialMatchCount = parseInt(process.env.RAG_INITIAL_MATCH_COUNT || "15", 10);
-    const finalMatchCount = parseInt(process.env.RAG_MATCH_COUNT || "5", 10);
+    const matchThreshold = RAG_CONFIG.MATCH_THRESHOLD;
+    const initialMatchCount = RAG_CONFIG.INITIAL_MATCH_COUNT;
+    const finalMatchCount = RAG_CONFIG.FINAL_MATCH_COUNT;
 
     let rankedDocs = await ragCache.getResults(searchQuery, finalMatchCount, userId);
     if (rankedDocs) {
@@ -262,13 +273,16 @@ export async function runRagPipeline(args: {
     // the book's OWN questions for the matched lesson directly.
     let quizContext = "";
     const isQuizLike =
-      /(اختبرني|امتحني|أسئلة|اسئلة|تمارين|تدريبات|quiz|test me|practice questions|give me questions)/i.test(
+      /(اختبرني|امتحني|أسئلة|اسئلة|تمارين|تدريبات|quiz|test me|practice questions|give me questions|اختبار|مراجعة|امتحان|سؤال|revise|study)/i.test(
         lastUserText
       );
     if (isQuizLike) {
       try {
         const mod = await import("../../textbook/textbook-search.js");
-        const sectionMatch = await mod.matchCurriculumSection(userId, searchQuery);
+        // Use semantic matching for quiz scoping too
+        const sectionMatch = queryEmbedding
+          ? await mod.matchCurriculumSectionSemantic(userId, searchQuery, queryEmbedding)
+          : await mod.matchCurriculumSection(userId, searchQuery);
 
         let qQuery = supabase
           .from("textbook_questions")
@@ -283,13 +297,18 @@ export async function runRagPipeline(args: {
         const { data: quizQuestions } = await qQuery;
         if (quizQuestions && quizQuestions.length > 0) {
           const listing = quizQuestions
-            .map((q: any) => `${q.number ? q.number + ". " : "• "}${q.text} (p.${q.page_number})`)
+            .map((q: { number?: number; text: string; page_number?: number }) => `${q.number ? q.number + ". " : "• "}${q.text} (p.${q.page_number})`)
             .join("\n");
           const lessonHint = sectionMatch?.matched ? ` for lesson "${sectionMatch.section_title}"` : "";
+          const topicForTool = sectionMatch?.matched ? sectionMatch.section_title : (quizQuestions[0]?.section_path || "general");
           quizContext =
             `THE USER'S OWN TEXTBOOK QUESTIONS${lessonHint}:\n${listing}\n\n` +
             `Tutor instruction: quiz the user with these exact questions from their book. Ask them ONE question at a time, ` +
-            `wait for their answer, then evaluate it against the book content before moving to the next question.`;
+            `wait for their answer, then evaluate it against the book content before moving to the next question. ` +
+            `After evaluating each answer, you MUST call the record_quiz_result tool immediately with: ` +
+            `topic="${topicForTool}", correct=<true/false>, ` +
+            `courseId and textbookId from the context if available. ` +
+            `Then proceed to the next question.`;
           ragLog.info("Quiz context injected", {
             questions: quizQuestions.length,
             lesson: sectionMatch?.section_title || null,
@@ -322,35 +341,33 @@ export async function runRagPipeline(args: {
         cacheMetadata,
         ragSuccess: true,
         ragSources: ["Textbook Questions"],
+        hasTextbookChunks: false,
         responseCacheHit: null,
       };
     }
 
-    // 5. Build context block
+    // 5. Build context block with per-source truncation
     const sourceNames = uniqueSourceNames(rankedDocs);
     const hasTextbookChunks = rankedDocs.some(d => d.metadata?.textbook_id);
 
-    const contextText = rankedDocs
-      .map((d, i) => {
-        const sourceName = cleanSourceName(
-          typeof d.metadata?.source === 'string' ? d.metadata.source :
-          typeof d.metadata?.source_url === 'string' ? d.metadata.source_url :
-          typeof d.metadata?.file_name === 'string' ? d.metadata.file_name : undefined
-        );
+    // Calculate RAG budget based on model context window
+    const reservedForPrompt = 6000; // system prompt + messages + output reserve
+    const ragBudgetTokens = calculateRAGBudget(selectedModel, reservedForPrompt);
 
-        // Add page number for textbook chunks
-        const pageHint = d.metadata?.page_number
-          ? ` (page ${d.metadata.page_number})`
-          : '';
+    // Truncate RAG sources to fit budget
+    const truncationResult = truncateRAGSources(rankedDocs, {
+      totalBudgetTokens: ragBudgetTokens,
+      strategy: 'hybrid',
+      preserveBoundaries: true,
+    });
 
-        // Curriculum/structure path: which lesson/unit this content belongs to
-        const sectionHint = typeof d.metadata?.structure_path === 'string' && d.metadata.structure_path
-          ? ` [${d.metadata.structure_path}]`
-          : '';
+    if (truncationResult.warnings.length > 0) {
+      for (const w of truncationResult.warnings) {
+        ragLog.warn("RAG truncation warning", { warning: w });
+      }
+    }
 
-        return `[Source ${i + 1}: ${sourceName}${pageHint}${sectionHint}]\n${d.content}`;
-      })
-      .join("\n\n");
+    let contextText = truncationResult.contextText;
 
     // 5b. Textbook visual + curriculum enrichment: figure descriptions on the
     // cited pages and the book's structure map, so the model can answer
@@ -369,34 +386,53 @@ export async function runRagPipeline(args: {
         }
 
         const parts: string[] = [];
+        const allTbIds = [...citedPagesByBook.keys()];
+
+        // Batch query figures for ALL cited textbooks at once (N+1 -> 1)
+        const allPageNumbers: Record<string, number[]> = {};
+        for (const [tbId, pages] of citedPagesByBook) {
+          allPageNumbers[tbId] = [...pages].sort((a, b) => a - b);
+        }
+
+        const { data: allFigs } = await supabase
+          .from("textbook_figures")
+          .select("textbook_id, page_number, caption, vlm_description")
+          .in("textbook_id", allTbIds)
+          .in("page_number", Object.values(allPageNumbers).flat())
+          .not("vlm_description", "is", null);
+
+        const figsByBook = new Map<string, typeof allFigs>();
+        for (const fig of (allFigs || [])) {
+          if (!figsByBook.has(fig.textbook_id)) figsByBook.set(fig.textbook_id, []);
+          figsByBook.get(fig.textbook_id)!.push(fig);
+        }
+
+        // Batch query sections for ALL cited textbooks at once (N+1 -> 1)
+        const { data: allSections } = await supabase
+          .from("textbook_sections")
+          .select("textbook_id, level, title, page_start, page_end, order_index")
+          .in("textbook_id", allTbIds)
+          .in("level", ["unit", "lesson"])
+          .order("order_index");
+
+        const sectionsByBook = new Map<string, typeof allSections>();
+        for (const sec of (allSections || [])) {
+          if (!sectionsByBook.has(sec.textbook_id)) sectionsByBook.set(sec.textbook_id, []);
+          sectionsByBook.get(sec.textbook_id)!.push(sec);
+        }
+
+        // Build enrichment from batched results
         for (const [tbId, pages] of citedPagesByBook) {
           const pageList = [...pages].sort((a, b) => a - b);
-
-          const { data: figs } = await supabase
-            .from("textbook_figures")
-            .select("page_number, caption, vlm_description")
-            .eq("textbook_id", tbId)
-            .in("page_number", pageList)
-            .not("vlm_description", "is", null);
-          for (const f of (figs || []).slice(0, 6)) {
-            parts.push(
-              `Figure on page ${f.page_number}: ${f.caption} — ${f.vlm_description}`
-            );
+          const figs = (figsByBook.get(tbId) || []).filter(f => pageList.includes(f.page_number)).slice(0, 6);
+          for (const f of figs) {
+            parts.push(`Figure on page ${f.page_number}: ${f.caption} — ${f.vlm_description}`);
           }
 
-          const { data: sections } = await supabase
-            .from("textbook_sections")
-            .select("level, title, page_start, page_end")
-            .eq("textbook_id", tbId)
-            .in("level", ["unit", "lesson"])
-            .order("order_index")
-            .limit(40);
-          if (sections && sections.length > 0) {
+          const sections = (sectionsByBook.get(tbId) || []).slice(0, 40);
+          if (sections.length > 0) {
             const map = sections
-              .map(
-                (s: any) =>
-                  `${s.level === "unit" ? "Unit" : "Lesson"} "${s.title}" (pages ${s.page_start}-${s.page_end})`
-              )
+              .map((s: { level?: string; title: string; page_start?: number; page_end?: number }) => `${s.level === "unit" ? "Unit" : "Lesson"} "${s.title}" (pages ${s.page_start}-${s.page_end})`)
               .join("; ");
             parts.push(`Book structure map: ${map}`);
           }
@@ -420,17 +456,37 @@ export async function runRagPipeline(args: {
     // Add educational grounding prompt when textbook chunks are present
     const textbookPrompt = hasTextbookChunks ? `\n\n${(await import("../../textbook/textbook-prompts.js")).TEXTBOOK_SYSTEM_PROMPT_ADDITION}` : '';
 
+    // Final context with enrichment (enrichment added after truncation, but monitor total)
+    const finalContextText = contextText + textbookEnrichment + textbookPrompt;
+    
+    // Final safety truncation if enrichment pushed us over budget
+    const finalTokens = estimateTokens(finalContextText);
+    if (finalTokens > ragBudgetTokens) {
+      ragLog.warn("RAG context with enrichment exceeds budget, applying final truncation", {
+        tokens: finalTokens,
+        budget: ragBudgetTokens,
+      });
+      // Truncate enrichment first
+      const enrichmentTokens = estimateTokens(textbookEnrichment + textbookPrompt);
+      const contextTokens = estimateTokens(contextText);
+      if (enrichmentTokens > 0) {
+        const enrichedTruncated = truncateWithBoundaries(textbookEnrichment + textbookPrompt, ragBudgetTokens - contextTokens, true);
+        contextText = contextText + enrichedTruncated;
+      }
+    }
+
     return {
       ragContext: {
         hasContext: true,
-        contextText: contextText + textbookEnrichment + textbookPrompt,
-        sourceNames,
+        contextText: finalContextText,
+        sourceNames: truncationResult.sourceNames,
         retrievalMethod: 'hybrid',
       },
       rankedDocs,
-      cacheMetadata: { ...cacheMetadata, ragSources: sourceNames },
+      cacheMetadata: { ...cacheMetadata, ragSources: truncationResult.sourceNames },
       ragSuccess: true,
-      ragSources: sourceNames,
+      ragSources: truncationResult.sourceNames,
+      hasTextbookChunks,
       responseCacheHit: null,
     };
   } catch (ragError) {
@@ -449,23 +505,43 @@ export async function runRagPipeline(args: {
  * Short-TTL signal: does this user have any completed textbook?
  * Used to bypass the semantic response cache (stale pre-upload answers).
  * Invalidated eagerly by the upload route / worker on completion.
+ *
+ * Uses Redis for multi-worker (PM2) safety. Falls back to in-memory
+ * if Redis is unavailable.
  */
-const USER_TEXTBOOK_SIGNAL_TTL_MS = 60_000;
-const userTextbookSignal = new Map<string, { value: boolean; expiry: number }>();
+const USER_TEXTBOOK_SIGNAL_TTL_MS = 60;
+const USER_TEXTBOOK_SIGNAL_KEY_PREFIX = "rag:textbook_signal:";
+
+// Fallback in-memory cache when Redis is unavailable
+const fallbackCache = new Map<string, { value: boolean; expiry: number }>();
 
 export function invalidateUserTextbookSignal(userId: string): void {
-  userTextbookSignal.delete(userId);
+  const key = USER_TEXTBOOK_SIGNAL_KEY_PREFIX + userId;
+  redis.del(key).catch(() => {});
+  fallbackCache.delete(userId);
 }
 
 async function getUserTextbookSignal(
   userId: string,
   supabase: SupabaseClient
 ): Promise<boolean> {
-  const cached = userTextbookSignal.get(userId);
-  if (cached && cached.expiry > Date.now()) {
-    return cached.value;
+  const key = USER_TEXTBOOK_SIGNAL_KEY_PREFIX + userId;
+
+  // Try Redis first
+  try {
+    const cached = await redis.get(key);
+    if (cached !== null) {
+      return cached === "1";
+    }
+  } catch {
+    // Redis unavailable — try fallback
+    const fb = fallbackCache.get(userId);
+    if (fb && fb.expiry > Date.now()) {
+      return fb.value;
+    }
   }
 
+  // Cache miss — query DB
   try {
     const { count } = await supabase
       .from("textbooks")
@@ -473,7 +549,15 @@ async function getUserTextbookSignal(
       .eq("user_id", userId)
       .eq("status", "completed");
     const value = (count ?? 0) > 0;
-    userTextbookSignal.set(userId, { value, expiry: Date.now() + USER_TEXTBOOK_SIGNAL_TTL_MS });
+
+    // Write to Redis
+    try {
+      await redis.set(key, value ? "1" : "0", "EX", USER_TEXTBOOK_SIGNAL_TTL_MS);
+    } catch {
+      // Redis write failed — use fallback
+      fallbackCache.set(userId, { value, expiry: Date.now() + USER_TEXTBOOK_SIGNAL_TTL_MS * 1000 });
+    }
+
     return value;
   } catch {
     // On lookup failure, prefer correctness over caching: bypass
@@ -511,7 +595,13 @@ async function retrieveAndRank(args: {
       .catch((e: Error) => ({ data: null, error: { message: e.message } })),
     Promise.resolve(
       bm25.getDocCount() > 0 ? bm25.search(searchQuery, initialMatchCount) : [],
-    ),
+    ).then((bm25Results) => {
+      // Filter BM25 results by user_id to prevent cross-user document access
+      return bm25Results.filter(({ doc }) => {
+        const meta = doc.metadata || {};
+        return meta.user_id === userId;
+      });
+    }),
     import("../../textbook/textbook-search.js")
       .then((mod) =>
         mod.searchTextbooksForUser({
@@ -599,7 +689,7 @@ async function retrieveAndRank(args: {
   return reranked;
 }
 
-async function runBM25Fallback(searchQuery: string): Promise<RagStepResult> {
+async function runBM25Fallback(searchQuery: string, userId: string): Promise<RagStepResult> {
   try {
     const { getBM25Search } = await import("../../rag/bm25-search.js");
     const bm25 = await getBM25Search();
@@ -611,10 +701,12 @@ async function runBM25Fallback(searchQuery: string): Promise<RagStepResult> {
         cacheMetadata: undefined,
         ragSuccess: false,
         ragSources: [],
+        hasTextbookChunks: false,
         responseCacheHit: null,
       };
     }
-    const results = bm25.search(searchQuery, 3);
+    const results = bm25.search(searchQuery, 10)
+      .filter(({ doc }) => (doc.metadata?.user_id === userId));
     if (results.length === 0) {
       return {
         ragContext: undefined,
@@ -622,6 +714,7 @@ async function runBM25Fallback(searchQuery: string): Promise<RagStepResult> {
         cacheMetadata: undefined,
         ragSuccess: false,
         ragSources: [],
+        hasTextbookChunks: false,
         responseCacheHit: null,
       };
     }
@@ -646,6 +739,7 @@ async function runBM25Fallback(searchQuery: string): Promise<RagStepResult> {
       cacheMetadata: undefined,
       ragSuccess: true,
       ragSources: sourceNames,
+      hasTextbookChunks: false,
       responseCacheHit: null,
     };
   } catch (err) {
@@ -656,6 +750,7 @@ async function runBM25Fallback(searchQuery: string): Promise<RagStepResult> {
       cacheMetadata: undefined,
       ragSuccess: false,
       ragSources: [],
+      hasTextbookChunks: false,
       responseCacheHit: null,
     };
   }

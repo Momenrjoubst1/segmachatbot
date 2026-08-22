@@ -80,22 +80,62 @@ export const DEFAULT_MODEL =
   "deepseek-v4-flash";
 
 export const ALLOWED_MODELS = [
+  // Baichat
   "deepseek-v4-flash",
+  // Google Gemini (direct) - gemini-3.7-flash is alias for gemini-2.5-flash
   "gemini-3.7-flash",
+  "gemini-2.5-flash",
+  "gemini-2.5-pro",
+  "gemini-3-flash",
+  "gemini-3.1-flash-lite",
+  // BigModel
   "glm-5.2",
+  // Azure/GitHub/OpenRouter
   "gpt-5.4",
   "gpt-4o",
   "gpt-4o-mini",
+  // Groq
   "qwen/qwen3.6-27b",
+  "qwen/qwen3-32b",
   "mixtral-8x7b-32768",
+  "llama-3.3-70b-versatile",
+  "llama-3.1-8b-instant",
+  "openai/gpt-oss-120b",
+  "openai/gpt-oss-20b",
+  "meta-llama/llama-4-scout-17b-16e-instruct",
+  // OpenRouter Free
   "google/gemini-2.0-flash-exp:free",
   "qwen/qwen-2.5-72b-instruct:free",
   "anthropic/claude-3.5-haiku",
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "nvidia/nemotron-3.5-lightning-30b-a3b:free",
+  "nvidia/nemotron-3-super-49b-a49b:free",
+  "nvidia/nemotron-3-nano-30b-a3b:free",
+  "nvidia/nemotron-nano-9b-v2:free",
+  "nvidia/nemotron-nano-12b-2-vl:free",
+  "google/gemma-4-26b-a4b:free",
+  "openai/gpt-oss-20b:free",
+  "poolside/laguna-s-2.1:free",
+  "poolside/laguna-xs-2.1:free",
+  "dots-studio/dots3-note-preview:free",
+  "liquid/lfm2.5-2.6b:free",
+  // Fireworks
   "accounts/fireworks/models/gemma-4-31b-it",
+  // Novita
   "inclusionai/ling-3.0-tiny",
+  // NVIDIA NIM (direct)
+  "nvidia/llama-3.1-nemotron-70b-instruct",
+  "nvidia/llama-3.3-70b-instruct",
+  "nvidia/deepseek-r1",
+  "meta/llama-3.1-8b-instruct",
+  "meta/llama-3.1-70b-instruct",
+  "qwen/qwen2.5-72b-instruct",
+  // Cerebras
+  "llama-3.3-70b",
+  "llama-3.1-8b",
 ];
 
-export type ProviderName = "openrouter" | "github" | "groq" | "fireworks" | "azure" | "novita" | "bigmodel" | "google" | "baichat";
+export type ProviderName = "openrouter" | "github" | "groq" | "fireworks" | "azure" | "novita" | "bigmodel" | "google" | "baichat" | "nvidia" | "cerebras";
 
 function pickFirstAvailableProvider(
   preferred: Array<{ provider: ProviderName; envKey: string }>,
@@ -113,8 +153,19 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
   if (modelId === "deepseek-v4-flash") {
     return { provider: "baichat", modelName: "deepseek-v4-flash" };
   }
-  if (modelId === "gemini-3.7-flash") {
-    return { provider: "google", modelName: "gemini-3.7-flash" };
+  // Google Gemini models (direct API)
+  // gemini-3.7-flash is alias for gemini-2.5-flash (backward compatibility)
+  const GEMINI_MODELS = new Set([
+    "gemini-3.7-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-3-flash",
+    "gemini-3.1-flash-lite",
+  ]);
+  if (GEMINI_MODELS.has(modelId)) {
+    // Map gemini-3.7-flash to gemini-2.5-flash for actual API call
+    const actualModel = modelId === "gemini-3.7-flash" ? "gemini-2.5-flash" : modelId;
+    return { provider: "google", modelName: actualModel };
   }
   const GLM_MODELS = new Set(["glm-5.2", "glm-4-flash"]);
   if (GLM_MODELS.has(modelId)) {
@@ -128,6 +179,7 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
     const fallback = pickFirstAvailableProvider([
       { provider: "github", envKey: "GITHUB_TOKEN" },
       { provider: "groq", envKey: "GROQ_API_KEY" },
+      { provider: "nvidia", envKey: "NVIDIA_API_KEY" },
       { provider: "openrouter", envKey: "OPENROUTER_API_KEY" },
     ]);
     if (fallback) {
@@ -142,7 +194,16 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
   if (modelId === "gpt-4o-mini") {
     return { provider: "github", modelName: "openai/gpt-4o-mini" };
   }
-  if (modelId.includes("llama-") || modelId.includes("mixtral") || modelId.startsWith("qwen/") || modelId === "qwen/qwen3.6-27b") {
+  // Groq models (direct API)
+  if (
+    modelId.includes("llama-") ||
+    modelId.includes("mixtral") ||
+    modelId.startsWith("qwen/") ||
+    modelId === "qwen/qwen3.6-27b" ||
+    modelId === "qwen/qwen3-32b" ||
+    modelId.startsWith("openai/gpt-oss") ||
+    modelId.startsWith("meta-llama/")
+  ) {
     return { provider: "groq", modelName: modelId };
   }
   if (modelId.startsWith("accounts/fireworks/models/")) {
@@ -150,6 +211,26 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
   }
   if (modelId.includes("ling-3.0-tiny") || modelId.startsWith("inclusionai/")) {
     return { provider: "novita", modelName: modelId };
+  }
+  // NVIDIA NIM models
+  if (
+    modelId.startsWith("nvidia/") ||
+    modelId.startsWith("nvidia-") ||
+    modelId === "deepseek-ai/deepseek-r1" ||
+    modelId === "meta/llama-3.1-8b-instruct" ||
+    modelId === "meta/llama-3.1-70b-instruct" ||
+    modelId === "meta/llama-3.3-70b-instruct" ||
+    modelId === "qwen/qwen2.5-72b-instruct"
+  ) {
+    return { provider: "nvidia", modelName: modelId };
+  }
+  // Cerebras models
+  if (
+    modelId.startsWith("cerebras/") ||
+    modelId === "llama-3.3-70b" ||
+    modelId === "llama-3.1-8b"
+  ) {
+    return { provider: "cerebras", modelName: modelId.replace("cerebras/", "") };
   }
   return { provider: "openrouter", modelName: modelId };
 }
@@ -219,6 +300,24 @@ export function createProviderClient(provider: ProviderName) {
     return createOpenAI({
       baseURL: "https://api.novita.ai/openai",
       apiKey: process.env.NOVITA_API_KEY,
+    });
+  }
+
+  if (provider === "nvidia") {
+    const nvidiaKey = process.env.NVIDIA_API_KEY;
+    if (!nvidiaKey) throw new Error("Missing NVIDIA_API_KEY in environment");
+    return createOpenAI({
+      baseURL: "https://integrate.api.nvidia.com/v1",
+      apiKey: nvidiaKey,
+    });
+  }
+
+  if (provider === "cerebras") {
+    const cerebrasKey = process.env.CEREBRAS_API_KEY;
+    if (!cerebrasKey) throw new Error("Missing CEREBRAS_API_KEY in environment");
+    return createOpenAI({
+      baseURL: "https://api.cerebras.ai/v1",
+      apiKey: cerebrasKey,
     });
   }
 

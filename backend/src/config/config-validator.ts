@@ -88,10 +88,16 @@ const validationRules: ConfigValidationRule[] = [
         process.env.BIGMODEL_API_KEY ||
         process.env.GROQ_API_KEY ||
         process.env.GITHUB_TOKEN ||
-        process.env.OPENROUTER_API_KEY
+        process.env.OPENROUTER_API_KEY ||
+        process.env.GEMINI_API_KEY ||
+        process.env.NVIDIA_API_KEY ||
+        process.env.CEREBRAS_API_KEY ||
+        process.env.NOVITA_API_KEY ||
+        process.env.BAICHAT_API_KEY ||
+        process.env.FIREWORKS_API_KEY
       );
       if (!hasProvider) {
-        return { valid: false, error: 'At least one AI provider key is required (BIGMODEL_API_KEY, AZURE_API_KEY, GROQ_API_KEY, GITHUB_TOKEN, or OPENROUTER_API_KEY)' };
+        return { valid: false, error: 'At least one AI provider key is required (BIGMODEL_API_KEY, AZURE_API_KEY, GROQ_API_KEY, GITHUB_TOKEN, OPENROUTER_API_KEY, GEMINI_API_KEY, NVIDIA_API_KEY, CEREBRAS_API_KEY, NOVITA_API_KEY, BAICHAT_API_KEY, or FIREWORKS_API_KEY)' };
       }
       return { valid: true };
     },

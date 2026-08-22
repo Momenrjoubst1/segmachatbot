@@ -152,62 +152,78 @@ vi.mock('../../../context/AgenticUIBus', () => ({
   useAgenticAction: vi.fn(),
 }));
 
+import { AssistantLayoutProvider } from '@/features/ai-assistant/context/AssistantLayoutContext';
+
+const layoutOverrides: Partial<React.ComponentProps<typeof AssistantLayoutProvider>["value"]> = {};
+
+vi.mock('@/features/ai-assistant/context/AssistantLayoutContext', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/ai-assistant/context/AssistantLayoutContext')>();
+  return {
+    ...actual,
+    useAssistantLayout: () => ({
+      activeView: layoutOverrides.activeView ?? 'chat',
+      onToggleView: layoutOverrides.onToggleView ?? vi.fn(),
+      artifactPanelOpen: layoutOverrides.artifactPanelOpen ?? false,
+      setArtifactPanelOpen: layoutOverrides.setArtifactPanelOpen ?? vi.fn(),
+      emailHistoryOpen: layoutOverrides.emailHistoryOpen ?? false,
+      setEmailHistoryOpen: layoutOverrides.setEmailHistoryOpen ?? vi.fn(),
+    }),
+  };
+});
+
 const defaultProps = {
-  courses: [],
   isOnboarded: true,
-  activeCourse: null,
   onActiveCourseChange: vi.fn(),
   onCompleteOnboarding: vi.fn().mockResolvedValue(undefined),
-  sidebarCollapsed: false,
-  onToggleSidebar: vi.fn(),
-  activeView: 'chat' as const,
-  onToggleView: vi.fn(),
-  artifactPanelOpen: false,
-  setArtifactPanelOpen: vi.fn(),
-  emailHistoryOpen: false,
-  setEmailHistoryOpen: vi.fn(),
 };
+
+function renderWithLayout(ui: React.ReactElement, overrides?: Partial<React.ComponentProps<typeof AssistantLayoutProvider>["value"]>) {
+  if (overrides) Object.assign(layoutOverrides, overrides);
+  else Object.keys(layoutOverrides).forEach(k => delete layoutOverrides[k as keyof typeof layoutOverrides]);
+  return render(ui);
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
+  Object.keys(layoutOverrides).forEach(k => delete layoutOverrides[k as keyof typeof layoutOverrides]);
 });
 
 describe('AssistantLayout (Shadcn)', () => {
   it('renders the basic layout', () => {
-    render(<Shadcn {...defaultProps} />);
+    renderWithLayout(<Shadcn {...defaultProps} />);
     expect(screen.getByTestId('thread')).toBeInTheDocument();
   });
 
   it('renders Thread with isOnboarded prop', () => {
-    render(<Shadcn {...defaultProps} isOnboarded={true} />);
+    renderWithLayout(<Shadcn {...defaultProps} isOnboarded={true} />);
     expect(screen.getByTestId('onboarded')).toHaveTextContent('true');
   });
 
   it('renders Thread as not onboarded when isOnboarded=false', () => {
-    render(<Shadcn {...defaultProps} isOnboarded={false} />);
+    renderWithLayout(<Shadcn {...defaultProps} isOnboarded={false} />);
     expect(screen.getByTestId('onboarded')).toHaveTextContent('false');
   });
 
   it('renders loading spinner when isCoursesLoadingVisible is true', () => {
-    render(<Shadcn {...defaultProps} isCoursesLoadingVisible={true} />);
+    renderWithLayout(<Shadcn {...defaultProps} isCoursesLoadingVisible={true} />);
     expect(screen.getByTestId('bars-spinner')).toBeInTheDocument();
     expect(screen.getByTestId('thread')).toBeInTheDocument();
   });
 
   it('does not render loading spinner by default', () => {
-    render(<Shadcn {...defaultProps} />);
+    renderWithLayout(<Shadcn {...defaultProps} />);
     expect(screen.queryByTestId('bars-spinner')).not.toBeInTheDocument();
   });
 
   it('switches to calendar view and renders calendar components', async () => {
-    render(<Shadcn {...defaultProps} activeView="calendar" />);
+    renderWithLayout(<Shadcn {...defaultProps} />, { activeView: 'calendar' });
     await waitFor(() => {
       expect(screen.getByTestId('fullscreen-calendar')).toBeInTheDocument();
     });
   });
 
   it('opens scheduling panel when create event is clicked in calendar', async () => {
-    render(<Shadcn {...defaultProps} activeView="calendar" />);
+    renderWithLayout(<Shadcn {...defaultProps} />, { activeView: 'calendar' });
     fireEvent.click(screen.getByTestId('create-event'));
     await waitFor(() => {
       expect(screen.getByTestId('scheduling-panel')).toBeInTheDocument();
@@ -215,7 +231,7 @@ describe('AssistantLayout (Shadcn)', () => {
   });
 
   it('closes scheduling panel when cancel is clicked', async () => {
-    render(<Shadcn {...defaultProps} activeView="calendar" />);
+    renderWithLayout(<Shadcn {...defaultProps} />, { activeView: 'calendar' });
     fireEvent.click(screen.getByTestId('create-event'));
     await waitFor(() => {
       expect(screen.getByTestId('scheduling-panel')).toBeInTheDocument();
@@ -227,14 +243,15 @@ describe('AssistantLayout (Shadcn)', () => {
   });
 
   it('shows artifact panel when opened', async () => {
-    render(<Shadcn {...defaultProps} artifactPanelOpen={true} />);
+    renderWithLayout(<Shadcn {...defaultProps} />, { artifactPanelOpen: true });
     expect(screen.getByTestId('artifact-panel')).toBeInTheDocument();
   });
 
   it('closes artifact panel when close is clicked', async () => {
-    render(<Shadcn {...defaultProps} artifactPanelOpen={true} />);
+    const setArtifactPanelOpen = vi.fn();
+    renderWithLayout(<Shadcn {...defaultProps} />, { artifactPanelOpen: true, setArtifactPanelOpen });
     expect(screen.getByTestId('artifact-panel')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('close-artifacts'));
-    expect(defaultProps.setArtifactPanelOpen).toHaveBeenCalledWith(false);
+    expect(setArtifactPanelOpen).toHaveBeenCalledWith(false);
   });
 });

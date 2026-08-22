@@ -37,6 +37,19 @@ vi.mock('../rag/bm25-search.js', () => ({
   }),
 }));
 
+const mockLogger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  child: vi.fn().mockReturnThis(),
+};
+
+vi.mock('../utils/logger.js', () => ({
+  createLogger: vi.fn(() => mockLogger),
+  logger: mockLogger,
+}));
+
 describe('Memory Cleanup', () => {
   it('should have cleanupOldMemories method', async () => {
     const { unifiedMemory } = await import('../services/memory/unified-memory.js');

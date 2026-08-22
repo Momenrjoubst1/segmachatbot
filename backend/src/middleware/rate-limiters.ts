@@ -32,6 +32,7 @@ const fallbackCounters = new Map<
     timeout: ReturnType<typeof setTimeout>;
   }
 >();
+const FALLBACK_COUNTERS_MAX_SIZE = 10_000;
 
 // Periodic cleanup interval for fallback counters
 let cleanupInterval: NodeJS.Timeout | null = null;
@@ -108,33 +109,7 @@ class SlidingWindowRedisStore implements Store {
   constructor(client: typeof redis, prefix: string) {
     this.redisClient = client;
     this.prefix = prefix;
-
-    // Define atomic Lua script to clean up old requests, add new, and return count
-    // Uses PEXPIRE to clean up the set when the window fully passes.
-    this.redisClient.defineCommand('slidingWindowRateLimit', {
-      numberOfKeys: 1,
-      lua: `
-        local key = KEYS[1]
-        local now = tonumber(ARGV[1])
-        local window = tonumber(ARGV[2])
-        local member = ARGV[3]
-
-        local clearBefore = now - window
-        redis.call('ZREMRANGEBYSCORE', key, "-inf", clearBefore)
-        redis.call('ZADD', key, now, member)
-        redis.call('PEXPIRE', key, window)
-
-        local currentHits = redis.call('ZCARD', key)
-
-        local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
-        local oldestScore = now
-        if oldest and oldest[2] then
-          oldestScore = tonumber(oldest[2])
-        end
-
-        return { currentHits, oldestScore + window }
-      `
-    });
+    // Lua script is defined once at module scope (see below the class definition)
   }
 
   init(options: Options): void {
@@ -146,7 +121,7 @@ class SlidingWindowRedisStore implements Store {
     const member = `${now}-${Math.random().toString(36).substring(2)}`;
 
     try {
-      const result = await (this.redisClient as any).slidingWindowRateLimit(
+      const result = await this.redisClient.slidingWindowRateLimit(
         this.prefix + key,
         now,
         this.windowMs,
@@ -173,6 +148,21 @@ class SlidingWindowRedisStore implements Store {
 
       if (existing) {
         clearTimeout(existing.timeout);
+      }
+
+      // Evict oldest entries if at capacity to prevent unbounded memory growth
+      if (fallbackCounters.size >= FALLBACK_COUNTERS_MAX_SIZE) {
+        const nowMs = Date.now();
+        let evicted = 0;
+        for (const [k, v] of fallbackCounters) {
+          if (v.resetTimeMs <= nowMs) {
+            clearTimeout(v.timeout);
+            fallbackCounters.delete(k);
+            evicted++;
+            if (fallbackCounters.size < FALLBACK_COUNTERS_MAX_SIZE * 0.8) break;
+          }
+        }
+        log.debug(`Evicted ${evicted} expired fallback counter entries`);
       }
 
       const resetTimeMs = now + this.windowMs;
@@ -205,6 +195,35 @@ function optionalStore(prefix: string): { store?: Store } {
   if (!useRedisStore) return {};
   return { store: new SlidingWindowRedisStore(redis, prefix) };
 }
+
+// Define atomic Lua script on the Redis client once at module load.
+// Previously this was inside the SlidingWindowRedisStore constructor, causing
+// defineCommand to be called 7+ times (once per rate limiter). ioredis does
+// not prevent re-defining a command on the same client.
+redis.defineCommand('slidingWindowRateLimit', {
+  numberOfKeys: 1,
+  lua: `
+    local key = KEYS[1]
+    local now = tonumber(ARGV[1])
+    local window = tonumber(ARGV[2])
+    local member = ARGV[3]
+
+    local clearBefore = now - window
+    redis.call('ZREMRANGEBYSCORE', key, "-inf", clearBefore)
+    redis.call('ZADD', key, now, member)
+    redis.call('PEXPIRE', key, window)
+
+    local currentHits = redis.call('ZCARD', key)
+
+    local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+    local oldestScore = now
+    if oldest and oldest[2] then
+      oldestScore = tonumber(oldest[2])
+    end
+
+    return { currentHits, oldestScore + window }
+  `
+});
 
 // ─── 1. Global fallback — catch-all for unlisted endpoints ──────────────────
 export const globalLimiter = rateLimit({

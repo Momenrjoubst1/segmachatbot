@@ -30,7 +30,7 @@ export function buildTextbookContext(
     content: string;
     page_number: number;
     structure_path: string;
-    figure_refs?: any[];
+    figure_refs?: string[];
   }>,
   figures: Array<{
     figure_id: string;

@@ -51,6 +51,7 @@ class LRUCache<K, V> {
 
 const structureCache = new LRUCache<string, Array<{ id: string; level?: string; title?: string; page_start?: number; page_end?: number; textbook_id?: string; children?: unknown[] }>>(CACHE_MAX_SIZE, CACHE_TTL_MS);
 const curriculumCache = new LRUCache<string, Array<{ id: string; level: string; title: string; page_start: number; page_end: number; textbook_id?: string }>>(CACHE_MAX_SIZE, CACHE_TTL_MS);
+const sectionEmbeddingCache = new LRUCache<string, Map<string, number[]>>(CACHE_MAX_SIZE, CACHE_TTL_MS);
 
 export function invalidateStructureCache(userId: string): void {
   structureCache.delete(`structure:${userId}`);
@@ -152,7 +153,7 @@ export async function matchStructureTree(
   let bestScore = 0;
 
   for (const textbook of textbooks) {
-    const tree = textbook.structure_tree as StructureNode;
+    const tree = (textbook as unknown as { structure_tree?: StructureNode }).structure_tree;
     if (!tree || !tree.children) continue;
 
     const matches = matchTreeRecursive(tree, question, textbook.id);
@@ -215,7 +216,7 @@ export async function matchCurriculumSection(
       page_start: row.page_start as number,
       page_end: row.page_end as number,
       textbook_id: (row.textbooks as { id?: string })?.id || "",
-    })) as typeof sections;
+    })) as NonNullable<typeof sections>;
     curriculumCache.set(cacheKey, sections as NonNullable<typeof sections>);
   }
 
@@ -226,6 +227,121 @@ export async function matchCurriculumSection(
 
   for (const section of sections) {
     const score = fuzzyMatch(question, section.title);
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = {
+        matched: true,
+        textbook_id: section.textbook_id || "",
+        section_title: section.title,
+        page_start: section.page_start,
+        page_end: section.page_end,
+        ambiguous: false,
+      };
+    } else if (score === bestScore && score > 0.3 && bestMatch) {
+      if (!bestMatch.candidates) {
+        bestMatch.candidates = [bestMatch.section_title];
+      }
+      bestMatch.candidates.push(section.title);
+      bestMatch.ambiguous = true;
+    }
+  }
+
+  if (bestScore < 0.3) {
+    return {
+      matched: false,
+      textbook_id: "",
+      section_title: "",
+      page_start: 0,
+      page_end: 0,
+      ambiguous: false,
+    };
+  }
+
+  return bestMatch;
+}
+
+/**
+ * Cosine similarity for embedding vectors (assumes normalized vectors).
+ */
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0;
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+  return dot;
+}
+
+/**
+ * Semantic matching of curriculum sections using embeddings.
+ * Computes or reuses cached embeddings for section titles, then finds
+ * the best match via cosine similarity. Falls back to fuzzy matching
+ * if embedding generation fails.
+ */
+export async function matchCurriculumSectionSemantic(
+  userId: string,
+  question: string,
+  queryEmbedding: number[]
+): Promise<MatchResult | null> {
+  const cacheKey = `curriculum:${userId}`;
+  let sections = curriculumCache.get(cacheKey);
+
+  if (!sections) {
+    const { data } = await supabase
+      .from("textbook_sections")
+      .select(
+        `id, level, title, page_start, page_end, textbooks!inner (id, user_id, status)`
+      )
+      .eq("level", "lesson")
+      .eq("textbooks.user_id", userId)
+      .eq("textbooks.status", "completed")
+      .order("order_index");
+    sections = (data || []).map((row: Record<string, unknown>) => ({
+      id: row.id as string,
+      level: row.level as string,
+      title: row.title as string,
+      page_start: row.page_start as number,
+      page_end: row.page_end as number,
+      textbook_id: (row.textbooks as { id?: string })?.id || "",
+    })) as NonNullable<typeof sections>;
+    curriculumCache.set(cacheKey, sections as NonNullable<typeof sections>);
+  }
+
+  if (!sections || sections.length === 0) return null;
+
+  // Get or compute section title embeddings
+  const embCacheKey = `embeddings:${userId}`;
+  let titleEmbeddings = sectionEmbeddingCache.get(embCacheKey);
+  if (!titleEmbeddings) {
+    try {
+      const { generateEmbeddings } = await import("../rag/embedding-service.js");
+      const titles = sections.map((s) => s.title);
+      const embeddings = await generateEmbeddings(titles);
+      if (embeddings && embeddings.length === titles.length) {
+        const map = new Map<string, number[]>();
+        sections.forEach((s, i) => map.set(s.id, embeddings[i]));
+        titleEmbeddings = map;
+        sectionEmbeddingCache.set(embCacheKey, map);
+      }
+    } catch (err) {
+      log.warn("Semantic matching: embedding generation failed, falling back to fuzzy", {
+        error: (err as Error).message,
+      });
+    }
+  }
+
+  let bestMatch: MatchResult | null = null;
+  let bestScore = 0;
+
+  for (const section of sections) {
+    // Combine fuzzy (0..1) + semantic (0..1) with weights
+    const fuzzyScore = fuzzyMatch(question, section.title);
+    let semanticScore = 0;
+    if (titleEmbeddings) {
+      const emb = titleEmbeddings.get(section.id);
+      if (emb) semanticScore = Math.max(0, cosineSimilarity(queryEmbedding, emb));
+    }
+    // Weighted: 40% fuzzy, 60% semantic (semantic more robust for paraphrases)
+    const score = 0.4 * fuzzyScore + 0.6 * semanticScore;
+
     if (score > bestScore) {
       bestScore = score;
       bestMatch = {
@@ -460,7 +576,13 @@ export async function getFiguresForChunks(
     })
   );
 
-  return figuresWithSignedUrls;
+  return figuresWithSignedUrls as Array<{
+  figure_id: string;
+  page_number: number;
+  caption: string;
+  image_url: string;
+  bounding_box: Record<string, number>;
+}>;
 }
 
 export async function searchTextbooksForUser(args: {

@@ -32,7 +32,6 @@ export function AuthModal() {
 
           <SignupPage
             initialMode={activeTab === "signup" ? "signup" : "signin"}
-            isModal={true}
             onSuccess={() => {
               closeAuthModal();
             }}

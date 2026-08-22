@@ -40,6 +40,14 @@ export interface RequestMetrics {
   cacheHit?: boolean;
   uiActionInjected?: boolean;
   threadReused?: boolean;
+  /** Prompt A/B variant used for this request */
+  promptVariant?: string;
+  /** System prompt length in chars */
+  promptLength?: number;
+  /** Estimated system prompt tokens (≈ chars/4) */
+  promptTokensEstimate?: number;
+  /** Time spent building the system prompt (ms) */
+  promptBuildTimeMs?: number;
   [key: string]: string | number | boolean | string[] | undefined;
 }
 

@@ -8,6 +8,7 @@
 
 import { memLog } from "../../../routes/chat/chat-shared.js";
 import { summarizer } from "../../memory/summarizer.service.js";
+import { streamingSummarizer, shouldTriggerStreamingSummary } from "../../memory/streaming-summarizer.js";
 import { contextCache } from "../../memory/context-cache.service.js";
 import { MemoryConfig } from "../../../config/memory.config.js";
 import {
@@ -22,9 +23,7 @@ export interface SummarizationResult {
   conversationSummary: string;
 }
 
-function extractText(content: CoreMessage["content"]): string {
-  return typeof content === "string" ? content : JSON.stringify(content);
-}
+import { extractText } from '../../../utils/message-utils/extract-text.js';
 
 function detectLanguage(messages: CoreMessage[]): "ar" | "en" {
   const sample = messages
@@ -39,9 +38,11 @@ function detectLanguage(messages: CoreMessage[]): "ar" | "en" {
 export async function manageContextWindow(args: {
   coreMessages: CoreMessage[];
   userId: string;
+  threadId?: string;
+  selectedModel?: string;
 }): Promise<SummarizationResult> {
-  const { coreMessages, userId } = args;
-  const ctxStatus = getContextWindowStatus(coreMessages);
+  const { coreMessages, userId, threadId, selectedModel = 'gpt-4o-mini' } = args;
+  const ctxStatus = getContextWindowStatus(coreMessages, selectedModel);
   memLog.info("Context window status", {
     messages: coreMessages.length,
     tokens: ctxStatus.totalTokens,
@@ -49,14 +50,36 @@ export async function manageContextWindow(args: {
     usage: `${ctxStatus.usagePercent}%`,
     urgency: ctxStatus.urgency,
     recommendation: ctxStatus.recommendation,
+    modelId: ctxStatus.modelId,
+    modelName: ctxStatus.modelName,
   });
 
   // No summarisation needed
   if (!ctxStatus.shouldSummarize || ctxStatus.totalTokens <= ctxStatus.maxTokens * 0.7) {
+    // Check if we should update streaming summary
+    const { shouldTrigger, state } = await shouldTriggerStreamingSummary(userId, coreMessages.length, threadId);
+    if (shouldTrigger) {
+      try {
+        const streamingResult = await streamingSummarizer.updateStreamingSummary(
+          userId,
+          coreMessages.map((m, idx) => ({ role: m.role, content: extractText(m.content), id: `msg_${idx}_${Date.now()}` })),
+          threadId,
+          { language: detectLanguage(coreMessages) as 'ar' | 'en' }
+        );
+        memLog.info("Streaming summary updated", {
+          userId,
+          newMessagesProcessed: streamingResult.newMessagesProcessed,
+          summaryTokens: streamingResult.tokensEstimate,
+        });
+        return { finalMessages: coreMessages, conversationSummary: streamingResult.summary };
+      } catch (err) {
+        memLog.warn("Streaming summary update failed", { error: (err as Error)?.message });
+      }
+    }
     return { finalMessages: coreMessages, conversationSummary: "" };
   }
 
-  const trimPlan = calculateTrimPlan(coreMessages);
+  const trimPlan = calculateTrimPlan(coreMessages, selectedModel);
   memLog.info("Trim plan calculated", {
     keepFirst: trimPlan.keepFirst,
     keepLast: trimPlan.keepLast,
@@ -68,7 +91,48 @@ export async function manageContextWindow(args: {
     return { finalMessages: coreMessages, conversationSummary: "" };
   }
 
-  // Try real summarisation first
+  // Try streaming summarization first (for incremental updates)
+  try {
+    const streamingResult = await streamingSummarizer.updateStreamingSummary(
+      userId,
+      coreMessages.map((m, idx) => ({ role: m.role, content: extractText(m.content), id: `msg_${idx}_${Date.now()}` })),
+      threadId,
+      { 
+        language: detectLanguage(coreMessages) as 'ar' | 'en',
+        windowSize: 15,
+        overlap: 3,
+      }
+    );
+    
+    // If streaming summary is fresh and comprehensive, use it
+    if (streamingResult.isIncremental && streamingResult.summary.length > 100) {
+      const firstMessages = coreMessages.slice(0, trimPlan.keepFirst);
+      const lastMessages = coreMessages.slice(-trimPlan.keepLast);
+      
+      const summaryLabel =
+        detectLanguage(coreMessages) === "ar"
+          ? `**ملخص المحادثة السابقة (محدث تدريجياً):**\n${streamingResult.summary}\n\n[تم تلخيص ${coreMessages.length - trimPlan.keepFirst - trimPlan.keepLast} رسالة لتوفير المساحة]`
+          : `**Previous conversation summary (incrementally updated):**\n${streamingResult.summary}\n\n[${coreMessages.length - trimPlan.keepFirst - trimPlan.keepLast} messages summarized to save space]`;
+
+      const finalMessages: CoreMessage[] = [
+        ...firstMessages,
+        { role: "system", content: summaryLabel },
+        ...lastMessages,
+      ];
+
+      memLog.info("Used streaming summary for context window", {
+        before: coreMessages.length,
+        after: finalMessages.length,
+        summaryTokens: streamingResult.tokensEstimate,
+      });
+
+      return { finalMessages, conversationSummary: streamingResult.summary };
+    }
+  } catch (streamErr) {
+    memLog.warn("Streaming summarization failed, falling back to batch", { error: (streamErr as Error)?.message });
+  }
+
+  // Fallback: Batch summarization
   if (MemoryConfig.summarization.enabled) {
     try {
       const firstMessages = coreMessages.slice(0, trimPlan.keepFirst);
@@ -122,6 +186,20 @@ export async function manageContextWindow(args: {
           timestamp: Date.now(),
         });
       }
+
+      // Also update streaming state with this summary
+      try {
+        await streamingSummarizer.generateInitialStreamingSummary(
+          userId,
+          coreMessages.map((m, idx) => ({ 
+            role: m.role, 
+            content: extractText(m.content), 
+            id: `msg_${idx}_${Date.now()}` 
+          })),
+          threadId,
+          { language: detectedLang as 'ar' | 'en' }
+        );
+      } catch {}
 
       return { finalMessages, conversationSummary: summaryResult.summary };
     } catch (err) {

@@ -13,6 +13,14 @@ import { LoginPage } from "@/components/LoginPage";
 const AssistantApp = lazy(() => import("@/features/ai-assistant/AssistantApp").then(m => ({ default: m.AssistantApp })));
 const ArtifactPage = lazy(() => import("@/features/artifacts/ArtifactPage").then(m => ({ default: m.ArtifactPage })));
 
+function RouteFallback() {
+  return (
+    <div className="flex h-screen h-[100dvh] w-full items-center justify-center bg-background">
+      <div className="size-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+    </div>
+  );
+}
+
 function AppContent() {
   const { isAuthLoading } = useAuthContext();
 
@@ -53,7 +61,7 @@ function AppContent() {
           path="/"
           element={
             <ErrorBoundary componentName="AssistantApp">
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <AssistantApp />
               </Suspense>
             </ErrorBoundary>
@@ -63,7 +71,7 @@ function AppContent() {
           path="/artifacts/:id"
           element={
             <ErrorBoundary componentName="ArtifactPage">
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <ArtifactPage />
               </Suspense>
             </ErrorBoundary>

@@ -111,9 +111,9 @@ URL: ${window.location.href}
         {showDetails ? "Hide" : "Show"} details
       </button>
 
-      {showDetails && (
+      {showDetails && import.meta.env.DEV && error?.stack && (
         <pre className="mt-4 p-4 bg-muted/50 rounded-lg text-xs text-muted-foreground overflow-auto max-w-full max-h-40 w-full z-10">
-          {error?.stack || error?.message || "No error details available"}
+          {error.stack}
         </pre>
       )}
     </div>

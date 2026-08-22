@@ -99,8 +99,8 @@ export function SignupPage({
           }, 600);
         }
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || "An unexpected error occurred");
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : "An unexpected error occurred");
     } finally {
       setIsSubmitting(false);
     }
@@ -124,8 +124,8 @@ export function SignupPage({
         }
         setIsGoogleLoading(false);
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || (isRtl ? "فشل تسجيل الدخول عبر Google" : "Failed to sign in with Google"));
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : (isRtl ? "فشل تسجيل الدخول عبر Google" : "Failed to sign in with Google"));
       setIsGoogleLoading(false);
     }
   };

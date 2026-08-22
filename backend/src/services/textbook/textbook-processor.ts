@@ -208,10 +208,16 @@ export async function processTextbookJob(jobData: {
     }
 
     const result = (await processResponse.json()) as {
-  page_models: Array<{ page_number: number; width: number; height: number; background_color: string; page_role: string; page_type: string; dominant_script: string; approximate_columns: number; thumbnail_key?: string }>;
+  page_models: Array<{ page_number: number; width: number; height: number; background_color: string; page_role: string; page_type: string; dominant_script: string; approximate_columns: number; thumbnail_key?: string; images?: Array<{ index: number; dominant_colors?: string[]; is_colored?: boolean }> }>;
   questions?: Array<{ question_type?: string; number?: number; text: string; page_number?: number; section_path?: string }>;
   glossary?: Array<{ term: string; definition: string }>;
   structure?: unknown;
+  figures?: Array<{ figure_id: string; page_number: number; caption: string; image_url?: string; image_base64?: string; bounding_box: Record<string, number> }>;
+  structure_tree?: Record<string, unknown>;
+  total_pages?: number;
+  book_language?: string;
+  chunks?: Array<{ page_number: number; structure_path: string; content: string; block_role?: string; text_color?: string; bbox?: Record<string, number> }>;
+  curriculum?: { root?: { children?: Array<{ level: string; title: string; page_start: number; page_end: number; order_index: number; children?: unknown[] }> }; questions?: Array<{ question_type?: string; number?: number; text: string; page_number?: number; section_path?: string }>; glossary?: Array<{ term: string; definition: string; page_number?: number }> };
 };
 
     // Write figures to storage (images may already be uploaded by Python)
@@ -231,7 +237,7 @@ export async function processTextbookJob(jobData: {
       for (const img of pm.images || []) {
         imageMetaByFig.set(`fig_${pm.page_number}_${img.index}`, {
           colors: img.dominant_colors || [],
-          colored: img.is_colored,
+          colored: img.is_colored ?? false,
         });
       }
     }
@@ -389,7 +395,7 @@ export async function processTextbookJob(jobData: {
       await supabase.from("textbook_questions").delete().eq("textbook_id", textbookId);
       await supabase.from("textbook_glossary").delete().eq("textbook_id", textbookId);
 
-      await insertSectionTree(textbookId, curriculum.root?.children || [], null);
+      await insertSectionTree(textbookId, (curriculum.root?.children || []) as CurriculumNodeData[], null);
 
       if (curriculum.questions?.length) {
         const qRows = curriculum.questions.slice(0, 1000).map((q) => ({

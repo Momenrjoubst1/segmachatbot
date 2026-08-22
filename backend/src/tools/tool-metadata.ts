@@ -134,7 +134,7 @@ export function validateToolRegistry(): { valid: boolean; issues: string[] } {
  * Usage: @ToolDecorator({...})
  */
 export function ToolDecorator(metadata: ToolMetadata) {
-  return function(_target: any, _propertyKey: string, descriptor: PropertyDescriptor) {
+  return function(_target: object, _propertyKey: string, descriptor: PropertyDescriptor) {
     registerTool(metadata);
     return descriptor;
   };

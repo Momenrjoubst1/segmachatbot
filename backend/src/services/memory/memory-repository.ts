@@ -7,7 +7,7 @@ export interface MemoryEntry {
   id: string;
   user_id: string;
   key: string;
-  value: any;
+  value: unknown;
   category: string;
   source_thread_id?: string | null;
   created_at: string;
@@ -39,7 +39,7 @@ export async function getMemory(userId: string): Promise<MemoryEntry[]> {
 export async function setMemory(
   userId: string,
   key: string,
-  value: any,
+  value: unknown,
   category: string = "fact",
   sourceThreadId?: string
 ): Promise<void> {

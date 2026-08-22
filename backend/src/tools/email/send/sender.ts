@@ -451,7 +451,7 @@ export async function updateJobStatus(
 // SMTP TRANSPORT (Flexible)
 // ========================================
 
-let nodemailerTransport: any = null;
+let nodemailerTransport: { sendMail: (opts: Record<string, unknown>) => Promise<unknown> } | null = null;
 
 async function getSmtpTransport() {
   if (nodemailerTransport) return nodemailerTransport;
@@ -461,7 +461,7 @@ async function getSmtpTransport() {
   if (!smtpUser || !smtpPass) return null;
 
   const nodemailerModule = await import("nodemailer");
-  const nodemailer = (nodemailerModule as any).default || nodemailerModule;
+  const nodemailer = (nodemailerModule as { default?: typeof import("nodemailer") }).default || nodemailerModule;
 
   // Flexible SMTP configuration
   const host = process.env.SMTP_HOST;
@@ -496,7 +496,7 @@ async function getSendGrid() {
   try {
     // @ts-ignore - Optional runtime dependency
     const sgMailModule = await import("@sendgrid/mail");
-    const sgMail = (sgMailModule as any).default || sgMailModule;
+    const sgMail = (sgMailModule as { default?: { setApiKey: (k: string) => void; send: (o: unknown) => Promise<unknown> } }).default || sgMailModule;
     sgMail.setApiKey(apiKey);
     return sgMail;
   } catch (error) {
@@ -524,7 +524,7 @@ export async function sendEmailViaProvider(
 ): Promise<{ provider: string; success: boolean; error?: string }> {
 
   const from = getFromAddress();
-  const mailOptions: any = { from, to, subject, text: body };
+  const mailOptions: { from: string; to: string; subject: string; text: string; html?: string; cc?: string; bcc?: string; attachments?: Array<{ filename: string; content: string; contentType: string }> } = { from, to, subject, text: body };
   
   // Only add HTML if explicitly provided
   if (html) {
@@ -556,7 +556,7 @@ export async function sendEmailViaProvider(
   const sgMail = await getSendGrid();
   if (sgMail) {
     try {
-      const sgOptions: any = { to, from, subject, text: body };
+      const sgOptions: { to: string; from: string; subject: string; text: string; html?: string; cc?: string[]; bcc?: string[]; attachments?: Array<{ filename: string; content: string; contentType: string }> } = { to, from, subject, text: body };
       
       // Only add HTML if explicitly provided
       if (html) {
@@ -1000,7 +1000,7 @@ export async function getEmailHistory(
     includeDeleted?: boolean;
     searchQuery?: string;
   }
-): Promise<any[]> {
+): Promise<Array<Record<string, unknown>>> {
   const limit = options?.limit || 50;
   
   let query = supabase
@@ -1172,14 +1172,14 @@ export async function resendEmail(emailId: string, userId: string): Promise<stri
 /**
  * Get email statistics for a user
  */
-export async function getEmailStats(userId: string): Promise<any> {
+export async function getEmailStats(userId: string): Promise<Record<string, unknown>> {
   const { data: stats } = await supabase
     .from('email_audit_logs')
     .select('status, created_at')
     .eq('user_id', userId)
     .or('is_deleted.is.null,is_deleted.eq.false');
 
-  if (!stats) return null;
+  if (!stats) return {} as Record<string, unknown>;
 
   const total = stats.length;
   const sent = stats.filter(s => s.status === 'sent').length;

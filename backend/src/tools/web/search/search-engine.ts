@@ -34,11 +34,11 @@ const BraveSearchProvider: WebSearchProvider = {
     
     return breaker.execute(async () => {
       const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${count}`;
-      const { data }: any = await axios.get(url, {
+      const { data } = await axios.get<{ web?: { results?: Array<{ title?: string; url?: string; description?: string; snippet?: string }> } }>(url, {
         headers: { "Accept": "application/json", "Accept-Encoding": "gzip", "X-Subscription-Token": apiKey },
         timeout: SEARCH_TIMEOUT_MS,
       });
-      return (data.web?.results || []).slice(0, count).map((r: any) => ({
+      return (data.web?.results || []).slice(0, count).map((r) => ({
         title: r.title || "No title",
         url: r.url || "",
         snippet: r.description || r.snippet || "No description",
@@ -64,8 +64,8 @@ const GoogleCSEProvider: WebSearchProvider = {
     
     return breaker.execute(async () => {
       const url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(query)}&num=${count}`;
-      const { data }: any = await axios.get(url, { timeout: SEARCH_TIMEOUT_MS });
-      return (data.items || []).slice(0, count).map((r: any) => ({
+      const { data } = await axios.get<{ items?: Array<{ title?: string; link?: string; snippet?: string }> }>(url, { timeout: SEARCH_TIMEOUT_MS });
+      return (data.items || []).slice(0, count).map((r) => ({
         title: r.title || "No title",
         url: r.link || "",
         snippet: r.snippet || "No description",
@@ -89,12 +89,12 @@ const TavilyProvider: WebSearchProvider = {
     });
     
     return breaker.execute(async () => {
-      const { data }: any = await axios.post(
+      const { data } = await axios.post<{ results?: Array<{ title?: string; url?: string; content?: string; snippet?: string }> }>(
         "https://api.tavily.com/search",
         { api_key: apiKey, query, max_results: count, search_depth: "basic" },
         { timeout: SEARCH_TIMEOUT_MS }
       );
-      return (data.results || []).slice(0, count).map((r: any) => ({
+      return (data.results || []).slice(0, count).map((r) => ({
         title: r.title || "No title",
         url: r.url || "",
         snippet: r.content || r.snippet || "No description",

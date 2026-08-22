@@ -231,10 +231,6 @@ export class BM25Search {
     return removed;
   }
 
-  getDocCount(): number {
-    return this.docs.length;
-  }
-
   getStats(): { totalDocs: number; avgDocLen: number; vocabSize: number } {
     return {
       totalDocs: this.totalDocs,

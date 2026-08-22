@@ -1,0 +1,32 @@
+{
+  "title": "اختصارات لوحة المفاتيح",
+  "description": "عزز إنتاجيتك مع اختصارات لوحة المفاتيح هذه.",
+  "openHint": "اضغط",
+  "openHintSuffix": "في أي وقت لفتح هذا الحوار.",
+  "close": "إغلاق",
+  "categories": {
+    "general": "عام",
+    "navigation": "التنقل",
+    "actions": "إجراءات",
+    "composer": "محرر الرسائل"
+  },
+  "shortcuts": {
+    "showShortcuts": "إظهار اختصارات لوحة المفاتيح",
+    "newChat": "محادثة جديدة",
+    "newChatAlt": "محادثة جديدة (بديل)",
+    "focusComposer": "التركيز على محرر الرسائل",
+    "stopGeneration": "إيقاف التوليد / إغلاق النوافذ",
+    "previousChat": "المحادثة السابقة",
+    "nextChat": "المحادثة التالية",
+    "prevMessage": "الرسالة السابقة",
+    "nextMessage": "الرسالة التالية",
+    "copyLastMessage": "نسخ آخر رسالة للمساعد",
+    "toggleSidebar": "إظهار/إخفاء الشريط الجانبي",
+    "toggleArtifacts": "إظهار/إخفاء لوحة العناصر",
+    "toggleEmail": "إظهار/إخفاء سجل البريد الإلكتروني",
+    "toggleCalendar": "إظهار/إخفاء عرض التقويم",
+    "sendMessage": "إرسال الرسالة",
+    "newLine": "سطر جديد",
+    "sendMessageAlt": "إرسال الرسالة (بديل)"
+  }
+}

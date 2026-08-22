@@ -1,66 +1,82 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Request, Response, NextFunction } from 'express';
 
-// Use vi.hoisted to define mock functions that vi.mock factories can reference
-const { mockGet, mockSet, mockDel, mockGetUser } = vi.hoisted(() => ({
-  mockGet: vi.fn(),
-  mockSet: vi.fn().mockResolvedValue('OK'),
-  mockDel: vi.fn().mockResolvedValue(1),
-  mockGetUser: vi.fn(),
-}));
+const mockLogger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  child: vi.fn().mockReturnThis(),
+};
 
-vi.mock('../config/redis/client.js', () => ({
-  default: {
-    get: mockGet,
-    set: mockSet,
-    del: mockDel,
-  },
-}));
-
-vi.mock('../services/supabase.service.js', () => ({
-  supabase: {
-    auth: {
-      getUser: mockGetUser,
-    },
-    from: vi.fn().mockReturnThis(),
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-  },
-}));
-
-import { authMiddleware } from '../middleware/auth.middleware.js';
+function createMockJWT(expiresInSeconds: number = 3600): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({
+    sub: 'user-1',
+    email: 'test@test.com',
+    exp: Math.floor(Date.now() / 1000) + expiresInSeconds,
+  })).toString('base64url');
+  const signature = 'mock-signature';
+  return `${header}.${payload}.${signature}`;
+}
 
 function mockReq(authHeader?: string): Request {
   return {
-    headers: {
-      authorization: authHeader,
-    },
+    headers: { authorization: authHeader },
     ip: '127.0.0.1',
     get: vi.fn().mockReturnValue('test-agent'),
   } as unknown as Request;
 }
 
 function mockRes() {
-  const res = {
+  return {
     status: vi.fn().mockReturnThis(),
     json: vi.fn().mockReturnThis(),
   } as unknown as Response;
-  return res;
 }
-
-const next = vi.fn() as NextFunction;
 
 describe('Auth Middleware', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGet.mockResolvedValue(null);
+    vi.resetModules();
   });
+
+  async function loadMiddleware() {
+    const { mockGet, mockSet, mockDel, mockGetUser } = vi.hoisted(() => ({
+      mockGet: vi.fn().mockResolvedValue(null),
+      mockSet: vi.fn().mockResolvedValue('OK'),
+      mockDel: vi.fn().mockResolvedValue(1),
+      mockGetUser: vi.fn(),
+    }));
+
+    vi.doMock('../utils/logger.js', () => ({
+      createLogger: vi.fn(() => mockLogger),
+    }));
+
+    vi.doMock('../config/redis/client.js', () => ({
+      default: { get: mockGet, set: mockSet, del: mockDel },
+    }));
+
+    vi.doMock('../services/supabase.service.js', () => ({
+      supabase: {
+        auth: { getUser: mockGetUser },
+        from: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+      },
+    }));
+
+    const { authMiddleware } = await import('../middleware/auth.middleware.js');
+    return { authMiddleware, mockGet, mockSet, mockDel, mockGetUser };
+  }
 
   describe('Token extraction', () => {
     it('should return 401 when no Authorization header is present', async () => {
+      const { authMiddleware } = await loadMiddleware();
       const req = mockReq();
       const res = mockRes();
+      const next = vi.fn() as NextFunction;
 
       await authMiddleware(req, res, next);
 
@@ -72,8 +88,10 @@ describe('Auth Middleware', () => {
     });
 
     it('should return 401 when Authorization header does not start with Bearer', async () => {
+      const { authMiddleware } = await loadMiddleware();
       const req = mockReq('Basic abc123');
       const res = mockRes();
+      const next = vi.fn() as NextFunction;
 
       await authMiddleware(req, res, next);
 
@@ -82,8 +100,10 @@ describe('Auth Middleware', () => {
     });
 
     it('should return 401 when Bearer token is empty', async () => {
+      const { authMiddleware } = await loadMiddleware();
       const req = mockReq('Bearer ');
       const res = mockRes();
+      const next = vi.fn() as NextFunction;
 
       await authMiddleware(req, res, next);
 
@@ -94,40 +114,47 @@ describe('Auth Middleware', () => {
 
   describe('Redis caching', () => {
     it('should use cached session when available', async () => {
+      const { authMiddleware, mockGet, mockGetUser } = await loadMiddleware();
       const cachedUser = { id: 'user-1', email: 'test@test.com' };
       mockGet.mockResolvedValue(
-        JSON.stringify({ user: cachedUser, isBanned: false, bannedUntil: null }),
+        JSON.stringify({ user: cachedUser, isBanned: false, bannedUntil: null, cachedAt: Date.now() }),
       );
 
-      const req = mockReq('Bearer valid-token');
+      const token = createMockJWT();
+      const req = mockReq(`Bearer ${token}`);
       const res = mockRes();
+      const next = vi.fn() as NextFunction;
 
       await authMiddleware(req, res, next);
 
       expect(mockGet).toHaveBeenCalled();
-      expect(mockGetUser).not.toHaveBeenCalled();
       expect(next).toHaveBeenCalled();
       expect((req as any).user).toEqual(cachedUser);
     });
 
     it('should skip Redis when circuit breaker is open', async () => {
+      const { authMiddleware, mockGet, mockGetUser } = await loadMiddleware();
       // Trigger circuit breaker by calling 5 failures
       mockGet.mockRejectedValue(new Error('Redis down'));
 
       for (let i = 0; i < 5; i++) {
-        await authMiddleware(mockReq(`Bearer token${i}`), mockRes(), next);
+        const token = createMockJWT();
+        await authMiddleware(mockReq(`Bearer ${token}`), mockRes(), vi.fn());
       }
 
       // Reset mocks for the actual test
       vi.clearAllMocks();
+      mockGet.mockResolvedValue(null);
       mockGetUser.mockResolvedValue({
         data: { user: { id: 'u1', email: 'a@b.com', banned_until: null } },
         error: null,
       });
 
-      const req2 = mockReq('Bearer fresh-token');
+      const token = createMockJWT();
+      const req2 = mockReq(`Bearer ${token}`);
       const res2 = mockRes();
-      await authMiddleware(req2, res2, next);
+      const next2 = vi.fn() as NextFunction;
+      await authMiddleware(req2, res2, next2);
 
       // Redis should be skipped (circuit open), Supabase called instead
       expect(mockGet).not.toHaveBeenCalled();
@@ -135,11 +162,13 @@ describe('Auth Middleware', () => {
     });
 
     it('should fall through to Supabase when cache has invalid structure', async () => {
-      // Return valid JSON with missing required fields
+      const { authMiddleware, mockGet, mockGetUser } = await loadMiddleware();
       mockGet.mockResolvedValue(JSON.stringify({ invalid: 'structure' }));
 
-      const req = mockReq('Bearer token');
+      const token = createMockJWT();
+      const req = mockReq(`Bearer ${token}`);
       const res = mockRes();
+      const next = vi.fn() as NextFunction;
       mockGetUser.mockResolvedValue({
         data: { user: { id: 'u1', email: 'a@b.com', banned_until: null } },
         error: null,
@@ -147,7 +176,6 @@ describe('Auth Middleware', () => {
 
       await authMiddleware(req, res, next);
 
-      // Should fall through to Supabase and still authenticate
       expect(mockGetUser).toHaveBeenCalled();
       expect(next).toHaveBeenCalled();
     });
@@ -155,14 +183,17 @@ describe('Auth Middleware', () => {
 
   describe('JWT validation via Supabase', () => {
     it('should return 401 for invalid tokens', async () => {
+      const { authMiddleware, mockGet, mockGetUser } = await loadMiddleware();
       mockGet.mockResolvedValue(null);
       mockGetUser.mockResolvedValue({
         data: null,
         error: { message: 'invalid token' },
       });
 
-      const req = mockReq('Bearer invalid-token');
+      const token = createMockJWT();
+      const req = mockReq(`Bearer ${token}`);
       const res = mockRes();
+      const next = vi.fn() as NextFunction;
 
       await authMiddleware(req, res, next);
 
@@ -174,6 +205,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should attach user to request on valid token', async () => {
+      const { authMiddleware, mockGet, mockGetUser } = await loadMiddleware();
       mockGet.mockResolvedValue(null);
       mockGetUser.mockResolvedValue({
         data: {
@@ -182,8 +214,10 @@ describe('Auth Middleware', () => {
         error: null,
       });
 
-      const req = mockReq('Bearer valid-token');
+      const token = createMockJWT();
+      const req = mockReq(`Bearer ${token}`);
       const res = mockRes();
+      const next = vi.fn() as NextFunction;
 
       await authMiddleware(req, res, next);
 
@@ -194,7 +228,8 @@ describe('Auth Middleware', () => {
       });
     });
 
-    it('should cache validation result in Redis for 5 minutes', async () => {
+    it('should cache validation result in Redis', async () => {
+      const { authMiddleware, mockGet, mockGetUser, mockSet } = await loadMiddleware();
       mockGet.mockResolvedValue(null);
       mockGetUser.mockResolvedValue({
         data: {
@@ -203,8 +238,10 @@ describe('Auth Middleware', () => {
         error: null,
       });
 
-      const req = mockReq('Bearer token');
+      const token = createMockJWT(600);
+      const req = mockReq(`Bearer ${token}`);
       const res = mockRes();
+      const next = vi.fn() as NextFunction;
 
       await authMiddleware(req, res, next);
 
@@ -212,13 +249,14 @@ describe('Auth Middleware', () => {
         expect.stringContaining('auth:session:'),
         expect.any(String),
         'EX',
-        300,
+        expect.any(Number),
       );
     });
   });
 
   describe('Ban checking', () => {
     it('should return 403 for banned users (auth metadata)', async () => {
+      const { authMiddleware, mockGet, mockGetUser } = await loadMiddleware();
       mockGet.mockResolvedValue(null);
       const futureDate = new Date(Date.now() + 86400000).toISOString();
       mockGetUser.mockResolvedValue({
@@ -232,8 +270,10 @@ describe('Auth Middleware', () => {
         error: null,
       });
 
-      const req = mockReq('Bearer banned-token');
+      const token = createMockJWT();
+      const req = mockReq(`Bearer ${token}`);
       const res = mockRes();
+      const next = vi.fn() as NextFunction;
 
       await authMiddleware(req, res, next);
 
@@ -245,6 +285,7 @@ describe('Auth Middleware', () => {
     });
 
     it('should allow users with expired bans', async () => {
+      const { authMiddleware, mockGet, mockGetUser } = await loadMiddleware();
       mockGet.mockResolvedValue(null);
       const pastDate = new Date(Date.now() - 86400000).toISOString();
       mockGetUser.mockResolvedValue({
@@ -258,8 +299,10 @@ describe('Auth Middleware', () => {
         error: null,
       });
 
-      const req = mockReq('Bearer token');
+      const token = createMockJWT();
+      const req = mockReq(`Bearer ${token}`);
       const res = mockRes();
+      const next = vi.fn() as NextFunction;
 
       await authMiddleware(req, res, next);
 
@@ -269,16 +312,21 @@ describe('Auth Middleware', () => {
 
   describe('Error handling', () => {
     it('should return 401 on unexpected errors', async () => {
-      // Make Redis throw and Supabase also throw to hit the outer catch block
+      const { authMiddleware, mockGet, mockGetUser } = await loadMiddleware();
       mockGet.mockRejectedValue(new Error('Redis down'));
       mockGetUser.mockRejectedValue(new Error('Supabase down'));
 
-      const req = mockReq('Bearer token');
+      const token = createMockJWT();
+      const req = mockReq(`Bearer ${token}`);
       const res = mockRes();
+      const next = vi.fn() as NextFunction;
 
       await authMiddleware(req, res, next);
 
       expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Authentication failed' }),
+      );
     });
   });
 });

@@ -75,8 +75,12 @@ vi.mock('@/context/RAGContext', () => ({
 vi.mock('@assistant-ui/react', () => ({
   AssistantRuntimeProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   Suggestions: vi.fn(),
-  useAui: vi.fn(() => ({ composer: () => ({ getText: () => '' }) })),
+  useAui: vi.fn(() => ({
+    composer: () => ({ getText: () => '', setText: vi.fn() }),
+    subscribe: vi.fn(),
+  })),
   useAuiState: vi.fn(() => ({ thread: { isEmpty: true } })),
+  unstable_useSlashCommandAdapter: vi.fn(),
 }));
 
 vi.mock('@assistant-ui/react-ai-sdk', () => ({
@@ -156,6 +160,8 @@ describe('AssistantApp', () => {
       updateThreadTitle: vi.fn(),
       getThreadsByCourse: vi.fn(),
       clearDraft: vi.fn(),
+      goToPreviousThread: vi.fn(),
+      goToNextThread: vi.fn(),
     });
 
     render(<AssistantApp />);
@@ -194,6 +200,8 @@ describe('AssistantApp', () => {
       updateThreadTitle: vi.fn(),
       getThreadsByCourse: vi.fn(),
       clearDraft: vi.fn(),
+      goToPreviousThread: vi.fn(),
+      goToNextThread: vi.fn(),
     });
 
     render(<AssistantApp />);

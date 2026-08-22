@@ -197,7 +197,7 @@ registerTool("get_calendar_insights", {
 
       // Check for conflicts
       if (checkConflicts && events && events.length > 1) {
-        const conflicts: any[] = [];
+        const conflicts: Array<{ event1: { id: string; title: string }; event2: { id: string; title: string }; overlap_minutes: number }> = [];
         
         for (let i = 0; i < events.length; i++) {
           for (let j = i + 1; j < events.length; j++) {

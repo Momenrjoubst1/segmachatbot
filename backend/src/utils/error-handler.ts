@@ -6,6 +6,7 @@
  * Standardizes error responses, logging, and error types
  */
 
+import { Request, Response, NextFunction } from "express";
 import { createLogger } from './logger.js';
 
 const log = createLogger('error-handler');
@@ -96,15 +97,6 @@ export function createErrorResponse(error: Error | AppError) {
       message: 'An unexpected error occurred',
       statusCode: 500,
     },
-  };
-}
-
-/**
- * Wrap async functions to catch errors consistently
- */
-export function asyncHandler(fn: Function) {
-  return (req: any, res: any, next: any) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
   };
 }
 

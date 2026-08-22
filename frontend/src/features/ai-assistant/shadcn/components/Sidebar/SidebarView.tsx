@@ -7,6 +7,7 @@ import { UserProfileCard, useUserProfile } from "./UserProfileCard";
 import { NewChatButtonIcon, NewChatButtonFull } from "./NewChatButton";
 import { getUserAvatarUrl } from "@/lib/cn";
 import { LogIn, AlertCircle, SearchIcon } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useChatHistory } from "../../../../../hooks/useChatHistory";
 import { useGuestMode } from "@/context/GuestModeContext";
 
@@ -82,11 +83,25 @@ export const SidebarView: FC<SidebarViewProps> = ({
   isGuestMode = false,
 }) => {
   const navigate = useNavigate();
-  const { loadThread, threadsError, retryFetchThreads } = useChatHistory();
+  const { loadThread, goToPreviousThread, goToNextThread, threadsError, retryFetchThreads } = useChatHistory();
   const { guestMessageCount, guestMessageLimit, limitReached, retryAfterSeconds } = useGuestMode();
 
   const remaining = Math.max(0, guestMessageLimit - guestMessageCount);
   const isLow = remaining <= 1 && remaining > 0;
+
+  // Listen for keyboard shortcut events for thread navigation
+  useEffect(() => {
+    const handlePreviousThread = () => goToPreviousThread();
+    const handleNextThread = () => goToNextThread();
+
+    window.addEventListener("sigma:navigate-previous-thread", handlePreviousThread);
+    window.addEventListener("sigma:navigate-next-thread", handleNextThread);
+
+    return () => {
+      window.removeEventListener("sigma:navigate-previous-thread", handlePreviousThread);
+      window.removeEventListener("sigma:navigate-next-thread", handleNextThread);
+    };
+  }, [goToPreviousThread, goToNextThread]);
 
   // ── Resizable sidebar state ──────────────────────────────────────────
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
@@ -158,30 +173,40 @@ export const SidebarView: FC<SidebarViewProps> = ({
           <div className="flex h-12 shrink-0 items-center justify-between ps-3 pe-2">
             <span className="text-xl font-semibold tracking-tight text-foreground select-none" style={{ fontFamily: "'Pacifico', cursive" }}>Sigma</span>
             <div className="flex items-center gap-0.5">
-              <button
-                type="button"
-                onClick={() => {
-                  const event = new CustomEvent('open-search');
-                  window.dispatchEvent(event);
-                }}
-                className="state-layer shrink-0 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Search"
-              >
-                <SearchIcon className="size-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={onToggle}
-                data-testid="sidebar-toggle"
-                className="state-layer aui-sidebar-toggle shrink-0 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Collapse sidebar"
-              >
-                <svg className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <line x1="9" y1="3" x2="9" y2="21" />
-                  <polyline points="18 15 14 12 18 9" className="transition-transform duration-300 ease-in-out group-hover:scale-x-[-1]" style={{ transformOrigin: 'center' }} />
-                </svg>
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const event = new CustomEvent('open-search');
+                      window.dispatchEvent(event);
+                    }}
+                    className="state-layer shrink-0 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label="Search"
+                  >
+                    <SearchIcon className="size-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Search conversations</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={onToggle}
+                    data-testid="sidebar-toggle"
+                    className="state-layer aui-sidebar-toggle shrink-0 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label="Collapse sidebar"
+                  >
+                    <svg className="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <line x1="9" y1="3" x2="9" y2="21" />
+                      <polyline points="18 15 14 12 18 9" className="transition-transform duration-300 ease-in-out group-hover:scale-x-[-1]" style={{ transformOrigin: 'center' }} />
+                    </svg>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Collapse sidebar</TooltipContent>
+              </Tooltip>
             </div>
           </div>
 

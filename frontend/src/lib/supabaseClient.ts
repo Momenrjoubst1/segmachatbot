@@ -129,8 +129,11 @@ export function onAuthStateChange(
  * }
  */
 export async function signInWithEmail(email: string, password: string) {
-    localStorage.setItem('auth_provider', 'email');
-    return supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (!error) {
+      localStorage.setItem('auth_provider', 'email');
+    }
+    return { data, error };
 }
 
 /**

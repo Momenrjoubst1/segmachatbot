@@ -306,10 +306,22 @@ class MockRedis {
     return 'PONG';
   }
 
-  on(event: string, callback: () => void) {
+  on(event: string, callback: (...args: any[]) => void) {
     if (event === 'connect') {
       setTimeout(() => callback(), 0);
     }
+    return this as any;
+  }
+
+  off(_event: string, _callback?: (...args: any[]) => void) {
+    return this as any;
+  }
+
+  unsubscribe(_channel?: string) {
+    return this as any;
+  }
+
+  disconnect() {
     return this as any;
   }
 
@@ -385,6 +397,94 @@ class MockRedis {
       return -2;
     }
     return Math.max(0, Math.ceil((expiry - Date.now()) / 1000));
+  }
+
+  // ── Custom Lua-script-backed commands (declared in client.ts) ──────────────
+
+  /** Sliding-window rate limit via ZSET. Returns [hits, oldestExpiryMs]. */
+  async slidingWindowRateLimit(
+    key: string,
+    nowMs: number,
+    windowMs: number,
+    member: string,
+  ): Promise<[number, number]> {
+    await this.zremrangebyscore(key, '-inf', nowMs - windowMs);
+    await this.zadd(key, nowMs, member);
+    await this.pexpire(key, windowMs);
+    const hits = await this.zcard(key);
+    const oldest = await this.zrange(key, 0, 0, 'WITHSCORES');
+    const oldestScore = oldest.length >= 2 ? Number(oldest[1]) : nowMs;
+    return [hits, oldestScore + windowMs];
+  }
+
+  /** Fixed-window counter for guest chat quota. Returns [count, ttlSeconds]. */
+  async guestFixedWindowIncr(
+    key: string,
+    windowSeconds: number,
+  ): Promise<[number, number]> {
+    const count = await this.incr(key);
+    if (count === 1) {
+      await this.expire(key, windowSeconds);
+    }
+    const ttl = await this.ttl(key);
+    return [count, Math.max(0, ttl)];
+  }
+
+  /** Append JSON entries to a list, bounded by maxLength and maxChars. */
+  async guestAppendTranscript(
+    key: string,
+    entryJson: string,
+    maxLength: number,
+    maxChars: number,
+    windowSeconds: number,
+  ): Promise<number> {
+    await this.rpush(key, entryJson);
+    // Enforce max length
+    const len = await this.llen(key);
+    if (len > maxLength) {
+      const excess = len - maxLength;
+      for (let i = 0; i < excess; i++) {
+        await this.lpop(key);
+      }
+    }
+    // Enforce max chars
+    const items = await this.lrange(key, 0, -1);
+    let totalChars = items.reduce((sum, item) => sum + item.length, 0);
+    while (totalChars > maxChars && items.length > 1) {
+      const removed = items.shift()!;
+      totalChars -= removed.length;
+      await this.lpop(key);
+    }
+    // Set TTL if not set
+    const ttl = await this.ttl(key);
+    if (ttl === -1) {
+      await this.expire(key, windowSeconds);
+    }
+    return items.length;
+  }
+
+  /** Return a duplicate "client" (same in-memory store for mock). */
+  duplicate(): MockRedis {
+    // MockRedis is a singleton in-memory store — just return `this`
+    return this;
+  }
+
+  /** Minimal subscribe (no-op for mock). */
+  async subscribe(_channel: string): Promise<number> {
+    return 1;
+  }
+
+  /** Minimal lpop */
+  async lpop(key: string): Promise<string | null> {
+    const list = this.lists.get(key);
+    if (!list || list.length === 0) return null;
+    return list.shift() ?? null;
+  }
+
+  /** List length */
+  async llen(key: string): Promise<number> {
+    const list = this.lists.get(key);
+    return list ? list.length : 0;
   }
 }
 

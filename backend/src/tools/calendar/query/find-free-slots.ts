@@ -40,7 +40,7 @@ async function getGoogleBusySlots(accessToken: string, calendarId: string, timeM
     throw new Error(`Google Calendar Free/Busy API error: ${response.statusText}`);
   }
 
-  const data = await response.json() as { calendars?: any[] };
+  const data = await response.json() as { calendars?: Array<{ busy?: Array<{ start?: string; end?: string }> }> };
   return data.calendars?.[0]?.busy || [];
 }
 
@@ -95,7 +95,7 @@ registerTool("find_free_slots", {
         searchDate = new Date(searchDate.getTime() + 24 * 60 * 60 * 1000);
       }
 
-      const freeSlots: any[] = [];
+      const freeSlots: Array<{ date: string; day_name: string; slots: Array<{ start: string; end: string; duration_minutes: number; formatted: string }> }> = [];
 
       // Search for available slots
       for (let day = 0; day < daysAhead; day++) {
@@ -131,7 +131,7 @@ registerTool("find_free_slots", {
         const timeMinISO = dayStart.toISOString();
         const timeMaxISO = dayEnd.toISOString();
 
-        let busySlots: any[] = [];
+        let busySlots: Array<{ start?: string; end?: string }> = [];
 
         // Try Google Calendar free/busy
         try {
@@ -163,10 +163,12 @@ registerTool("find_free_slots", {
         const busy: { start: Date; end: Date }[] = [];
 
         for (const busySlot of busySlots) {
-          busy.push({
-            start: new Date(busySlot.start),
-            end: new Date(busySlot.end),
-          });
+          if (busySlot.start && busySlot.end) {
+            busy.push({
+              start: new Date(busySlot.start),
+              end: new Date(busySlot.end),
+            });
+          }
         }
 
         if (localEvents) {

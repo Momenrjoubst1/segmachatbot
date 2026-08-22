@@ -32,7 +32,7 @@ export class CircuitBreaker {
     private name: string,
     private options: CircuitBreakerOptions
   ) {
-    log.info(`Circuit breaker initialized: ${name}`, options as any);
+    log.info(`Circuit breaker initialized: ${name}`, options as unknown as Record<string, unknown>);
   }
 
   /**

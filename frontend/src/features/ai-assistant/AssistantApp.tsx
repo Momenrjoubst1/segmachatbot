@@ -24,6 +24,9 @@ import { Header } from "./shadcn/components/Header/Header";
 import { useAssistantState } from "./hooks/useAssistantState";
 import { GuestModeProvider, useGuestMode } from "@/context/GuestModeContext";
 import { SendStateProvider } from "@/context/SendStateContext";
+import { BotActivityReporter } from "./ui/bot-activity/BotActivityReporter";
+import { AssistantLayoutProvider } from "./context/AssistantLayoutContext";
+import { AssistantSettingsProvider } from "./context/AssistantSettingsContext";
 
 
 const WELCOME_SUGGESTIONS = [
@@ -75,7 +78,7 @@ const DraftSaver = ({
   useEffect(() => {
     const saveDraftNow = () => {
       try {
-        const composer = aui.composer() as any;
+        const composer = aui.composer() as { getText?: () => string };
         const text = typeof composer?.getText === "function" ? composer.getText() : "";
         if (text) {
           onDraftSaveRef.current(chatKeyRef.current, text);
@@ -84,11 +87,20 @@ const DraftSaver = ({
         // Composer not mounted — nothing to save
       }
     };
+    // pagehide covers refresh, tab close, and mobile app switch;
+    // it fires reliably even when beforeunload is ignored (iOS Safari).
     window.addEventListener("pagehide", saveDraftNow);
     document.addEventListener("visibilitychange", saveDraftNow);
+    // beforeunload as additional safety net (works on most desktop browsers)
+    window.addEventListener("beforeunload", saveDraftNow);
+    // Periodic save as last resort (every 5s) - handles cases where
+    // pagehide/visibilitychange/beforeunload all fail (e.g., iOS Safari kills process)
+    const intervalId = setInterval(saveDraftNow, 5_000);
     return () => {
       window.removeEventListener("pagehide", saveDraftNow);
       document.removeEventListener("visibilitychange", saveDraftNow);
+      window.removeEventListener("beforeunload", saveDraftNow);
+      clearInterval(intervalId);
     };
   }, [aui]);
 
@@ -98,7 +110,7 @@ const DraftSaver = ({
       onThreadSwitch(prevKey, chatKey);
 
       try {
-        const composer = aui.composer() as any;
+        const composer = aui.composer() as { getText?: () => string };
         const text = typeof composer?.getText === "function" ? composer.getText() : "";
         if (text) {
           onDraftSave(prevKey, text);
@@ -154,16 +166,12 @@ interface AssistantChatInnerProps {
   chatKey: string;
   onDraftSave: (key: string, text: string) => void;
   onThreadSwitch: (prevKey: string, nextKey: string) => void;
-  activeView: 'chat' | 'calendar';
-  onToggleView: (view: 'chat' | 'calendar') => void;
-  artifactPanelOpen: boolean;
-  setArtifactPanelOpen: (open: boolean) => void;
-  emailHistoryOpen: boolean;
-  setEmailHistoryOpen: (open: boolean) => void;
-  isGuestMode: boolean;
 }
 
-const AssistantChatInner = ({
+/**
+ * Inner component that runs inside AssistantRuntimeProvider.
+ */
+const AssistantChatInnerRuntime = ({
   activeCourse,
   isOnboarded,
   isCoursesLoading,
@@ -173,19 +181,12 @@ const AssistantChatInner = ({
   handleCompleteOnboarding,
   handleSkipOnboarding,
   setActiveCourse,
-  activeThreadId: _activeThreadId,
   draftText,
   chatKey,
   onDraftSave,
   onThreadSwitch,
-  activeView,
-  onToggleView,
-  artifactPanelOpen,
-  setArtifactPanelOpen,
-  emailHistoryOpen,
-  setEmailHistoryOpen,
-  isGuestMode,
-}: AssistantChatInnerProps) => {
+}: Omit<AssistantChatInnerProps, "activeThreadId">) => {
+  const { isGuestMode } = useGuestMode();
   const runtime = useRuntime(activeCourse, chatKey);
   const aui = useAui({
     suggestions: Suggestions([...WELCOME_SUGGESTIONS]),
@@ -195,6 +196,8 @@ const AssistantChatInner = ({
     <AssistantRuntimeProvider runtime={runtime} aui={aui}>
       <SendStateProvider>
         <MessageSyncer />
+        <BotActivityReporter />
+        <AssistantSettingsProvider>
         <RAGProvider>
           <DraftSaver chatKey={chatKey} onDraftSave={onDraftSave} onThreadSwitch={onThreadSwitch} />
           <DraftRestorer draftText={draftText} />
@@ -206,18 +209,19 @@ const AssistantChatInner = ({
             onActiveCourseChange={setActiveCourse}
             onCompleteOnboarding={handleCompleteOnboarding}
             onSkipOnboarding={handleSkipOnboarding}
-            activeView={activeView}
-            onToggleView={onToggleView}
-            artifactPanelOpen={artifactPanelOpen}
-            setArtifactPanelOpen={setArtifactPanelOpen}
-            emailHistoryOpen={emailHistoryOpen}
-            setEmailHistoryOpen={setEmailHistoryOpen}
             isGuestMode={isGuestMode}
           />
         </RAGProvider>
+        </AssistantSettingsProvider>
       </SendStateProvider>
     </AssistantRuntimeProvider>
   );
+};
+
+const AssistantChatInner = (props: AssistantChatInnerProps) => {
+  // Destructure activeThreadId out so it's not passed to the runtime component
+  const { activeThreadId: _activeThreadId, ...rest } = props;
+  return <AssistantChatInnerRuntime {...rest} />;
 };
 
 const AssistantAppContent = () => {
@@ -284,6 +288,15 @@ const AssistantAppContent = () => {
   const handleSkipOnboarding = useCallback(() => {}, []);
 
   const draftText = getDraft(chatKey);
+
+  // Listen for keyboard-triggered sidebar toggle (Ctrl+Shift+E), wired from
+  // the global shortcut handler in AssistantLayout. The real toggle action
+  // lives here in the parent, so we bridge the event to it.
+  useEffect(() => {
+    const handleToggleSidebar = () => actions.toggleSidebar();
+    window.addEventListener("sigma:toggle-sidebar", handleToggleSidebar);
+    return () => window.removeEventListener("sigma:toggle-sidebar", handleToggleSidebar);
+  }, [actions]);
 
   return (
     <div className="assistant-app-shell flex flex-1 h-full w-full overflow-hidden bg-[#FDFBF7] text-foreground">
@@ -357,29 +370,33 @@ const AssistantAppContent = () => {
               animate={{ opacity: 1 }}
               className="flex flex-1 h-full w-full overflow-hidden"
             >
-              <AssistantChatInner
-                activeCourse={state.activeCourse}
-                isOnboarded={isOnboarded}
-                isCoursesLoading={isCoursesLoading}
-                coursesError={coursesError}
-                retryCourses={retryCourses}
-                localOnboarded={false}
-                handleCompleteOnboarding={handleCompleteOnboarding}
-                handleSkipOnboarding={handleSkipOnboarding}
-                setActiveCourse={actions.setActiveCourse}
-                activeThreadId={activeThreadId}
-                draftText={draftText}
-                chatKey={chatKey}
-                onDraftSave={handleDraftSave}
-                onThreadSwitch={onThreadChange}
-                activeView={state.activeView}
-                onToggleView={setActiveView}
-                artifactPanelOpen={state.artifactPanelOpen}
-                setArtifactPanelOpen={setArtifactPanelOpen}
-                emailHistoryOpen={state.emailHistoryOpen}
-                setEmailHistoryOpen={setEmailHistoryOpen}
-                isGuestMode={isGuestMode}
-              />
+              <AssistantLayoutProvider
+                value={{
+                  activeView: state.activeView,
+                  onToggleView: setActiveView,
+                  artifactPanelOpen: state.artifactPanelOpen,
+                  setArtifactPanelOpen,
+                  emailHistoryOpen: state.emailHistoryOpen,
+                  setEmailHistoryOpen,
+                }}
+              >
+                <AssistantChatInner
+                  activeCourse={state.activeCourse}
+                  isOnboarded={isOnboarded}
+                  isCoursesLoading={isCoursesLoading}
+                  coursesError={coursesError}
+                  retryCourses={retryCourses}
+                  localOnboarded={false}
+                  handleCompleteOnboarding={handleCompleteOnboarding}
+                  handleSkipOnboarding={handleSkipOnboarding}
+                  setActiveCourse={actions.setActiveCourse}
+                  activeThreadId={activeThreadId}
+                  draftText={draftText}
+                  chatKey={chatKey}
+                  onDraftSave={handleDraftSave}
+                  onThreadSwitch={onThreadChange}
+                />
+              </AssistantLayoutProvider>
             </motion.div>
           </div>
         </div>

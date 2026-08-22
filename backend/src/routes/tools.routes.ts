@@ -37,7 +37,7 @@ export const codeExecuteLimiter = rateLimit({
   keyGenerator: (req: Request) => {
     const userId = req.user?.id;
     if (userId) return userId;
-    return ipKeyGenerator(req);
+    return ipKeyGenerator(req.ip || req.socket.remoteAddress || 'unknown');
   },
 });
 

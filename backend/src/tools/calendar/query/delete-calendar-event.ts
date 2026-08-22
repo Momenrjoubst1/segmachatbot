@@ -40,7 +40,7 @@ registerTool("delete_calendar_event", {
         });
       }
 
-      const results: any = {
+      const results: { deleted: Array<Record<string, unknown>>; failed: Array<Record<string, unknown>> } = {
         deleted: [],
         failed: [],
       };
@@ -262,7 +262,7 @@ registerTool("update_calendar_event", {
       }
 
       // Build update object
-      const updates: any = { updated_at: new Date().toISOString() };
+      const updates: { updated_at: string; title?: string; [key: string]: unknown } = { updated_at: new Date().toISOString() };
       if (args.title !== undefined) updates.title = args.title;
       if (args.description !== undefined) updates.description = args.description;
       if (args.location !== undefined) updates.location = args.location;

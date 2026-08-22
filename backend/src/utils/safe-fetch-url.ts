@@ -61,9 +61,7 @@ function hostAllowedByAllowlist(hostname: string): boolean {
       hostname.endsWith('.supabase.co')
     );
   }
-  return allowed.some(
-    (entry) => hostname === entry || hostname.endsWith(`.${entry}`),
-  );
+  return allowed.includes(hostname);
 }
 
 /**
@@ -121,6 +119,8 @@ export async function fetchImageForProxy(url: string): Promise<{
 
   while (attempts <= maxRedirects) {
     attempts++;
+    // Re-validate and re-resolve DNS on EACH attempt (including redirects)
+    // This prevents DNS rebinding where the IP changes between validation and fetch
     const { safeUrl, resolvedIp } = await assertSafeImageProxyUrl(currentUrl);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -152,6 +152,7 @@ export async function fetchImageForProxy(url: string): Promise<{
           throw new Error('Redirect response missing Location header');
         }
         currentUrl = new URL(location, safeUrl).toString();
+        // Loop continues - will re-resolve DNS and re-validate the redirect target
         continue;
       }
 

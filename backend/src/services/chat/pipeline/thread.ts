@@ -13,6 +13,19 @@ import { ensureThreadOwnership } from "../../../routes/chat/chat-shared.js";
 import { createLogger } from "../../../utils/logger.js";
 const log = createLogger("pipeline:thread");
 import redis from "../../../config/redis/client.js";
+import { AsyncMutex } from "../../../utils/async-mutex.js";
+
+// Simple keyed mutex for thread reuse - one mutex per user
+const threadReuseMutexes = new Map<string, AsyncMutex>();
+
+function getThreadReuseMutex(userId: string): AsyncMutex {
+  let mutex = threadReuseMutexes.get(userId);
+  if (!mutex) {
+    mutex = new AsyncMutex();
+    threadReuseMutexes.set(userId, mutex);
+  }
+  return mutex;
+}
 
 interface ChatSessionRow {
   id: string;
@@ -77,6 +90,10 @@ export async function resolveThread(args: {
 
   // 3) Defensive: reuse a recent empty session
   if (!reusedSessionId) {
+    // Use a per-user mutex to prevent race condition where two concurrent
+    // requests both find and reuse the same empty session
+    const mutexKey = `thread:reuse:${userId}`;
+    const release = await getThreadReuseMutex(userId).acquire(); // 5s timeout
     try {
       const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       const { data: recentEmpties } = await supabase
@@ -113,6 +130,8 @@ export async function resolveThread(args: {
       log.warn("Empty session reuse check failed", {
         error: (err as Error)?.message,
       });
+    } finally {
+      release();
     }
   }
 

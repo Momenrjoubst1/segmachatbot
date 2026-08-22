@@ -131,7 +131,7 @@ export function useAuth() {
         setError(message);
         return {
           data: { user: null, session: null },
-          error: { message, name: 'AuthApiError', status: 0 } as import('@supabase/supabase-js').AuthError,
+          error: { message, name: 'NetworkError', status: 0 } as any,
         };
       }
   };
@@ -155,7 +155,7 @@ export function useAuth() {
         setError(message);
         return {
           data: { user: null, session: null },
-          error: { message, name: 'AuthApiError', status: 0 } as import('@supabase/supabase-js').AuthError,
+          error: { message, name: 'NetworkError', status: 0 } as any,
         };
       }
   };

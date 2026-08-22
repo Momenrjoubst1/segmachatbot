@@ -89,7 +89,7 @@ Full-stack AI chatbot with RAG (Retrieval-Augmented Generation), memory manageme
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20+
 - npm or yarn
 - Supabase account (for database)
 - At least one AI provider API key (Azure, Groq, GitHub, OpenRouter, Fireworks, or Novita)
@@ -152,6 +152,8 @@ Open http://localhost:5173
 
 ## Docker Deployment
 
+Before running, ensure you have `.env` files configured in both `frontend/` and `backend/` directories (see [Environment Setup](#2-environment-setup) above).
+
 ```bash
 # Build and run with Docker Compose
 docker-compose up --build
@@ -163,6 +165,7 @@ docker-compose up -d
 This will start:
 - Frontend on http://localhost:80
 - Backend on http://localhost:3004
+- PDF Processor on http://localhost:8000
 
 ## Available Scripts
 

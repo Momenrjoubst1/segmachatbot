@@ -12,6 +12,34 @@ if (process.env.NODE_ENV === 'production' && !useRealRedis) {
   throw new Error('RATE_LIMIT_STORE must be set to "redis" in production');
 }
 
+// Module augmentation: ioredis addCustomCommand returns `this` typed as Redis,
+// but our sites call the custom commands via dot-access. Declaring them on
+// the Redis interface lets us drop every `(redis as any).customCmd(...)` cast.
+declare module 'ioredis' {
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+  interface RedisCommander<Context> {
+    /** Sliding-window log via ZSET + Lua. Returns [hits, oldestExpiryMs]. */
+    slidingWindowRateLimit(
+      key: string,
+      nowMs: number,
+      windowMs: number,
+      member: string,
+    ): Promise<[number, number]>;
+    /** Fixed-window counter for guest chat quota. Returns [count, ttlSeconds]. */
+    guestFixedWindowIncr(
+      key: string,
+      windowSeconds: number,
+    ): Promise<[number, number]>;
+    /** Append a single JSON line to a transcript list, bounded by MAX_LENGTH. */
+    guestAppendTranscript(
+      key: string,
+      entryJson: string,
+      maxLength: number,
+      maxChars: number,
+    ): Promise<number>;
+  }
+}
+
 let redis: Redis | MockRedis;
 
 if (useRealRedis) {

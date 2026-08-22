@@ -68,16 +68,19 @@ export const MemoryConfig = {
   memoryBank: {
     // تفعيل/تعطيل الذاكرة الدائمة المحسّنة
     enabled: process.env.MEMORY_BANK_ENABLED !== 'false',
-    
+
     // الحد الأقصى لعدد الحقائق المحفوظة لكل مستخدم
     maxFactsPerUser: parseInt(process.env.MEMORY_MAX_FACTS || '100'),
-    
+
     // الحد الأدنى لعدد الرسائل قبل استخراج الحقائق
     minMessagesForExtraction: parseInt(process.env.MEMORY_MIN_FOR_EXTRACTION || '6'),
-    
+
     // الحد الأقصى لعدد مرات الاستخراج في الجلسة الواحدة
     maxExtractionsPerSession: parseInt(process.env.MEMORY_MAX_EXTRACTIONS || '5'),
-    
+
+    // الحد الأقصى لعمر الحقائق بالأيام قبل التنظيف (90 يوماً افتراضياً)
+    maxFactAgeDays: parseInt(process.env.MEMORY_MAX_FACT_AGE_DAYS || '90'),
+
     // الفئات المدعومة
     categories: [
       'personal',      // معلومات شخصية
@@ -96,13 +99,16 @@ export const MemoryConfig = {
   crossSession: {
     // تفعيل/تعطيل التذكر عبر المحادثات
     enabled: process.env.MEMORY_CROSS_SESSION_ENABLED !== 'false',
-    
+
     // عدد المحادثات السابقة للبحث فيها
     maxPreviousChats: parseInt(process.env.MEMORY_MAX_PREVIOUS_CHATS || '10'),
-    
+
     // الحد الأقصى لعمر المحادثة للبحث فيها (أيام)
     maxChatAgeDays: parseInt(process.env.MEMORY_MAX_CHAT_AGE_DAYS || '30'),
-    
+
+    // الحد الأقصى لعمر إدخالات cross-session بالأيام قبل التنظيف (30 يوماً افتراضياً)
+    maxEntryAgeDays: parseInt(process.env.MEMORY_CROSS_SESSION_MAX_AGE_DAYS || '30'),
+
     // عدد النتائج من كل محادثة
     resultsPerChat: parseInt(process.env.MEMORY_RESULTS_PER_CHAT || '3'),
   },

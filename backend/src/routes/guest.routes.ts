@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Router } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { streamText } from "ai";
 import { asyncHandler } from "../utils/express-async-wrapper.js";
@@ -9,8 +9,14 @@ import { createProviderClient, getProviderAndModel } from "./chat/chat-shared.js
 import { guestIpLimiter, guestStatusLimiter } from "../middleware/rate-limiters.js";
 import { withTimeout, TIMEOUTS } from "../utils/timeout-wrapper.js";
 import redis from "../config/redis/client.js";
+import { GUEST_SYSTEM_PROMPT } from "../prompts/guest-system-prompt.js";
 
 const log = createLogger("guest-chat");
+
+/** Express Request with guest session ID attached by guestCookieMiddleware. */
+interface GuestRequest extends Request {
+  guestId?: string;
+}
 
 // ---------------------------------------------------------------------------
 // i18n refusal messages + locale detection
@@ -21,13 +27,13 @@ const REFUSAL_TEXT: Record<string, string> = {
   ar: "لا أستطيع المساعدة في هذا الطلب. هل يمكنك إعادة صياغته؟",
 };
 
-function resolveLocale(req: any): string {
+function resolveLocale(req: Request): string {
   const accept = req.headers["accept-language"] ?? "";
   return accept.includes("ar") ? "ar" : "en";
 }
 
 /** Send a refusal text as a single AI SDK SSE chunk and close the response. */
-function sendRefusalChunk(res: any, text: string): void {
+function sendRefusalChunk(res: Response, text: string): void {
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.write(`0:${JSON.stringify(text)}\n`);
@@ -118,7 +124,14 @@ function parseCookies(header: string | undefined): Record<string, string> {
   for (const pair of header.split(";")) {
     const [rawKey, ...rest] = pair.split("=");
     const key = rawKey?.trim();
-    if (key) cookies[key] = rest.join("=").trim();
+    if (key) {
+      const rawValue = rest.join("=").trim();
+      try {
+        cookies[key] = decodeURIComponent(rawValue);
+      } catch {
+        cookies[key] = rawValue;
+      }
+    }
   }
   return cookies;
 }
@@ -226,7 +239,7 @@ const FIXED_WINDOW_LUA = `
 `;
 
 // Register the Lua command on the Redis client
-(redis as any).defineCommand("guestFixedWindowIncr", {
+redis.defineCommand("guestFixedWindowIncr", {
   numberOfKeys: 1,
   lua: FIXED_WINDOW_LUA,
 });
@@ -246,7 +259,7 @@ async function incrementGuestCountRedis(guestId: string): Promise<{
 
   try {
     // Use atomic Lua script for fixed-window semantics
-    const result = await (redis as any).guestFixedWindowIncr(key, windowSeconds);
+    const result = await redis.guestFixedWindowIncr(key, windowSeconds);
     const [count, ttl] = result as [number, number];
     const retryAfterMs = ttl > 0 ? ttl * 1000 : WINDOW_MS;
 
@@ -289,18 +302,27 @@ async function readGuestCountRedis(guestId: string): Promise<{
 
 /**
  * Decrement the guest message counter (rollback on failed request).
- * Only decrements if count > 0.
+ * Only decrements if count > 0. Prevents negative counts.
  */
 async function decrementGuestCountRedis(guestId: string): Promise<void> {
   const key = `guest:count:${guestId}`;
   try {
-    await redis.decr(key);
-    // Ensure key still has TTL (decr on a new key would remove expiry)
-    const ttl = await redis.ttl(key);
-    if (ttl === -1) {
-      // Key exists but no TTL — set it
-      await redis.expire(key, Math.floor(WINDOW_MS / 1000));
-    }
+    // Use Lua script for atomic check-and-decrement
+    const result = await redis.eval(
+      `
+      local current = redis.call('GET', KEYS[1])
+      if current then
+        local count = tonumber(current)
+        if count > 0 then
+          redis.call('DECR', KEYS[1])
+          return count - 1
+        end
+      end
+      return 0
+      `,
+      1,
+      key
+    );
   } catch (err) {
     log.warn("Redis guest quota rollback failed", { error: (err as Error)?.message });
   }
@@ -358,11 +380,12 @@ function readGuestCountMemory(guestId: string): {
 
 /**
  * Decrement the guest message counter (in-memory rollback).
+ * Prevents negative counts.
  */
 function decrementGuestCountMemory(guestId: string): void {
   const existing = guestWindows.get(guestId);
   if (existing && existing.count > 0) {
-    existing.count--;
+    existing.count = Math.max(0, existing.count - 1);
   }
 }
 
@@ -411,7 +434,7 @@ async function decrementGuestCount(guestId: string): Promise<void> {
 // Reads or generates the anonymous cookie. Attaches guestId to req for
 // downstream use. Sets the cookie on the response if newly generated.
 
-function guestCookieMiddleware(req: any, res: any, next: any): void {
+function guestCookieMiddleware(req: Request, res: Response, next: NextFunction): void {
   const cookies = parseCookies(req.headers.cookie);
   let guestId = cookies[GUEST_COOKIE];
 
@@ -443,7 +466,7 @@ function guestCookieMiddleware(req: any, res: any, next: any): void {
     });
   }
 
-  req.guestId = guestId;
+  (req as GuestRequest).guestId = guestId;
   next();
 }
 
@@ -451,8 +474,8 @@ function guestCookieMiddleware(req: any, res: any, next: any): void {
 // Returns 429 with a structured body the frontend can parse directly.
 // IMPORTANT: This runs AFTER body validation (moved to route handler).
 
-async function guestRateLimitMiddleware(req: any, res: any, next: any): Promise<void> {
-  const guestId: string | undefined = req.guestId;
+async function guestRateLimitMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const guestId: string | undefined = (req as GuestRequest).guestId;
   if (!guestId) {
     res.status(400).json({ error: "Missing guest session" });
     return;
@@ -520,8 +543,13 @@ async function loadTranscript(guestId: string): Promise<TranscriptEntry[]> {
 
 /**
  * Lua script for atomic transcript append with fixed-window TTL.
- * Appends entries to the JSON array, trims to max size, and only sets
- * TTL on first write (fixed-window semantics).
+ * 
+ * ATOMICITY: This entire script runs atomically in Redis (single-threaded).
+ * The read-modify-write (GET -> modify -> SET) is safe from races because
+ * Redis executes Lua scripts sequentially - no other command interleaves.
+ * 
+ * Fixed-window semantics: TTL is anchored on FIRST write only.
+ * Subsequent appends overwrite value WITHOUT touching TTL.
  */
 const TRANSCRIPT_APPEND_LUA = `
   local key = KEYS[1]
@@ -530,7 +558,7 @@ const TRANSCRIPT_APPEND_LUA = `
   local max_chars = tonumber(ARGV[3])
   local window_seconds = tonumber(ARGV[4])
 
-  -- Load existing transcript
+  -- Load existing transcript (single atomic GET)
   local raw = redis.call('GET', key)
   local existing = {}
   if raw then
@@ -559,13 +587,14 @@ const TRANSCRIPT_APPEND_LUA = `
     table.insert(bounded, 1, existing[i])
   end
 
-  -- Write back with fixed-window TTL
+  -- Write back with fixed-window TTL (atomic SET/SETEX)
   local serialized = cjson.encode(bounded)
-  if redis.call('EXISTS', key) == 0 then
-    -- Key is new — anchor TTL
+  local exists = redis.call('EXISTS', key)
+  if exists == 0 then
+    -- Key is new — anchor TTL (fixed window starts now)
     redis.call('SETEX', key, window_seconds, serialized)
   else
-    -- Key exists — overwrite value without touching TTL
+    -- Key exists — overwrite value WITHOUT touching TTL
     redis.call('SET', key, serialized)
   end
 
@@ -573,7 +602,7 @@ const TRANSCRIPT_APPEND_LUA = `
 `;
 
 // Register the transcript Lua command
-(redis as any).defineCommand("guestAppendTranscript", {
+redis.defineCommand("guestAppendTranscript", {
   numberOfKeys: 1,
   lua: TRANSCRIPT_APPEND_LUA,
 });
@@ -590,7 +619,7 @@ async function appendTranscript(guestId: string, entries: TranscriptEntry[]): Pr
     try {
       const key = transcriptKey(guestId);
       const windowSeconds = Math.floor(WINDOW_MS / 1000);
-      await (redis as any).guestAppendTranscript(
+      await redis.guestAppendTranscript(
         key,
         JSON.stringify(entries),
         MAX_TRANSCRIPT_MESSAGES,
@@ -607,26 +636,8 @@ async function appendTranscript(guestId: string, entries: TranscriptEntry[]): Pr
 }
 
 // ---------------------------------------------------------------------------
-// Guest system prompt — helpful assistant, no tools, gentle sign-in nudge
+// Guest system prompt — imported from prompts/guest-system-prompt.ts
 // ---------------------------------------------------------------------------
-
-const GUEST_SYSTEM_PROMPT = `You are a helpful AI assistant. You are knowledgeable, friendly, and thorough in your responses.
-
-CRITICAL: Always respond in the SAME LANGUAGE the user writes in. If they write in Arabic, respond in Arabic. If they write in English, respond in English. If they write in French, respond in French. Match their language exactly.
-
-IMPORTANT — Guest Mode limitations:
-- You do NOT have access to tools like email, calendar, saved documents, course materials, or any external integrations.
-- You do NOT have access to the user's personal data, history, or academic records.
-- You CAN answer general questions, help with writing, explain concepts, brainstorm ideas, and have conversations on any topic.
-
-When a user asks for something that requires tools or personal data (e.g., "send me my notes", "what's on my calendar", "email my professor", "summarize my course material"):
-- Do NOT say you can't do it in a cold or robotic way.
-- Instead, warmly acknowledge what they want, explain that this feature is available for signed-in users, and encourage them to create a free account to unlock it.
-- Keep it brief, natural, and helpful — like a friendly suggestion, not a hard wall.
-
-Example: "I'd love to help with that! To access your course materials and saved notes, you'll need to sign in — it's quick and free. Once you're in, I can pull up everything for you. Want me to help you get started?"
-
-Otherwise, just be a great assistant. Answer thoroughly and helpfully.`;
 
 // ---------------------------------------------------------------------------
 // GET /api/guest/status — Return current guest session status
@@ -638,7 +649,7 @@ router.get(
   guestStatusLimiter,
   guestCookieMiddleware,
   asyncHandler(async (req, res) => {
-    const guestId = (req as any).guestId;
+    const guestId = (req as GuestRequest).guestId;
     if (!guestId) {
       res.status(400).json({ error: "Missing guest session" });
       return;
@@ -668,7 +679,7 @@ router.post(
   // NOTE: guestRateLimitMiddleware is NOT in the middleware chain here.
   // We validate the body first, then increment quota inside the handler.
   asyncHandler(async (req, res) => {
-    const guestId: string | undefined = (req as any).guestId;
+    const guestId: string | undefined = (req as GuestRequest).guestId;
     if (!guestId) {
       res.status(400).json({ error: "Missing guest session" });
       return;
@@ -687,7 +698,7 @@ router.post(
     // --- Input moderation (fail-OPEN for guest availability) ---
     try {
       // Check if message contains image content
-      const hasImage = conversationHistory.some((msg: any) => {
+      const hasImage = conversationHistory.some((msg: { role: string; content: string | Array<{ type?: string; name?: string }> }) => {
         const content = msg.content;
         if (!content) return false;
         if (typeof content === "string") {
@@ -700,7 +711,7 @@ router.post(
         }
         if (Array.isArray(content)) {
           return content.some(
-            (p: any) => p.type === "image" || (p.type === "file" && p.name?.includes("image"))
+            (p) => p.type === "image" || (p.type === "file" && p.name?.includes("image"))
           );
         }
         return false;
@@ -790,6 +801,7 @@ router.post(
     let streamedAnyChunk = false;
     let fullResponse = "";
     let lastError: Error | null = null;
+    const MAX_RESPONSE_CHARS = 50_000;
 
     for (const currentModelId of guestCandidateModels) {
       try {
@@ -816,6 +828,14 @@ router.post(
           streamedAnyChunk = true;
           fullResponse += chunk;
           res.write(`0:${JSON.stringify(chunk)}\n`);
+          // Cap response to prevent memory exhaustion from pathological LLM output
+          if (fullResponse.length > MAX_RESPONSE_CHARS) {
+            log.warn("Guest response exceeded max length, aborting stream", {
+              length: fullResponse.length,
+              max: MAX_RESPONSE_CHARS,
+            });
+            break;
+          }
         }
 
         if (streamedAnyChunk) {

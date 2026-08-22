@@ -39,7 +39,7 @@ export async function detectUserIntent(
     const text = extractPlainText(lastUserMsg.content);
     if (!text) return DEFAULT_INTENT;
 
-    const result = await detectIntent(text, coreMessages, { userId });
+    const result = await detectIntent(text, coreMessages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : undefined })), { userId });
     ragLog.info("Intent detection result", {
       intent: result.intent,
       confidence: result.confidence,

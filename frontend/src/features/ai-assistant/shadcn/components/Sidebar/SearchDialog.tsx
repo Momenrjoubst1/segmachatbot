@@ -51,7 +51,8 @@ export const SearchDialog: FC = () => {
 
   // Drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLButtonElement || e.target.closest('button')) return;
+    const target = e.target as HTMLElement;
+    if (target instanceof HTMLInputElement || target instanceof HTMLButtonElement || target.closest('button')) return;
     if (!dialogRef.current) return;
 
     const rect = dialogRef.current.getBoundingClientRect();

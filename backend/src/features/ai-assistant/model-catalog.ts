@@ -1,0 +1,37 @@
+/**
+ * Model Catalog — Backend re-export of model context windows.
+ *
+ * Re-exports from the local model-context module so that imports
+ * from '../../features/ai-assistant/model-catalog.js' resolve correctly.
+ */
+
+export {
+  MODEL_CONTEXT_WINDOWS,
+  getModelContextWindow,
+  getModelInfo,
+  getKnownModelIds,
+  isKnownModel,
+  DEFAULT_CONTEXT_WINDOW,
+  type ModelContextInfo,
+} from '../../services/memory/model-context.js';
+
+import { MODEL_CONTEXT_WINDOWS } from '../../services/memory/model-context.js';
+import type { ModelContextInfo } from '../../services/memory/model-context.js';
+
+export type KnownModelId = keyof typeof MODEL_CONTEXT_WINDOWS;
+
+/**
+ * Re-exported alias matching the frontend `getContextWindow` signature.
+ */
+export function getContextWindow(modelId: string): number {
+  const model = MODEL_CONTEXT_WINDOWS[modelId] as ModelContextInfo | undefined;
+  return model?.contextWindow ?? 8_000;
+}
+
+/** Flat array of all known models (mirrors frontend MODELS constant) */
+export const MODELS: Array<{ value: string; contextWindow: number; label: string }> =
+  Object.values(MODEL_CONTEXT_WINDOWS).map((m) => ({
+    value: m.value,
+    contextWindow: m.contextWindow,
+    label: m.value,
+  }));

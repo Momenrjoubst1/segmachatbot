@@ -13,6 +13,14 @@ from botocore.config import Config
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
+from .constants import (
+    MAX_CHUNK_CHARS,
+    OVERLAP_CHARS,
+    VERTICAL_GAP_THRESHOLD,
+    FONT_SIZE_TOLERANCE,
+    MAX_PDF_PAGES,
+    SENTENCE_END,
+)
 from .extraction import extract_page
 from .figures import pair_figures
 from .curriculum import build_curriculum
@@ -24,15 +32,19 @@ app = FastAPI(title="PDF Processor", version="0.5.0")
 
 ALLOWED_DIRS = {tempfile.gettempdir(), "/tmp"}
 
-PROGRESS_TTL_SECONDS = 3600
+# Progress reporting
+PROGRESS_TTL_SECONDS = int(os.environ.get("PROGRESS_TTL_SECONDS", "3600"))
 PROGRESS_EVERY_N_PAGES = 5
 
-# Chunking constants
-MAX_CHUNK_CHARS = 1000
-OVERLAP_CHARS = 100
-VERTICAL_GAP_THRESHOLD = 20.0
-FONT_SIZE_TOLERANCE = 1.5
+# Chunking constants (shared with backend config)
+MAX_CHUNK_CHARS = int(os.environ.get("MAX_CHUNK_CHARS", "1000"))
+OVERLAP_CHARS = int(os.environ.get("OVERLAP_CHARS", "100"))
+VERTICAL_GAP_THRESHOLD = float(os.environ.get("VERTICAL_GAP_THRESHOLD", "20.0"))
+FONT_SIZE_TOLERANCE = float(os.environ.get("FONT_SIZE_TOLERANCE", "1.5"))
 SENTENCE_END = re.compile(r"(?<=[.!?؟])\s+")
+
+# PDF Processing
+MAX_PDF_PAGES = int(os.environ.get("MAX_PDF_PAGES", "800"))
 
 # Cloudflare R2 config
 R2_ACCOUNT_ID = os.environ.get("R2_ACCOUNT_ID", "")
@@ -201,9 +213,10 @@ def _validate_auth(token: str | None = None) -> None:
 def _validate_path(pdf_path: str) -> str:
     """Validate and resolve the PDF path to prevent path traversal."""
     resolved = os.path.realpath(pdf_path)
-    parent = os.path.dirname(resolved)
-    if parent not in ALLOWED_DIRS and not any(
-        resolved.startswith(d + os.sep) for d in ALLOWED_DIRS
+    # Validate the RESOLVED path (after symlink resolution) is within allowed dirs
+    # This prevents symlink attacks where a symlink in /tmp points outside
+    if not any(
+        resolved == d or resolved.startswith(d + os.sep) for d in ALLOWED_DIRS
     ):
         raise HTTPException(
             status_code=400,

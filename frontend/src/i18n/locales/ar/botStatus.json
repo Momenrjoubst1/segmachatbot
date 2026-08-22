@@ -1,0 +1,90 @@
+{
+  "status": {
+    "idle": "خامل",
+    "queued": "في الانتظار",
+    "thinking": "يفكّر",
+    "tool_running": "يشتغل",
+    "moderating": "يفحص المحتوى",
+    "compacting": "يضغط السياق",
+    "retrieving": "يبحث في المعرفة",
+    "streaming": "يولّد الإجابة",
+    "interrupted": "توقّف",
+    "retrying": "يعيد المحاولة",
+    "error": "صار في خطأ"
+  },
+  "steps": {
+    "summary_one": "خطوة واحدة",
+    "summary_other": "{{count}} خطوات",
+    "showAll": "عرض الكل",
+    "showLess": "إخفاء",
+    "kind": {
+      "moderation": "فحص المحتوى",
+      "intent_detection": "فهم الطلب",
+      "memory_context": "تحميل الذاكرة",
+      "rag_pipeline": "البحث في قاعدة المعرفة",
+      "fetch_user_courses": "تحميل مساقاتك",
+      "thread_resolution": "تحميل المحادثة",
+      "context_window": "تجهيز السياق",
+      "persist_message": "حفظ الرسالة",
+      "ui_fastpass": "تجهيز الواجهة",
+      "tool_call": "استخدام أداة",
+      "tool_result": "قراءة نتيجة الأداة",
+      "generation": "توليد الإجابة",
+      "error": "خطأ"
+    },
+    "tool": {
+      "web_search": {
+        "label": "البحث في الويب",
+        "completed_one": "بحث في مصدر واحد",
+        "completed_other": "بحث في {{count}} مصادر"
+      },
+      "calculator": {
+        "label": "حساب",
+        "completed_one": "حل خطوة واحدة",
+        "completed_other": "حل {{count}} خطوات"
+      },
+      "get_time": {
+        "label": "قراءة الوقت"
+      },
+      "get_weather": {
+        "label": "فحص الطقس"
+      },
+      "send_email": {
+        "label": "كتابة إيميل"
+      },
+      "create_calendar_event": {
+        "label": "إنشاء حدث"
+      },
+      "get_course_info": {
+        "label": "البحث عن معلومات المساق"
+      },
+      "generate_flashcards": {
+        "label": "توليد بطاقات مراجعة"
+      },
+      "code_executor": {
+        "label": "تشغيل كود"
+      },
+      "create_artifact": {
+        "label": "إنشاء محتوى"
+      }
+    }
+  },
+  "result": {
+    "docs_one": "مصدر واحد",
+    "docs_other": "{{count}} مصادر",
+    "pages_one": "صفحة واحدة",
+    "pages_other": "{{count}} صفحات",
+    "data_one": "عنصر واحد",
+    "data_other": "{{count}} عناصر",
+    "text_one": "سطر واحد",
+    "text_other": "{{count}} سطور"
+  },
+  "tokens_one": "كلمة واحدة",
+  "tokens_other": "{{count}} كلمات",
+  "retry": "إعادة المحاولة",
+  "regenerate": "إعادة التوليد",
+  "stop": "إيقاف",
+  "stopping": "يتم الإيقاف…",
+  "expand": "عرض التفاصيل",
+  "collapse": "إخفاء التفاصيل"
+}

@@ -5,7 +5,7 @@ const log = createLogger('memory-extractor');
 
 interface ExtractedFact {
   key: string;
-  value: any;
+  value: unknown;
   category: "preference" | "fact" | "academic" | "behavior";
 }
 

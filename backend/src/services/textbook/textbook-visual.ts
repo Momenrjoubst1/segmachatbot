@@ -48,7 +48,7 @@ interface FigureRow {
   bounding_box: Record<string, number> | null;
 }
 
-function parseJsonLoose(raw: string): any | null {
+function parseJsonLoose(raw: string): Record<string, unknown> | null {
   const cleaned = raw
     .replace(/^\s*```(?:json)?\s*/i, "")
     .replace(/\s*```\s*$/, "")
@@ -155,7 +155,7 @@ export async function enrichTextbookVisually(
     .eq("textbook_id", textbookId)
     .order("page_number");
 
-  const candidates = ((rawPages || []) as any[]).filter(
+  const candidates = (rawPages as unknown as Array<Record<string, unknown>> || []).filter(
     (p) =>
       !p.vlm_enriched &&
       p.thumbnail_key &&
@@ -178,7 +178,7 @@ export async function enrichTextbookVisually(
   let enrichedFigures = 0;
 
   for (let i = 0; i < candidates.length; i++) {
-    const page = candidates[i] as any;
+    const page = candidates[i] as { page_number: number; thumbnail_key?: string };
     try {
       // figures on this page (for captions + later zip)
       const { data: figRows } = await supabase
@@ -186,18 +186,18 @@ export async function enrichTextbookVisually(
         .select("id, figure_id, page_number, caption, bounding_box")
         .eq("textbook_id", textbookId)
         .eq("page_number", page.page_number);
-      const figures: FigureRow[] = (figRows || []).slice().sort((a: any, b: any) => {
+      const figures: FigureRow[] = (figRows || []).slice().sort((a, b) => {
         const ya = a.bounding_box?.y0 ?? 0;
         const yb = b.bounding_box?.y0 ?? 0;
         return ya - yb;
       });
 
-      const thumbBase64 = await downloadR2ObjectToBuffer(page.thumbnail_key);
+      const thumbBase64 = await downloadR2ObjectToBuffer(page.thumbnail_key!);
       if (!thumbBase64 || thumbBase64.length === 0) continue;
 
       const result = await describePage(
         thumbBase64.toString("base64"),
-        buildPrompt(page, language, figures.map((f) => f.caption))
+        buildPrompt(page as unknown as VisualPageRow, language, figures.map((f) => f.caption))
       );
       if (!result) continue;
 

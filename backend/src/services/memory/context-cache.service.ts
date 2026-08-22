@@ -19,7 +19,7 @@ interface CacheEntry {
   metadata?: Record<string, any>;
 }
 
-interface CacheStats {
+export interface CacheStats {
   hits: number;
   misses: number;
   totalSize: number;

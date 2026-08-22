@@ -21,24 +21,21 @@ from .models import (
     TextBlock,
 )
 
-# ── constants ───────────────────────────────────────────────────────────────
-
-HEADER_ZONE = 0.085      # top fraction of the page
-FOOTER_ZONE = 0.915      # bottom fraction starts here
-FOOTNOTE_ZONE = 0.88     # footnotes live lower than this
-CAPTION_MAX_DIST = 90.0  # pt between figure edge and its caption
-
-TOC_KEYWORDS = {"table of contents", "contents", "فهرس", "المحتويات", "المحتويات"}
-INDEX_KEYWORDS = {
-    "index", "الفهرس", "مسرد", "المصطلحات", "glossary",
-    "author index", "subject index", "فهرس المؤلفين", "فهرس المواضيع",
-}
-TOC_LINE_PATTERN = re.compile(r"\.{2,}\s*\d+")
-PAGE_NUM_PATTERN = re.compile(r"^[\s\-–—|]*\d{1,4}[\s\-–—|]*$")
-CAPTION_KEYWORDS = {
-    "figure", "fig.", "fig", "table", "chart", "diagram", "image", "photo", "map",
-    "شكل", "جدول", "رسم", "مخطط", "صورة", "خريطة", "بيان",
-}
+from .constants import (
+    HEADER_ZONE,
+    FOOTER_ZONE,
+    FOOTNOTE_ZONE,
+    CAPTION_MAX_DIST,
+    VERTICAL_GAP_THRESHOLD,
+    FONT_SIZE_TOLERANCE,
+    HEADER_ZONE,
+    FOOTER_ZONE,
+    CAPTION_KEYWORDS,
+    PAGE_NUM_PATTERN,
+    TOC_KEYWORDS,
+    INDEX_KEYWORDS,
+    TOC_LINE_PATTERN,
+)
 
 
 def _normalize_zone_text(text: str) -> str:

@@ -114,7 +114,7 @@ export function useAgenticAction<T extends keyof AgenticUIActionMap>(
         handler(lastAction as Extract<AgenticUIAction, { target: T }>);
       } catch (err) {
         console.warn(
-          `[AgenticUIBus] Handler error for ${target}/${(lastAction as any).action}:`,
+          `[AgenticUIBus] Handler error for ${target}/${String((lastAction as { action: string }).action)}:`,
           err,
         );
       }

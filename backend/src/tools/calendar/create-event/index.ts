@@ -92,7 +92,7 @@ registerTool("create_calendar_event", {
           return JSON.stringify({ status: "error", message: "Failed to create event in Google Calendar", error: errorText });
         }
 
-        const data = (await res.json()) as any;
+        const data = (await res.json()) as { id?: string; htmlLink?: string };
         return JSON.stringify({ status: "success", provider: "google", eventId: data.id, htmlLink: data.htmlLink, savedToDB: !!userId });
       }
 

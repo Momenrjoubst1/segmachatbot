@@ -13,10 +13,9 @@
  */
 
 import { createLogger } from "../../utils/logger.js";
+import { MAX_MESSAGE_CHARS } from "../../config/constants.js";
 
 const log = createLogger("moderation");
-
-const MAX_MESSAGE_CHARS = 32_000;
 
 // ==========================================
 // Types
@@ -55,17 +54,7 @@ interface SupabaseModerationResponse {
 // Internal helpers
 // ==========================================
 
-/** Extracts plain text from a CoreMessage's content (string | parts[]). */
-function extractText(content: CoreMessage['content']): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter(p => p.type === 'text')
-      .map(p => p.text ?? '')
-      .join(' ');
-  }
-  return '';
-}
+import { extractText } from '../../utils/message-utils/extract-text.js';
 
 /** Lazy-imports the Supabase client to avoid circular deps. */
 async function getSupabase(): Promise<typeof import("../rag/rag-supabase-client.js").supabase> {

@@ -34,7 +34,7 @@ async function sendViaProvider(
   bcc: string[]
 ): Promise<{ provider: string; success: boolean; error?: string }> {
   // Lazy-import to avoid circular deps
-  const { sendEmailViaProvider } = await import("./sender.js") as any;
+  const { sendEmailViaProvider } = (await import("./sender.js")) as { sendEmailViaProvider?: (...args: unknown[]) => Promise<{ provider: string; success: boolean; error?: string }> };
   if (typeof sendEmailViaProvider !== "function") {
     return { provider: "none", success: false, error: "sendEmailViaProvider not exported" };
   }
@@ -84,7 +84,7 @@ async function processTick(): Promise<void> {
 // ──────────────────────────────────────────────────────────────────────────────
 // Send a scheduled email
 // ──────────────────────────────────────────────────────────────────────────────
-async function processScheduledEmail(schedule: any): Promise<void> {
+async function processScheduledEmail(schedule: { id: string; user_id: string; to_address: string; subject: string; body?: string; html?: string; cc_addresses?: string[]; bcc_addresses?: string[]; attempts?: number }): Promise<void> {
   const { id, user_id, to_address, subject, body, html, cc_addresses, bcc_addresses, attempts } = schedule;
 
   // Mark as processing (optimistic lock)
@@ -103,7 +103,7 @@ async function processScheduledEmail(schedule: any): Promise<void> {
     const result = await sendViaProvider(
       to_address,
       subject,
-      body,
+      body ?? "",
       html,
       cc_addresses ?? [],
       bcc_addresses ?? []
@@ -143,7 +143,7 @@ async function processScheduledEmail(schedule: any): Promise<void> {
 // ──────────────────────────────────────────────────────────────────────────────
 // Retry a failed email_job
 // ──────────────────────────────────────────────────────────────────────────────
-async function processRetryJob(job: any): Promise<void> {
+async function processRetryJob(job: { id: string; user_id: string; to_address: string; subject: string; body?: string; html?: string; cc_addresses?: string[]; bcc_addresses?: string[]; attempts?: number }): Promise<void> {
   const { id, user_id, to_address, subject, body, html, cc_addresses, bcc_addresses, attempts } = job;
 
   // Optimistic lock
@@ -162,7 +162,7 @@ async function processRetryJob(job: any): Promise<void> {
     const result = await sendViaProvider(
       to_address,
       subject,
-      body,
+      body ?? "",
       html,
       cc_addresses ?? [],
       bcc_addresses ?? []

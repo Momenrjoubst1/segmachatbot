@@ -157,7 +157,7 @@ router.post(
       return res.status(503).json({ error: "No translation providers configured" });
     }
 
-    let lastError: any = null;
+    let lastError: unknown = null;
 
     for (const step of chain) {
       try {
@@ -200,11 +200,11 @@ router.post(
     }
 
     // If we reach here, all providers in the chain failed
-    trLog.error("All providers in fallback chain failed", { lastError: lastError?.message });
+    trLog.error("All providers in fallback chain failed", { lastError: lastError instanceof Error ? lastError.message : String(lastError) });
     return res.status(500).json({
       translated: text,
       error: "Translation failed across all available providers",
-      details: lastError?.message || String(lastError)
+      details: lastError instanceof Error ? lastError.message : String(lastError)
     });
   })
 );

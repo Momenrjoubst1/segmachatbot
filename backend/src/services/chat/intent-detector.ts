@@ -61,14 +61,16 @@ const TOOL_KEYWORDS_EN = [
 const SMALL_TALK_PATTERNS_AR = [
   /^(مرحبا?|أهلا?|هلا|سلام|السلام عليكم)[\s!!.،]*$/u,
   /^(شكرا?|شكراً|مشكور|يعطيك العافية)[\s!!.،]*$/u,
-  /^(كيف حالك|كيفك|شلونك|شخبارك|ايش أخبارك)[\s?!!.،]*$/u,
+  // Only match standalone greetings — require end of string or punctuation only
+  /^(كيف حالك|كيفك|شلونك|شخبارك|ايش أخبارك)([\s!.،?؟]*|[؟!]?)$/u,
   /^(أهلا وسهلا|حياك الله)[\s!!.،]*$/u,
 ] as const;
 
 const SMALL_TALK_PATTERNS_EN = [
   /^(hi|hello|hey|greetings|good\s*(morning|afternoon|evening))[\s!!.]*$/i,
   /^(thanks|thank\s*you|thx|ty|appreciate\s*it)[\s!!.]*$/i,
-  /^(how\s*are\s*you|how'?s\s*it\s*going|what'?s\s*up|sup)[\s?!?.]*$/i,
+  // Only match standalone greetings
+  /^(how\s*are\s*you|how'?s\s*it\s*going|what'?s\s*up|sup)([\s!.?]*|[?!]?)$/i,
   /^(bye|goodbye|see\s*ya|later|take\s*care)[\s!!.]*$/i,
 ] as const;
 
@@ -167,7 +169,7 @@ function isQuestion(text: string): boolean {
 
 export async function detectIntent(
   userMessage: string,
-  recentMessages: any[],
+  recentMessages: { role: string; content?: string }[],
   _options?: { userId?: string },
 ): Promise<IntentResult> {
   const msg = (userMessage ?? "").trim();

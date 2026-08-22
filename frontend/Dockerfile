@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:20.11.1-alpine3.19 AS base
 
 # Frontend build stage
 FROM base AS frontend-builder
@@ -6,10 +6,11 @@ WORKDIR /app/frontend
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+RUN npm run typecheck
 RUN npm run build
 
 # Frontend production stage with nginx
-FROM nginx:alpine AS frontend-production
+FROM nginx:1.25.4-alpine AS frontend-production
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
 
 # Nginx config for SPA

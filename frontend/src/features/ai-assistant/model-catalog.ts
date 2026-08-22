@@ -20,7 +20,51 @@ export const MODELS = [
   },
 
   // ==========================================
-  // 1. Azure OpenAI Models (ChatGPT 5.4)
+  // 1. Google Gemini (Direct API - Free Tier)
+  // ==========================================
+  {
+    name: "Gemini 3.7 Flash (Google - Free)",
+    value: "gemini-3.7-flash",
+    icon: "/icons/google.svg",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "google" as const,
+  },
+  {
+    name: "Gemini 2.5 Flash (Google - Free)",
+    value: "gemini-2.5-flash",
+    icon: "/icons/google.svg",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "google" as const,
+  },
+  {
+    name: "Gemini 2.5 Pro (Google)",
+    value: "gemini-2.5-pro",
+    icon: "/icons/google.svg",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "google" as const,
+  },
+  {
+    name: "Gemini 3 Flash (Google - Latest)",
+    value: "gemini-3-flash",
+    icon: "/icons/google.svg",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "google" as const,
+  },
+  {
+    name: "Gemini 3.1 Flash-Lite (Google)",
+    value: "gemini-3.1-flash-lite",
+    icon: "/icons/google.svg",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "google" as const,
+  },
+
+  // ==========================================
+  // 2. Azure OpenAI Models (ChatGPT 5.4)
   // ==========================================
   {
     name: "ChatGPT 5.4 (Azure OpenAI)",
@@ -32,7 +76,7 @@ export const MODELS = [
   },
 
   // ==========================================
-  // 2. GitHub Models (Free via GITHUB_TOKEN)
+  // 3. GitHub Models (Free via GITHUB_TOKEN)
   // ==========================================
   {
     name: "GPT-4o Mini (GitHub)",
@@ -52,27 +96,67 @@ export const MODELS = [
   },
 
   // ==========================================
-  // 3. Groq Models (Free & Fast via GROQ_API_KEY)
+  // 4. Groq Models (Free & Fast via GROQ_API_KEY)
   // ==========================================
   {
-    name: "Llama 3.3 70B (Groq)",
+    name: "Llama 3.3 70B (Groq - Fast)",
     value: "llama-3.3-70b-versatile",
     icon: "/icons/meta.svg",
     disabled: false,
-    contextWindow: 128_000,
+    contextWindow: 131_072,
     provider: "groq" as const,
   },
   {
-    name: "Llama 3.1 8B (Groq - Fast)",
+    name: "Llama 3.1 8B (Groq - Fastest)",
     value: "llama-3.1-8b-instant",
     icon: "/icons/meta.svg",
     disabled: false,
-    contextWindow: 128_000,
+    contextWindow: 131_072,
+    provider: "groq" as const,
+  },
+  {
+    name: "GPT-OSS 120B (Groq)",
+    value: "openai/gpt-oss-120b",
+    icon: "/icons/openai.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "groq" as const,
+  },
+  {
+    name: "GPT-OSS 20B (Groq)",
+    value: "openai/gpt-oss-20b",
+    icon: "/icons/openai.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "groq" as const,
+  },
+  {
+    name: "Qwen 3 32B (Groq)",
+    value: "qwen/qwen3-32b",
+    icon: "/icons/qwen.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "groq" as const,
+  },
+  {
+    name: "Llama 4 Scout 17B (Groq)",
+    value: "meta-llama/llama-4-scout-17b-16e-instruct",
+    icon: "/icons/meta.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "groq" as const,
+  },
+  {
+    name: "Mixtral 8x7B (Groq)",
+    value: "mixtral-8x7b-32768",
+    icon: "/icons/mistral.svg",
+    disabled: false,
+    contextWindow: 32_768,
     provider: "groq" as const,
   },
 
   // ==========================================
-  // 4. OpenRouter Models (Free Tier via OPENROUTER_API_KEY)
+  // 5. OpenRouter Models (Free Tier via OPENROUTER_API_KEY)
   // ==========================================
   {
     name: "Gemini 2.0 Flash (Free)",
@@ -90,9 +174,89 @@ export const MODELS = [
     contextWindow: 32_000,
     provider: "openrouter" as const,
   },
+  {
+    name: "Nemotron 3 Ultra 550B (Free)",
+    value: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    icon: "/icons/nvidia.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "Nemotron 3.5 Lightning 30B (Free)",
+    value: "nvidia/nemotron-3.5-lightning-30b-a3b:free",
+    icon: "/icons/nvidia.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "Nemotron 3 Super 49B (Free)",
+    value: "nvidia/nemotron-3-super-49b-a49b:free",
+    icon: "/icons/nvidia.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "Nemotron 3 Nano 30B (Free)",
+    value: "nvidia/nemotron-3-nano-30b-a3b:free",
+    icon: "/icons/nvidia.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "Nemotron Nano 9B V2 (Free)",
+    value: "nvidia/nemotron-nano-9b-v2:free",
+    icon: "/icons/nvidia.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "Nemotron Nano 12B VL (Free)",
+    value: "nvidia/nemotron-nano-12b-2-vl:free",
+    icon: "/icons/nvidia.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "Gemma 4 26B (Free)",
+    value: "google/gemma-4-26b-a4b:free",
+    icon: "/icons/google.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "GPT-OSS 20B (Free)",
+    value: "openai/gpt-oss-20b:free",
+    icon: "/icons/openai.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "Laguna S 2.1 (Free)",
+    value: "poolside/laguna-s-2.1:free",
+    icon: "/icons/poolside.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "LFM2.5 2.6B (Free)",
+    value: "liquid/lfm2.5-2.6b:free",
+    icon: "/icons/liquid.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "openrouter" as const,
+  },
 
   // ==========================================
-  // 5. Fireworks Models (via FIREWORKS_API_KEY)
+  // 6. Fireworks Models (via FIREWORKS_API_KEY)
   // ==========================================
   {
     name: "Gemma 4 31B IT (Fireworks)",
@@ -104,7 +268,7 @@ export const MODELS = [
   },
 
   // ==========================================
-  // 6. Novita.ai Models (via NOVITA_API_KEY)
+  // 7. Novita.ai Models (via NOVITA_API_KEY)
   // ==========================================
   {
     name: "Ling 3.0 Tiny (Novita)",
@@ -113,6 +277,78 @@ export const MODELS = [
     disabled: false,
     contextWindow: 262_144,
     provider: "novita" as const,
+  },
+
+  // ==========================================
+  // 8. NVIDIA NIM Models (via NVIDIA_API_KEY)
+  // ==========================================
+  {
+    name: "Nemotron 70B (NVIDIA NIM)",
+    value: "nvidia/llama-3.1-nemotron-70b-instruct",
+    icon: "/icons/nvidia.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "nvidia" as const,
+  },
+  {
+    name: "Llama 3.3 70B (NVIDIA NIM)",
+    value: "nvidia/llama-3.3-70b-instruct",
+    icon: "/icons/nvidia.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "nvidia" as const,
+  },
+  {
+    name: "DeepSeek R1 (NVIDIA NIM)",
+    value: "nvidia/deepseek-r1",
+    icon: "/icons/nvidia.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "nvidia" as const,
+  },
+  {
+    name: "Llama 3.1 8B (NVIDIA NIM)",
+    value: "meta/llama-3.1-8b-instruct",
+    icon: "/icons/nvidia.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "nvidia" as const,
+  },
+  {
+    name: "Llama 3.1 70B (NVIDIA NIM)",
+    value: "meta/llama-3.1-70b-instruct",
+    icon: "/icons/nvidia.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "nvidia" as const,
+  },
+  {
+    name: "Qwen 2.5 72B (NVIDIA NIM)",
+    value: "qwen/qwen2.5-72b-instruct",
+    icon: "/icons/nvidia.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "nvidia" as const,
+  },
+
+  // ==========================================
+  // 9. Cerebras Models (via CEREBRAS_API_KEY)
+  // ==========================================
+  {
+    name: "Llama 3.3 70B (Cerebras)",
+    value: "llama-3.3-70b",
+    icon: "/icons/cerebras.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "cerebras" as const,
+  },
+  {
+    name: "Llama 3.1 8B (Cerebras - Fast)",
+    value: "llama-3.1-8b",
+    icon: "/icons/cerebras.svg",
+    disabled: false,
+    contextWindow: 131_072,
+    provider: "cerebras" as const,
   },
 ] as const;
 

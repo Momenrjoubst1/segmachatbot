@@ -2,6 +2,8 @@
  * Cross-Session Recall Service
  * نظام التذكر عبر المحادثات - مستوحى من Gemini
  * يربط المحادثات القديمة بالجديدة
+ * 
+ * Enhanced with semantic search via message_embeddings table
  */
 
 import { supabase } from '../../config/supabase.config.js';
@@ -9,6 +11,7 @@ import { MemoryConfig } from '../../config/memory.config.js';
 import { logger } from '../../utils/logger.js';
 import { generateEmbedding, generateEmbeddings } from '../rag/embedding-service.js';
 import { cosineSimilarity } from 'ai';
+import { semanticCrossSession } from './semantic-cross-session.service.js';
 
 interface ChatSession {
   id: string;
@@ -68,7 +71,7 @@ class CrossSessionService {
   }
 
   /**
-   * البحث في المحادثات السابقة
+   * البحث في المحادثات السابقة - يستخدم البحث الدلالي المحسن
    */
   async searchPreviousChats(
     userId: string,
@@ -80,46 +83,28 @@ class CrossSessionService {
     }
 
     try {
-      // الحصول على المحادثات السابقة
-      const sessions = await this.getRecentSessions(userId, currentSessionId);
-
-      if (sessions.length === 0) {
-        return [];
-      }
-
-      // البحث في كل محادثة
-      const results: CrossSessionResult[] = [];
-
-      for (const session of sessions) {
-        const relevantMessages = await this.searchInSession(
-          session.id,
-          query,
-          MemoryConfig.crossSession.resultsPerChat
-        );
-
-        if (relevantMessages.length > 0) {
-          results.push({
-            sessionId: session.id,
-            sessionTitle: session.title || 'محادثة سابقة',
-            messages: relevantMessages,
-            relevanceScore: this.calculateRelevance(query, relevantMessages),
-            timestamp: session.updated_at,
-          });
+      // Use the new semantic cross-session service for vector-based search
+      const results = await semanticCrossSession.searchPreviousChats(
+        userId,
+        query,
+        currentSessionId,
+        {
+          limit: 5,
+          minSimilarity: 0.65,
+          maxAgeDays: MemoryConfig.crossSession.maxChatAgeDays,
+          includeTextSearch: true,
         }
-      }
-
-      // ترتيب حسب الصلة
-      results.sort((a, b) => b.relevanceScore - a.relevanceScore);
+      );
 
       if (MemoryConfig.debug.enabled && results.length > 0) {
-        logger.info('[Cross-Session] Found relevant previous chats', {
+        logger.info('[Cross-Session] Found relevant previous chats (semantic)', {
           userId,
           count: results.length,
           topScore: results[0]?.relevanceScore,
         });
       }
 
-      return results.slice(0, 5); // أفضل 5 نتائج
+      return results;
     } catch (error) {
       logger.error('[Cross-Session] Error searching previous chats', { error, userId });
       return [];
@@ -441,6 +426,30 @@ class CrossSessionService {
       logger.error('[Cross-Session] Error linking sessions', { error });
       return false;
     }
+  }
+
+  /**
+   * Index a message for future semantic search
+   * Call after saving a message to chat_messages
+   */
+  async indexMessageForSearch(
+    messageId: string,
+    sessionId: string,
+    userId: string,
+    content: string,
+    role: string
+  ): Promise<void> {
+    await semanticCrossSession.indexMessage(messageId, sessionId, userId, content, role);
+  }
+
+  /**
+   * Batch index messages (for backfill)
+   */
+  async batchIndexMessages(
+    userId: string,
+    messages: Array<{ id: string; session_id: string; content: string; role: string; created_at: string }>
+  ): Promise<{ indexed: number; failed: number }> {
+    return semanticCrossSession.batchIndexMessages(userId, messages);
   }
 }
 

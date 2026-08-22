@@ -1,0 +1,90 @@
+{
+  "status": {
+    "idle": "Idle",
+    "queued": "Queued",
+    "thinking": "Thinking",
+    "tool_running": "Working",
+    "moderating": "Checking content",
+    "compacting": "Compacting context",
+    "retrieving": "Searching knowledge",
+    "streaming": "Generating",
+    "interrupted": "Stopped",
+    "retrying": "Retrying",
+    "error": "Something went wrong"
+  },
+  "steps": {
+    "summary_one": "{{count}} step",
+    "summary_other": "{{count}} steps",
+    "showAll": "Show all",
+    "showLess": "Show less",
+    "kind": {
+      "moderation": "Checking content",
+      "intent_detection": "Understanding request",
+      "memory_context": "Loading memory",
+      "rag_pipeline": "Searching knowledge base",
+      "fetch_user_courses": "Loading your courses",
+      "thread_resolution": "Loading conversation",
+      "context_window": "Preparing context",
+      "persist_message": "Saving message",
+      "ui_fastpass": "Preparing interface",
+      "tool_call": "Using a tool",
+      "tool_result": "Reading tool result",
+      "generation": "Generating response",
+      "error": "Error"
+    },
+    "tool": {
+      "web_search": {
+        "label": "Searching the web",
+        "completed_one": "Searched {{count}} source",
+        "completed_other": "Searched {{count}} sources"
+      },
+      "calculator": {
+        "label": "Calculating",
+        "completed_one": "Solved {{count}} step",
+        "completed_other": "Solved {{count}} steps"
+      },
+      "get_time": {
+        "label": "Checking the time"
+      },
+      "get_weather": {
+        "label": "Checking weather"
+      },
+      "send_email": {
+        "label": "Composing email"
+      },
+      "create_calendar_event": {
+        "label": "Creating event"
+      },
+      "get_course_info": {
+        "label": "Looking up course info"
+      },
+      "generate_flashcards": {
+        "label": "Generating flashcards"
+      },
+      "code_executor": {
+        "label": "Running code"
+      },
+      "create_artifact": {
+        "label": "Creating content"
+      }
+    }
+  },
+  "result": {
+    "docs_one": "{{count}} source",
+    "docs_other": "{{count}} sources",
+    "pages_one": "{{count}} page",
+    "pages_other": "{{count}} pages",
+    "data_one": "{{count}} item",
+    "data_other": "{{count}} items",
+    "text_one": "{{count}} line",
+    "text_other": "{{count}} lines"
+  },
+  "tokens_one": "{{count}} token",
+  "tokens_other": "{{count}} tokens",
+  "retry": "Retry",
+  "regenerate": "Regenerate",
+  "stop": "Stop",
+  "stopping": "Stopping…",
+  "expand": "Show details",
+  "collapse": "Hide details"
+}

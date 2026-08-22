@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabaseClient';
 
-const FALLBACK_EMAILS = new Set(['momenrjoub77@gmail.com']);
+const FALLBACK_EMAILS = new Set(
+  import.meta.env.VITE_VERIFIED_EMAILS?.split(',').filter(Boolean) ?? []
+);
 const VERIFIED_CACHE = new Map<string, boolean>();
 const LS_KEY = 'sk_verified_ids_v2';
 

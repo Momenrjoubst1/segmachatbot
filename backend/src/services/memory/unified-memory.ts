@@ -18,7 +18,7 @@
 import { createLogger } from '../../utils/logger.js';
 import { MemoryConfig } from '../../config/memory.config.js';
 import { buildMemoryContext, tryExtractAndStore, resetExtractionCounter } from './memory-context-builder.js';
-import { contextCache } from './context-cache.service.js';
+import { contextCache, type CacheStats } from './context-cache.service.js';
 import { enhancedMemory } from './enhanced-memory.service.js';
 import { crossSession } from './cross-session.service.js';
 import { containsDuplicate, deduplicateMemoryContexts } from './text-deduplicator.js';
@@ -411,8 +411,8 @@ class UnifiedMemoryManager {
    * Get memory statistics
    */
   async getStats(_userId?: string): Promise<{
-    cacheStats: any;
-    config: any;
+    cacheStats: CacheStats;
+    config: Record<string, unknown>;
   }> {
     const cacheStats = await contextCache.getStats();
     
@@ -490,20 +490,34 @@ class UnifiedMemoryManager {
       }
 
       // --- 3. Clean old chat_sessions (source of cross-session data) ---
+      // Only delete truly empty sessions (no messages) older than TTL
+      // Preserve sessions with messages even if old — user may want history
       const crossSessionCutoff = new Date(now - crossSessionTtlMs).toISOString();
-      const { data: oldSessions, error: oldSessionsError } = await supabase
-        .from('chat_sessions')
-        .delete()
-        .lt('created_at', crossSessionCutoff)
-        .select('id');
 
-      if (!oldSessionsError && oldSessions) {
-        cleaned += oldSessions.length;
-        if (oldSessions.length > 0) {
-          log.info('Cleaned old chat_sessions', { count: oldSessions.length });
+      // First, find old sessions that have NO messages
+      const { data: emptyOldSessions, error: emptySessionsError } = await supabase
+        .from('chat_sessions')
+        .select('id')
+        .lt('created_at', crossSessionCutoff)
+        .not('id', 'in', `(
+          SELECT DISTINCT session_id FROM chat_messages
+        )`);
+
+      if (!emptySessionsError && emptyOldSessions && emptyOldSessions.length > 0) {
+        const emptyIds = emptyOldSessions.map(s => s.id);
+        const { error: deleteError } = await supabase
+          .from('chat_sessions')
+          .delete()
+          .in('id', emptyIds);
+
+        if (!deleteError) {
+          cleaned += emptyIds.length;
+          log.info('Cleaned old empty chat_sessions', { count: emptyIds.length });
+        } else {
+          log.warn('Failed to clean old empty chat_sessions', { error: deleteError.message });
         }
-      } else if (oldSessionsError) {
-        log.warn('Failed to clean old chat_sessions', { error: oldSessionsError.message });
+      } else if (emptySessionsError) {
+        log.warn('Failed to find old empty chat_sessions', { error: emptySessionsError.message });
       }
     } catch (err) {
       log.warn('Memory cleanup failed', { error: (err as Error)?.message });

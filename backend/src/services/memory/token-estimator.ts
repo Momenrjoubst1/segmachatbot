@@ -8,6 +8,8 @@
 
 import { getEncoding, Tiktoken } from 'js-tiktoken';
 import { createLogger } from '../../utils/logger.js';
+import { MEMORY_CONFIG } from '../../config/constants.js';
+import { getModelContextWindow, getModelInfo, MODEL_CONTEXT_WINDOWS } from './model-context.js';
 
 const log = createLogger('token-estimator');
 
@@ -103,7 +105,7 @@ export function estimateTokens(text: string): number {
       return enc.encode(text).length;
     } catch (e) {
       // If encoding fails for any reason, fall back to heuristic
-      if (process.env.MEMORY_DEBUG === 'true') {
+if (MEMORY_CONFIG.debug.enabled) {
         log.warn('tiktoken encode failed, using heuristic fallback', { error: String(e) });
       }
       return estimateTokensHeuristic(text);
@@ -176,7 +178,7 @@ export function estimateConversationTokens(messages: Array<{
 }
 
 /**
- * Context Window Manager
+ * Context Window Manager - Model Aware
  * Decides when to trigger summarization based on actual token usage
  */
 export interface ContextWindowStatus {
@@ -186,6 +188,8 @@ export interface ContextWindowStatus {
   shouldSummarize: boolean;
   urgency: 'ok' | 'warning' | 'critical';
   recommendation: 'keep_all' | 'summarize_middle' | 'aggressive_trim';
+  modelId: string;
+  modelName: string;
 }
 
 export function getContextWindowStatus(
@@ -195,8 +199,10 @@ export function getContextWindowStatus(
     toolCalls?: unknown[];
     toolInvocations?: unknown[];
   }>,
-  maxTokens = parseInt(process.env.MAX_CONTEXT_TOKENS || '8000')
+  modelId: string = 'gpt-4o-mini'
 ): ContextWindowStatus {
+  const maxTokens = getModelContextWindow(modelId);
+  const modelInfo = getModelInfo(modelId);
   const totalTokens = estimateConversationTokens(messages);
   const usagePercent = Math.round((totalTokens / maxTokens) * 100);
   
@@ -218,7 +224,7 @@ export function getContextWindowStatus(
     recommendation = 'keep_all';
   }
   
-  if (process.env.MEMORY_DEBUG === 'true') {
+  if (MEMORY_CONFIG.debug.enabled) {
     log.info('Context window status', {
       messageCount: messages.length,
       totalTokens,
@@ -226,10 +232,12 @@ export function getContextWindowStatus(
       usagePercent,
       urgency,
       recommendation,
+      modelId,
+      modelName: modelInfo?.value,
     });
   }
   
-  return { totalTokens, maxTokens, usagePercent, shouldSummarize, urgency, recommendation };
+  return { totalTokens, maxTokens, usagePercent, shouldSummarize, urgency, recommendation, modelId, modelName: modelInfo?.value ?? modelId };
 }
 
 // ==========================================
@@ -397,10 +405,13 @@ export function calculateTrimPlan(
     is_pinned?: boolean;
     id?: string;
   }>,
-  targetTokens: number = parseInt(process.env.MAX_CONTEXT_TOKENS || '8000') * 0.7, // Target 70% usage
+  modelId: string = 'gpt-4o-mini',
+  targetTokensRatio: number = 0.7, // Target 70% usage
   keepFirstMin = parseInt(process.env.MEMORY_KEEP_FIRST || '5'),
   _keepLastMin = parseInt(process.env.MEMORY_KEEP_LAST || '10'),
 ): TrimPlan {
+  const maxTokens = getModelContextWindow(modelId);
+  const targetTokens = Math.floor(maxTokens * targetTokensRatio);
   const totalTokens = estimateConversationTokens(messages);
   
   if (totalTokens <= targetTokens) {
@@ -503,6 +514,12 @@ export function calculateTrimPlan(
 // ==========================================
 // Constants
 // ==========================================
+
+// ==========================================
+// Re-exports from model-context
+// ==========================================
+
+export { getModelContextWindow, getModelInfo, MODEL_CONTEXT_WINDOWS } from './model-context.js';
 
 // Estimated token cost for an image (varies by model/resolution, this is conservative)
 const IMAGE_TOKEN_COST = 85; // ~85 tokens for a typical image in GPT-4o

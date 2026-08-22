@@ -1,4 +1,5 @@
 import { createLogger } from '../../utils/logger.js';
+import { RERANKER_CONFIG } from '../../config/constants.js';
 
 const log = createLogger('rerank');
 
@@ -88,11 +89,24 @@ const tokenOverlapReranker: RerankerProvider = {
 
 let cohereReranker: RerankerProvider | null = null;
 
+/**
+ * Pre-warm the Cohere reranker at startup to avoid cold-start latency
+ * on the first request. Safe to call multiple times (no-op if already init'd).
+ */
+export async function warmUpReranker(): Promise<void> {
+  if (!cohereReranker) {
+    cohereReranker = await createCohereReranker();
+    if (cohereReranker) {
+      log.info("[Rerank] Cohere reranker pre-warmed at startup");
+    }
+  }
+}
+
 async function createCohereReranker(): Promise<RerankerProvider | null> {
-  const apiKey = process.env.COHERE_API_KEY;
+  const apiKey = RERANKER_CONFIG.COHERE_API_KEY;
   if (!apiKey) return null;
 
-  const model = process.env.COHERE_RERANK_MODEL || "rerank-multilingual-v3.0";
+  const model = RERANKER_CONFIG.COHERE_RERANK_MODEL;
 
   return {
     name: "cohere",
@@ -146,7 +160,7 @@ export async function rerankDocuments(
     // Cohere was pre-initialised — use it
     rerankerToUse = cohereReranker;
   } else {
-    const envPref = process.env.RAG_RERANKER_PROVIDER?.toLowerCase();
+    const envPref = RERANKER_CONFIG.RAG_RERANKER_PROVIDER?.toLowerCase();
     if (envPref === "cohere") {
       // Caller requested Cohere but it isn't set up — try once more
       const freshCohere = await createCohereReranker();

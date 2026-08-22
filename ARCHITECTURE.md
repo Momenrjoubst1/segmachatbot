@@ -343,7 +343,7 @@ The memory system consists of three tiers:
 
 ### Docker Deployment
 - Docker Compose for local development
-- Separate containers for frontend, backend, Redis
+- Separate containers for frontend, backend, pdf-processor, Redis
 - Environment configuration via .env files
 - Health check endpoints for monitoring
 

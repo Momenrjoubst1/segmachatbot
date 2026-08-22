@@ -1,0 +1,32 @@
+{
+  "title": "Keyboard Shortcuts",
+  "description": "Boost your productivity with these keyboard shortcuts.",
+  "openHint": "Press",
+  "openHintSuffix": "anytime to open this dialog.",
+  "close": "Close",
+  "categories": {
+    "general": "General",
+    "navigation": "Navigation",
+    "actions": "Actions",
+    "composer": "Composer"
+  },
+  "shortcuts": {
+    "showShortcuts": "Show keyboard shortcuts",
+    "newChat": "New chat",
+    "newChatAlt": "New chat (alternate)",
+    "focusComposer": "Focus composer",
+    "stopGeneration": "Stop generation / Close modals",
+    "previousChat": "Previous chat",
+    "nextChat": "Next chat",
+    "prevMessage": "Previous message",
+    "nextMessage": "Next message",
+    "copyLastMessage": "Copy last assistant message",
+    "toggleSidebar": "Toggle sidebar",
+    "toggleArtifacts": "Toggle artifacts panel",
+    "toggleEmail": "Toggle email history",
+    "toggleCalendar": "Toggle calendar view",
+    "sendMessage": "Send message",
+    "newLine": "New line",
+    "sendMessageAlt": "Send message (alternate)"
+  }
+}

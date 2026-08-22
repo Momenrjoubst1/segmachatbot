@@ -23,3 +23,7 @@ frontend-dev-error.log
 # local tooling / python env
 .zcode/
 pdf-processor/venv/
+
+# local tooling state
+.opencode/
+.freebuff/

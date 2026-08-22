@@ -22,7 +22,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { cn } from "@/lib/cn";
 
@@ -338,18 +337,13 @@ export const ComposerAddAttachment: FC = () => {
 
   return (
     <ComposerPrimitive.AddAttachment asChild>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            className="state-layer aui-composer-add-attachment inline-flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground p-1 font-semibold text-xs"
-            aria-label="Add Attachment"
-          >
-            <PlusIcon className="aui-attachment-add-icon size-5 stroke-[1.5px]" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">Add Attachment</TooltipContent>
-      </Tooltip>
+      <button
+        type="button"
+        className="state-layer aui-composer-add-attachment inline-flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground p-1 font-semibold text-xs"
+        aria-label="Add Attachment"
+      >
+        <PlusIcon className="aui-attachment-add-icon size-5 stroke-[1.5px]" />
+      </button>
     </ComposerPrimitive.AddAttachment>
   );
 };

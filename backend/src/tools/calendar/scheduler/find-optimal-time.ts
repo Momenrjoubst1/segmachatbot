@@ -14,7 +14,7 @@ async function checkConflicts(
   startTime: Date,
   endTime: Date,
   excludeEventId?: string
-): Promise<any[]> {
+): Promise<Array<{ id: string; title: string; start_time: string; end_time: string; provider?: string }>> {
   // Check local database
   let query = supabase
     .from("user_calendar_events")
@@ -30,7 +30,7 @@ async function checkConflicts(
   const { data: localConflicts } = await query;
 
   // Try Google Calendar
-  let googleConflicts: any[] = [];
+  let googleConflicts: Array<{ id: string; title: string; start_time: string; end_time: string; provider?: string }> = [];
   try {
     const settingsQuery = await supabase
       .from("user_calendar_settings")
@@ -56,13 +56,13 @@ async function checkConflicts(
         });
 
         if (response.ok) {
-          const data = await response.json() as any;
+          const data = await response.json() as { calendars?: Array<{ busy?: Array<{ start?: string; end?: string }> }> };
           const busySlots = data.calendars?.[0]?.busy || [];
-          googleConflicts = busySlots.map((slot: any) => ({
+          googleConflicts = busySlots.map((slot) => ({
             id: "google",
             title: "Google Calendar Event",
-            start_time: slot.start,
-            end_time: slot.end,
+            start_time: slot.start!,
+            end_time: slot.end!,
             provider: "google",
           }));
         }
@@ -84,7 +84,7 @@ async function findOptimalSlot(
   preferredDate?: string,
   preferredTime?: string,
   daysAhead: number = 7
-): Promise<any> {
+): Promise<{ date: string; start_time: string; end_time: string; formatted: string; day_name: string; score: number; is_full_day_available?: boolean; has_conflicts?: boolean; conflict_resolution?: string } | null> {
   const now = new Date();
   
   // Parse preferred date
@@ -294,7 +294,7 @@ registerTool("find_optimal_time", {
       }
 
       // Check attendee availability if provided
-      let attendeeAvailability: any = null;
+      let attendeeAvailability: { status: string; message?: string } | null = null;
       if (args.attendees && args.attendees.length > 0) {
         // In a real implementation, we would check attendee calendars
         // For now, just indicate that attendee check is not yet implemented

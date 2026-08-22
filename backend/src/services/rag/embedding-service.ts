@@ -1,53 +1,73 @@
 import { embed, embedMany } from "ai";
-import { google } from "@ai-sdk/google";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import dotenv from "dotenv";
 import path from "path";
 import { createLogger } from '../../utils/logger.js';
 import { AppError, ErrorCode } from '../../utils/error-handler.js';
+import { TEXTBOOK_CONFIG, EMBEDDING_PROVIDER_CONFIG } from '../../config/constants.js';
 
 const log = createLogger('embedding');
 
-const envPath = path.resolve(process.cwd(), "../.env.local");
-dotenv.config({ path: envPath });
-dotenv.config({ path: path.resolve(process.cwd(), "../.env") });
-
-// Alias GOOGLE_API_KEY → GOOGLE_GENERATIVE_AI_API_KEY for @ai-sdk/google compatibility.
-// This runs once at import time and is intentional: the Google AI SDK expects the
-// longer env var name, but the project commonly uses GOOGLE_API_KEY. Testing
-// implications: tests that set GOOGLE_API_KEY before importing this module will
-// see the alias applied automatically.
-if (process.env.GOOGLE_API_KEY && !process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-  process.env.GOOGLE_GENERATIVE_AI_API_KEY = process.env.GOOGLE_API_KEY;
+// Accept every known Gemini key env var name (GEMINI_API_KEY is what the
+// Google AI Studio docs use; the AI SDK default reads only
+// GOOGLE_GENERATIVE_AI_API_KEY — this mismatch silently disabled the
+// provider before).
+function getGoogleApiKey(): string {
+  return (
+    EMBEDDING_PROVIDER_CONFIG.GOOGLE_GENERATIVE_AI_API_KEY ||
+    EMBEDDING_PROVIDER_CONFIG.GEMINI_API_KEY ||
+    EMBEDDING_PROVIDER_CONFIG.GOOGLE_API_KEY ||
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+    ""
+  );
 }
 
-// Target embedding dimension — must match the PostgreSQL vector column size.
-// The pgvector column is defined as vector(9692) in the database schema.
-// Override via EMBEDDING_TARGET_DIM env var if the schema changes.
-const TARGET_DIM = parseInt(process.env.EMBEDDING_TARGET_DIM || '9692', 10);
-
 let detectedDim: number | null = null;
-let dimensionChecked = false;
+let dimensionLogged = false;
+
+/**
+ * MRL (Matryoshka) truncation: keep the first `target` components and
+ * re-normalize to unit length. Gemini/OpenAI MRL-trained embeddings retain
+ * near-identical cosine similarity quality after prefix truncation.
+ */
+function mrlTruncate(vector: number[], target: number): number[] {
+  let sumSquares = 0;
+  for (let i = 0; i < target; i++) sumSquares += vector[i] * vector[i];
+  const norm = Math.sqrt(sumSquares);
+  if (!Number.isFinite(norm) || norm === 0) {
+    throw new Error(
+      `MRL truncation failed: zero/normless vector (len=${vector.length})`
+    );
+  }
+  const out = new Array<number>(target);
+  for (let i = 0; i < target; i++) out[i] = vector[i] / norm;
+  return out;
+}
 
 function fitToTargetDim(vector: number[]): number[] {
-  if (vector.length === TARGET_DIM) return vector;
+  const target = TEXTBOOK_CONFIG.EXPECTED_DIMENSIONS;
+  if (vector.length === target) return vector;
 
-  // Auto-detect dimension from first successful embedding
-  if (!dimensionChecked) {
-    detectedDim = vector.length;
-    dimensionChecked = true;
-
-    if (vector.length !== TARGET_DIM) {
-      const msg = `Embedding dimension mismatch: provider returned ${vector.length} dimensions but database expects ${TARGET_DIM}. ` +
-        `Set EMBEDDING_TARGET_DIM=${vector.length} or update the database schema. ` +
-        `Padding with zeros — this WILL degrade search quality.`;
-      log.error(msg, { actualDim: vector.length, targetDim: TARGET_DIM });
+  if (vector.length > target) {
+    // Provider natively returns more dimensions than the DB stores.
+    // Truncate + renormalize (MRL) instead of failing — this is what makes
+    // HNSW indexing possible (pgvector limit: 2000 dims).
+    if (!dimensionLogged) {
+      log.info(`[Embedding] MRL truncating ${vector.length} -> ${target} dims`, {
+        providerDim: vector.length,
+        targetDim: target,
+      });
+      dimensionLogged = true;
     }
+    return mrlTruncate(vector, target);
   }
 
-  // Still pad/truncate to prevent crashes, but the error above flags it
-  if (vector.length > TARGET_DIM) return vector.slice(0, TARGET_DIM);
-  return vector.concat(Array(TARGET_DIM - vector.length).fill(0));
+  // Fewer dimensions than the DB column expects cannot be fixed here.
+  const msg = `Embedding dimension mismatch: provider returned ${vector.length} dimensions but database expects ${target}. ` +
+    `Set EMBEDDING_TARGET_DIM=${vector.length} or switch provider. FAILING FAST — silent padding corrupts search quality.`;
+  log.error(msg, { actualDim: vector.length, targetDim: target });
+  throw new Error(msg);
 }
 
 interface EmbeddingProvider {
@@ -56,25 +76,26 @@ interface EmbeddingProvider {
   embedMany(texts: string[]): Promise<number[][]>;
 }
 
+const googleClient = createGoogleGenerativeAI({ apiKey: getGoogleApiKey() });
+
 const googleProvider: EmbeddingProvider = {
   name: "google",
   embed: async (text: string) => {
-    const model = google.textEmbeddingModel("gemini-embedding-001");
+    const model = googleClient.textEmbeddingModel("gemini-embedding-001");
     const { embedding } = await embed({ model, value: text });
     return fitToTargetDim(embedding);
   },
   embedMany: async (texts: string[]) => {
-    const model = google.textEmbeddingModel("gemini-embedding-001");
+    const model = googleClient.textEmbeddingModel("gemini-embedding-001");
     const { embeddings } = await embedMany({ model, values: texts });
     return embeddings.map(fitToTargetDim);
   },
 };
-
 function createBigModelProvider(): EmbeddingProvider | null {
-  if (!process.env.BIGMODEL_API_KEY) return null;
+  if (!EMBEDDING_PROVIDER_CONFIG.BIGMODEL_API_KEY) return null;
   const client = createOpenAI({
     baseURL: "https://open.bigmodel.cn/api/paas/v4",
-    apiKey: process.env.BIGMODEL_API_KEY,
+    apiKey: EMBEDDING_PROVIDER_CONFIG.BIGMODEL_API_KEY,
   });
   return {
     name: "bigmodel",
@@ -92,10 +113,10 @@ function createBigModelProvider(): EmbeddingProvider | null {
 }
 
 function createGitHubProvider(): EmbeddingProvider | null {
-  if (!process.env.GITHUB_TOKEN) return null;
+  if (!EMBEDDING_PROVIDER_CONFIG.GITHUB_TOKEN) return null;
   const client = createOpenAI({
     baseURL: "https://models.github.ai/inference",
-    apiKey: process.env.GITHUB_TOKEN,
+    apiKey: EMBEDDING_PROVIDER_CONFIG.GITHUB_TOKEN,
   });
   return {
     name: "github",
@@ -113,9 +134,9 @@ function createGitHubProvider(): EmbeddingProvider | null {
 }
 
 function createAzureProvider(): EmbeddingProvider | null {
-  const key = process.env.AZURE_OPENAI_API_KEY;
-  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-  const deployment = process.env.AZURE_EMBEDDING_DEPLOYMENT || "text-embedding-3-small";
+  const key = EMBEDDING_PROVIDER_CONFIG.AZURE_OPENAI_API_KEY;
+  const endpoint = EMBEDDING_PROVIDER_CONFIG.AZURE_OPENAI_ENDPOINT;
+  const deployment = EMBEDDING_PROVIDER_CONFIG.AZURE_EMBEDDING_DEPLOYMENT;
   if (!key || !endpoint) return null;
   const client = createOpenAI({
     baseURL: `${endpoint.replace(/\/$/, "")}/openai/deployments/${deployment}?api-version=2024-08-01-preview`,
@@ -139,33 +160,35 @@ function createAzureProvider(): EmbeddingProvider | null {
   };
 }
 
-function toVector(output: any): number[] {
+function toVector(output: unknown): number[] {
   if (!output) return [];
   if (Array.isArray(output)) return output as number[];
-  if (output?.data) return Array.from(output.data as ArrayLike<number>);
-  if (typeof output?.tolist === "function") {
-    const list = output.tolist();
+  const obj = output as Record<string, unknown>;
+  if (obj.data) return Array.from(obj.data as ArrayLike<number>);
+  if (typeof obj.tolist === "function") {
+    const list = (obj.tolist as () => unknown)();
     return Array.isArray(list) ? (Array.isArray(list[0]) ? list[0] : list) : [];
   }
   return [];
 }
 
-function toVectors(output: any): number[][] {
+function toVectors(output: unknown): number[][] {
   if (!output) return [];
   if (Array.isArray(output)) {
     return output.map((item) => toVector(item)).filter((v) => v.length > 0);
   }
-  if (output?.data && Array.isArray(output?.dims) && output.dims.length === 2) {
-    const [batch, dim] = output.dims as number[];
-    const data = Array.from(output.data as ArrayLike<number>);
+  const out = output as Record<string, unknown>;
+  if (out.data && Array.isArray(out.dims) && (out.dims as unknown[]).length === 2) {
+    const [batch, dim] = out.dims as number[];
+    const data = Array.from(out.data as ArrayLike<number>);
     const vectors: number[][] = [];
     for (let i = 0; i < batch; i += 1) {
       vectors.push(data.slice(i * dim, (i + 1) * dim));
     }
     return vectors;
   }
-  if (typeof output?.tolist === "function") {
-    const list = output.tolist();
+  if (typeof out.tolist === "function") {
+    const list = (out.tolist as () => unknown)();
     if (Array.isArray(list) && Array.isArray(list[0])) return list as number[][];
     if (Array.isArray(list)) return [list as number[]];
   }
@@ -174,13 +197,16 @@ function toVectors(output: any): number[][] {
 }
 
 function createLocalProvider(): EmbeddingProvider | null {
-  if (process.env.LOCAL_EMBEDDINGS_ENABLED === "false") return null;
+  if (!EMBEDDING_PROVIDER_CONFIG.LOCAL_EMBEDDINGS_ENABLED) return null;
 
   const modelId =
-    process.env.LOCAL_EMBEDDING_MODEL ||
+    EMBEDDING_PROVIDER_CONFIG.LOCAL_EMBEDDING_MODEL ||
     "Xenova/paraphrase-multilingual-mpnet-base-v2";
 
-  let extractorPromise: Promise<any> | null = null;
+  interface EmbeddingPipeline {
+    (input: string | string[], opts?: Record<string, unknown>): Promise<unknown>;
+  }
+  let extractorPromise: Promise<EmbeddingPipeline> | null = null;
   const getExtractor = async () => {
     if (!extractorPromise) {
       try {
@@ -233,12 +259,66 @@ function createLocalProvider(): EmbeddingProvider | null {
   };
 }
 
+function createNvidiaProvider(): EmbeddingProvider | null {
+  if (!EMBEDDING_PROVIDER_CONFIG.NVIDIA_API_KEY) return null;
+  const apiKey = EMBEDDING_PROVIDER_CONFIG.NVIDIA_API_KEY;
+  const modelId = EMBEDDING_PROVIDER_CONFIG.NVIDIA_EMBEDDING_MODEL;
+  const endpoint = "https://integrate.api.nvidia.com/v1/embeddings";
+
+  // NVIDIA NIM embedding models are asymmetric: they require `input_type`.
+  // Queries use "query", stored documents use "passage" — this distinction
+  // measurably improves retrieval quality. The AI SDK cannot send it, so we
+  // call the OpenAI-compatible endpoint directly.
+  async function callNvidia(
+    texts: string[],
+    inputType: "query" | "passage"
+  ): Promise<number[][]> {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        input: texts,
+        model: modelId,
+        input_type: inputType,
+        encoding_format: "float",
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new Error(
+        `NVIDIA embeddings HTTP ${res.status}: ${detail.slice(0, 200)}`
+      );
+    }
+    const json = (await res.json()) as {
+      data: Array<{ embedding: number[]; index: number }>;
+    };
+    return json.data
+      .sort((a, b) => a.index - b.index)
+      .map((d) => d.embedding);
+  }
+
+  return {
+    name: "nvidia",
+    embed: async (text: string) =>
+      fitToTargetDim((await callNvidia([text], "query"))[0]),
+    embedMany: async (texts: string[]) => {
+      const vectors = await callNvidia(texts, "passage");
+      return vectors.map((v) => fitToTargetDim(v));
+    },
+  };
+}
+
+const nvidiaProvider = createNvidiaProvider();
 const bigmodelProvider = createBigModelProvider();
 const githubProvider = createGitHubProvider();
 const azureProvider = createAzureProvider();
 const localProvider = createLocalProvider();
 
 const providers: EmbeddingProvider[] = [
+  ...(nvidiaProvider ? [nvidiaProvider] : []),
   googleProvider,
   ...(bigmodelProvider ? [bigmodelProvider] : []),
   ...(githubProvider ? [githubProvider] : []),
@@ -252,7 +332,7 @@ let lastActiveProviderName: string | null = null;
 function getPreferredProvider(): EmbeddingProvider {
   if (lastActiveProvider) return lastActiveProvider;
 
-  const envPreference = process.env.RAG_EMBEDDING_PROVIDER?.toLowerCase();
+  const envPreference = EMBEDDING_PROVIDER_CONFIG.RAG_EMBEDDING_PROVIDER?.toLowerCase();
   if (envPreference) {
     const preferred = providers.find((p) => p.name === envPreference);
     if (preferred) return preferred;

@@ -35,7 +35,7 @@ registerTool("create_artifact", {
     language?: string;
     fonts?: string[];
     bodyFontFamily?: string;
-    projectFiles?: any[];
+    projectFiles?: Array<{ name: string; path: string; content?: string } | Record<string, unknown>>;
     __userId?: string;
   }) => {
     const { type, title, content, language, fonts, bodyFontFamily, projectFiles, __userId } = args;

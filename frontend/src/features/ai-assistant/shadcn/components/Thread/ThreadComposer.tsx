@@ -25,6 +25,7 @@ import { useGuestMode } from "@/context/GuestModeContext";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useSendState } from "@/context/SendStateContext";
+import { ComposerStatus } from "../../../ui/bot-activity/components/ComposerStatus";
 
 /**
  * Discrete send-button state machine:
@@ -46,6 +47,12 @@ const ComposerAction: FC<{ disabled?: boolean }> = ({ disabled }) => {
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
       <ComposerAddAttachment />
       <div className="composer-send-group relative flex items-center gap-1.5">
+
+        {/* ── live status indicator: tokens + elapsed ──────────
+            Shown only while submitting or streaming. Sits to the LEFT
+            of the action button so the visual hierarchy reads:
+            "[Attach] ........ [X tokens · Y.Ys] [Stop]". */}
+        <ComposerStatus active={effectiveState !== "idle"} />
 
         {/* ── idle: send button ─────────────────────────────────── */}
         {effectiveState === "idle" && (
@@ -71,7 +78,7 @@ const ComposerAction: FC<{ disabled?: boolean }> = ({ disabled }) => {
           <button
             type="button"
             className="inline-flex size-10 items-center justify-center rounded-full text-muted-foreground cursor-not-allowed"
-            aria-label="Sending..."
+            aria-label={t("botStatus:stopping")}
           >
             <svg
               className="size-4 animate-spin"
@@ -104,7 +111,7 @@ const ComposerAction: FC<{ disabled?: boolean }> = ({ disabled }) => {
               variant="default"
               size="icon"
               className="aui-composer-cancel size-10 rounded-full"
-              aria-label={t("composerStop")}
+              aria-label={t("botStatus:stop")}
             >
               <SquareIcon className="aui-composer-cancel-icon size-3.5 fill-current" />
             </Button>
@@ -127,10 +134,23 @@ export const ThreadComposer: FC = () => {
     const viewport = window.visualViewport;
     if (!viewport) return;
 
-    const offset = window.innerHeight - viewport.height - viewport.offsetTop;
+    // iOS Safari: keyboard doesn't always trigger resize on visualViewport
+    // Fall back to window.innerHeight comparison
+    let offset = 0;
+    if (window.visualViewport) {
+      offset = window.innerHeight - viewport.height - viewport.offsetTop;
+    } else {
+      // Fallback for browsers without visualViewport API
+      offset = Math.max(0, window.innerHeight - document.documentElement.clientHeight);
+    }
+    
+    // iOS: keyboard can cause viewport.height to be 0 or incorrect
+    // Clamp to reasonable values
+    offset = Math.max(0, Math.min(offset, window.innerHeight * 0.8));
+    
     document.documentElement.style.setProperty(
       "--composer-keyboard-offset",
-      `${Math.max(0, offset)}px`
+      `${offset}px`
     );
   }, []);
 
@@ -179,6 +199,7 @@ export const ThreadComposer: FC = () => {
                 directiveChip={DirectiveChip}
                 formatter={mention.directive.formatter}
                 placeholder={t("composerPlaceholder")}
+                submitMode="enter"
                 className="aui-composer-input relative max-h-32 min-h-10 w-full resize-none bg-transparent px-1.75 py-1 text-sm outline-none [&_.aui-directive-chip-icon]:self-center [&_.aui-directive-chip]:inline-flex [&_.aui-directive-chip]:items-baseline [&_.aui-directive-chip]:gap-1 [&_.aui-directive-chip]:rounded-md [&_.aui-directive-chip]:bg-blue-100 [&_.aui-directive-chip]:px-1.5 [&_.aui-directive-chip]:py-0.5 [&_.aui-directive-chip]:font-medium [&_.aui-directive-chip]:text-[13px] [&_.aui-directive-chip]:text-blue-700 [&_.aui-directive-chip]:leading-none [&_.aui-lexical-input]:min-h-lh [&_.aui-lexical-input]:outline-none [&_.aui-lexical-placeholder]:pointer-events-none [&_.aui-lexical-placeholder]:absolute [&_.aui-lexical-placeholder]:top-0 [&_.aui-lexical-placeholder]:left-0 [&_.aui-lexical-placeholder]:px-1.75 [&_.aui-lexical-placeholder]:py-1 [&_.aui-lexical-placeholder]:text-muted-foreground/80"
               />
             </div>

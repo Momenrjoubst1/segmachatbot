@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { startOfDay, format, addDays, isSameDay } from 'date-fns';
-import type { CalendarEvent, CalendarInsights, FreeSlotDay } from '../types';
+import type { CalendarEvent, CalendarInsights, FreeSlotDay, FreeSlot } from '../types';
 
 const USER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -94,8 +94,8 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
       if (fetchError) throw fetchError;
 
       setEvents(data || []);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch events');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch events');
       console.error('[Calendar] fetchEvents error:', err);
     } finally {
       setIsCalendarLoading(false);
@@ -193,8 +193,8 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
       };
 
       setInsights(insightsData);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch insights');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch insights');
       console.error('[Calendar] fetchInsights error:', err);
     } finally {
       setIsCalendarLoading(false);
@@ -243,9 +243,9 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
       await fetchEvents();
 
       return { success: true, event: data };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[Calendar] createEvent error:', err);
-      return { success: false, error: err.message };
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
     }
   }, [options?.userId, fetchEvents]);
 
@@ -296,9 +296,9 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
       await fetchEvents();
 
       return { success: true };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[Calendar] updateEvent error:', err);
-      return { success: false, error: err.message };
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
     }
   }, [options?.userId, fetchEvents]);
 
@@ -327,9 +327,9 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
       await fetchEvents();
 
       return { success: true };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[Calendar] deleteEvent error:', err);
-      return { success: false, error: err.message };
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
     }
   }, [options?.userId, fetchEvents]);
 
@@ -357,7 +357,7 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
 
       const { data: allEvents } = await supabase
         .from('user_calendar_events')
-        .select('start_time, end_time')
+        .select('id, title, start_time, end_time, is_all_day, provider, is_recurring')
         .eq('user_id', options.userId)
         .gte('start_time', startDate.toISOString())
         .lte('end_time', endDate.toISOString());
@@ -380,17 +380,17 @@ export default function useCalendarSync(options?: UseCalendarSyncOptions): UseCa
         dayEnd.setHours(endHour, endMin, 0, 0);
 
         // Find busy slots for this day
-        const dayEvents = (allEvents || []).filter((e: any) => {
+        const dayEvents = (allEvents || []).filter((e: CalendarEvent) => {
           const eventStart = new Date(e.start_time);
           return isSameDay(eventStart, currentDay);
         });
 
         // Sort events by start time
-        dayEvents.sort((a: any, b: any) => 
+        dayEvents.sort((a: CalendarEvent, b: CalendarEvent) =>
           new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
         );
 
-        const slots: any[] = [];
+        const slots: FreeSlot[] = [];
         let slotStart = new Date(dayStart);
 
         for (const event of dayEvents) {

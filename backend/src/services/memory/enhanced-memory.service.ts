@@ -15,13 +15,13 @@ interface EnhancedMemoryEntry {
   user_id: string;
   category: MemoryCategory;
   key: string;
-  value: any;
+  value: unknown;
   confidence: number; // 0-1
   source: 'extracted' | 'explicit' | 'inferred';
   created_at?: string;
   updated_at?: string;
   expires_at?: string | null;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 class EnhancedMemoryService {
@@ -100,7 +100,7 @@ class EnhancedMemoryService {
   private async extractWithAI(
     messages: { role: string; content: string }[],
     existingKeys: Set<string>
-  ): Promise<Array<{ category: MemoryCategory; key: string; value: any; confidence: number }>> {
+  ): Promise<Array<{ category: MemoryCategory; key: string; value: unknown; confidence: number }>> {
     const conversationText = messages
       .map(m => `${m.role}: ${m.content}`)
       .join('\n');
@@ -156,12 +156,12 @@ ${conversationText}
         const extracted = JSON.parse(jsonMatch[0]);
         
         // تصفية النتائج
-        return extracted.filter((item: any) => 
+        return extracted.filter((item: { category?: string; key?: string; value?: unknown; confidence?: number }) =>
           item.category &&
           item.key &&
           item.value &&
-          item.confidence >= 0.7 &&
-          MemoryConfig.memoryBank.categories.includes(item.category) &&
+          (item.confidence ?? 0) >= 0.7 &&
+          MemoryConfig.memoryBank.categories.includes(item.category as typeof MemoryConfig.memoryBank.categories[number]) &&
           !existingKeys.has(item.key)
         );
       } catch (parseError) {
@@ -181,7 +181,7 @@ ${conversationText}
     userId: string,
     category: MemoryCategory,
     key: string,
-    value: any,
+    value: unknown,
     options?: {
       confidence?: number;
       source?: 'extracted' | 'explicit' | 'inferred';

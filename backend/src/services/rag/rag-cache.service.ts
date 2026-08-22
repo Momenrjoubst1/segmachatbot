@@ -14,6 +14,7 @@
 import { createLogger } from '../../utils/logger.js';
 import crypto from 'crypto';
 import redis from '../../config/redis/client.js';
+import { RAG_CONFIG, MEMORY_CONFIG } from '../../config/constants.js';
 
 const log = createLogger('rag-cache');
 
@@ -41,10 +42,14 @@ interface RankedDocument {
 // ==========================================
 
 const DEFAULT_CONFIG = {
-  enabled: process.env.RAG_CACHE_ENABLED !== 'false',
-  embeddingTTL: parseInt(process.env.RAG_EMBEDDING_CACHE_TTL || '3600'), // seconds
-  resultsTTL: parseInt(process.env.RAG_RESULTS_CACHE_TTL || '1800'),     // seconds
-  minQueryLength: parseInt(process.env.RAG_CACHE_MIN_QUERY_LENGTH || '5'),
+  enabled: Boolean(RAG_CONFIG.ENABLED),
+  embeddingTTL: RAG_CONFIG.EMBEDDING_TTL,
+  resultsTTL: RAG_CONFIG.RESULTS_TTL,
+  minQueryLength: RAG_CONFIG.MIN_QUERY_LENGTH,
+  similarityThreshold: RAG_CONFIG.SIMILARITY_THRESHOLD,
+  maxCacheSize: RAG_CONFIG.CACHE_MAX_SIZE,
+  minResponseLength: RAG_CONFIG.MIN_RESPONSE_LENGTH,
+  maxResponseLength: RAG_CONFIG.MAX_RESPONSE_LENGTH,
 };
 
 const KEY_PREFIX = 'rag:';
@@ -98,9 +103,9 @@ class RAGQueryCache {
       }
       
       const value = JSON.parse(raw) as number[];
-      this.stats.hits++;
-      
-      if (process.env.MEMORY_DEBUG === 'true') {
+this.stats.hits++;
+
+      if (MEMORY_CONFIG.debug.enabled) {
         log.debug('Embedding cache hit (Redis)', { query: query.substring(0, 50) });
       }
       
@@ -144,9 +149,9 @@ class RAGQueryCache {
       }
       
       const value = JSON.parse(raw) as RankedDocument[];
-      this.stats.hits++;
-      
-      if (process.env.MEMORY_DEBUG === 'true') {
+this.stats.hits++;
+
+      if (MEMORY_CONFIG.debug.enabled) {
         log.debug('Results cache hit (Redis)', { 
           query: query.substring(0, 50), 
           docCount: value.length,

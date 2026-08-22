@@ -21,6 +21,13 @@ import { uploadR2Object, downloadR2ObjectToBuffer, deleteR2ObjectsByPrefix } fro
 import { enqueueTextbookJob } from "../textbook/textbook-queue.js";
 import type { Response } from "express";
 
+/** Minimal AI SDK message shape used by the chat pipeline. */
+interface ChatMsg {
+  role: string;
+  content?: string | Array<{ type?: string; text?: string; mimeType?: string; mediaType?: string; filename?: string; fileName?: string; data?: string; url?: string; base64?: string; file?: { type?: string; mimeType?: string; name?: string; data?: string; url?: string; base64?: string } }>;
+  parts?: Array<{ type?: string; text?: string; mimeType?: string; mediaType?: string; filename?: string; fileName?: string; data?: string; url?: string; base64?: string; file?: { type?: string; mimeType?: string; name?: string; data?: string; url?: string; base64?: string } }>;
+}
+
 const log = createLogger("chat-file-router");
 
 const PENDING_TTL_SECONDS = 3600; // decision window: 1 hour
@@ -65,7 +72,7 @@ interface PdfAttachment {
   bytes: Buffer;
 }
 
-function extractPdfAttachment(messages: any[]): PdfAttachment | null {
+function extractPdfAttachment(messages: ChatMsg[]): PdfAttachment | null {
   const lastUser = [...messages].reverse().find((m) => m?.role === "user");
   if (!lastUser) return null;
 
@@ -101,14 +108,14 @@ function extractPdfAttachment(messages: any[]): PdfAttachment | null {
   return null;
 }
 
-function lastUserText(messages: any[]): string {
+function lastUserText(messages: ChatMsg[]): string {
   const lastUser = [...messages].reverse().find((m) => m?.role === "user");
   if (!lastUser) return "";
   const parts = Array.isArray(lastUser.content) ? lastUser.content : Array.isArray(lastUser.parts) ? lastUser.parts : [];
   if (Array.isArray(parts) && parts.length > 0) {
     return parts
-      .filter((p: any) => p?.type === "text" || !p?.type)
-      .map((p: any) => p?.text || "")
+      .filter((p) => p?.type === "text" || !p?.type)
+      .map((p) => p?.text || "")
       .join(" ")
       .trim();
   }
@@ -120,7 +127,7 @@ function lastUserText(messages: any[]): string {
 async function persistAndStreamReply(
   res: Response,
   threadId: string,
-  messages: any[],
+  messages: ChatMsg[],
   reply: string
 ): Promise<void> {
   // persist the exchange so it survives thread switches
@@ -175,7 +182,7 @@ async function extractPdfText(bytes: Buffer): Promise<string> {
 export async function handleChatFileFlow(args: {
   userId: string;
   threadId: string;
-  messages: any[];
+  messages: ChatMsg[];
   res: Response;
 }): Promise<boolean> {
   const { userId, threadId, messages, res } = args;

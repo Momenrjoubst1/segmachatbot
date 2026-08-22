@@ -9,6 +9,8 @@ describe('Moderation Fail-Closed Behavior', () => {
     process.env = { ...originalEnv };
     delete process.env.MODERATION_FAIL_OPEN;
     delete process.env.MODERATION_FAIL_CLOSED;
+    // vitest sets NODE_ENV=test, which forces fail-closed.
+    // For FAIL_OPEN tests, we need to remove this.
   });
 
   afterEach(() => {
@@ -39,8 +41,7 @@ describe('Moderation Fail-Closed Behavior', () => {
   });
 
   it('moderateInput should BLOCK when moderator is unavailable (fail-closed default)', async () => {
-    // Mock the Supabase client to return an error (simulating unavailable service)
-    vi.mock('../rag/rag-supabase-client.js', () => ({
+    vi.doMock('../rag/rag-supabase-client.js', () => ({
       supabase: {
         functions: {
           invoke: vi.fn().mockResolvedValue({
@@ -60,10 +61,12 @@ describe('Moderation Fail-Closed Behavior', () => {
     expect(result.error).toBe('Content moderation service unavailable');
   });
 
-  it('moderateInput should ALLOW when MODERATION_FAIL_OPEN=true', async () => {
+  it('moderateInput should ALLOW when MODERATION_FAIL_OPEN=true (non-test env)', async () => {
     process.env.MODERATION_FAIL_OPEN = 'true';
+    // Remove NODE_ENV=test so the fail-open logic can run
+    delete process.env.NODE_ENV;
 
-    vi.mock('../rag/rag-supabase-client.js', () => ({
+    vi.doMock('../rag/rag-supabase-client.js', () => ({
       supabase: {
         functions: {
           invoke: vi.fn().mockResolvedValue({
@@ -83,7 +86,7 @@ describe('Moderation Fail-Closed Behavior', () => {
   });
 
   it('moderateFull should BLOCK when moderator is unavailable (fail-closed default)', async () => {
-    vi.mock('../rag/rag-supabase-client.js', () => ({
+    vi.doMock('../rag/rag-supabase-client.js', () => ({
       supabase: {
         functions: {
           invoke: vi.fn().mockResolvedValue({
@@ -94,8 +97,7 @@ describe('Moderation Fail-Closed Behavior', () => {
       },
     }));
 
-    // Mock input-validator to return clean validation
-    vi.mock('../security/input-validator.js', () => ({
+    vi.doMock('../security/input-validator.js', () => ({
       inputValidator: {
         validate: vi.fn().mockResolvedValue({
           valid: true,
@@ -113,10 +115,12 @@ describe('Moderation Fail-Closed Behavior', () => {
     expect(result.reason).toBe('Content moderation service unavailable');
   });
 
-  it('moderateFull should ALLOW with local validation only when MODERATION_FAIL_OPEN=true', async () => {
+  it('moderateFull should ALLOW with local validation only when MODERATION_FAIL_OPEN=true (non-test env)', async () => {
     process.env.MODERATION_FAIL_OPEN = 'true';
+    // Remove NODE_ENV=test so the fail-open logic can run
+    delete process.env.NODE_ENV;
 
-    vi.mock('../rag/rag-supabase-client.js', () => ({
+    vi.doMock('../rag/rag-supabase-client.js', () => ({
       supabase: {
         functions: {
           invoke: vi.fn().mockResolvedValue({
@@ -127,7 +131,7 @@ describe('Moderation Fail-Closed Behavior', () => {
       },
     }));
 
-    vi.mock('../security/input-validator.js', () => ({
+    vi.doMock('../security/input-validator.js', () => ({
       inputValidator: {
         validate: vi.fn().mockResolvedValue({
           valid: true,

@@ -1,6 +1,7 @@
-import { getMemory, setMemory, getCustomInstructions } from "./memory-repository.js";
+import { getMemory, setMemory, getCustomInstructions, type MemoryEntry } from "./memory-repository.js";
 import { extractFacts } from "./memory-fact-extractor.js";
 import { createLogger } from "../../utils/logger.js";
+import { reliableMemoryExtraction } from "./reliable-memory-extraction.service.js";
 
 const log = createLogger('memory-manager');
 
@@ -49,27 +50,40 @@ export async function tryExtractAndStore(
   if (messages.length < 6) return;
   if (count >= 3) return;
 
-  const existing = await getMemory(userId);
-  const existingKeys = new Set(existing.map((e) => e.key));
+  try {
+    // Use reliable extraction service for production-grade extraction
+    const jobId = await reliableMemoryExtraction.submitExtractionJob(userId, messages, threadId);
+    log.info(`Submitted reliable memory extraction job`, { userId, jobId });
+    
+    extractionCounter.set(userId, count + 1);
+  } catch (error) {
+    // Fallback to old method if reliable service fails
+    log.warn('[MemoryManager] Reliable extraction failed, falling back to basic', { 
+      error: (error as Error)?.message 
+    });
+    
+    const existing = await getMemory(userId);
+    const existingKeys = new Set(existing.map((e) => e.key));
 
-  const facts = await extractFacts(messages, existingKeys);
-  if (facts.length === 0) return;
+    const facts = await extractFacts(messages, existingKeys);
+    if (facts.length === 0) return;
 
-  extractionCounter.set(userId, count + 1);
+    extractionCounter.set(userId, count + 1);
 
-  for (const fact of facts) {
-    await setMemory(userId, fact.key, fact.value, fact.category, threadId);
+    for (const fact of facts) {
+      await setMemory(userId, fact.key, fact.value, fact.category, threadId);
+    }
+
+    log.info(`Extracted ${facts.length} new facts (fallback)`, { userId });
   }
-
-  log.info(`Extracted ${facts.length} new facts`, { userId });
 }
 
 export function resetExtractionCounter(userId: string): void {
   extractionCounter.set(userId, 0);
 }
 
-function groupByCategory(entries: any[]): Record<string, any[]> {
-  const grouped: Record<string, any[]> = {};
+function groupByCategory(entries: MemoryEntry[]): Record<string, MemoryEntry[]> {
+  const grouped: Record<string, MemoryEntry[]> = {};
   for (const entry of entries) {
     const cat = entry.category || "fact";
     if (!grouped[cat]) grouped[cat] = [];

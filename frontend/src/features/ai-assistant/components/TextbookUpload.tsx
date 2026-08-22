@@ -1,9 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useTranslation } from "react-i18next";
 import { Upload, FileText, Loader2, AlertCircle, CheckCircle2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
-import { useTextbooks, type Textbook, type TextbookStatus } from "@/hooks/useTextbooks";
+import { useTextbooks, type TextbookStatus } from "@/hooks/useTextbooks";
 
 interface TextbookUploadProps {
   courseId?: string;
@@ -17,8 +16,7 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadProps) {
-  const { t } = useTranslation("common");
-  const { uploadTextbook, textbooks, getStatus, deleteTextbook, refetch, isLoading } = useTextbooks();
+  const { uploadTextbook, textbooks, getStatus, deleteTextbook, refetch } = useTextbooks();
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);

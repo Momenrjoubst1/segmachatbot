@@ -344,9 +344,9 @@ router.get("/:id/curriculum", async (req: Request, res: Response) => {
     for (const s of sections || []) {
       const node = byId.get(s.id);
       if (s.parent_id && byId.has(s.parent_id)) {
-        byId.get(s.parent_id).children.push(node);
+        byId.get(s.parent_id)!.children.push(node);
       } else {
-        roots.push(node);
+        if (node) roots.push(node);
       }
     }
 

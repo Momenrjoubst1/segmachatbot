@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from .models import ExtractedImage, FigurePair, PageExtraction
-
-CAPTION_KEYWORDS = {"figure", "fig.", "fig", "table", "image", "diagram", "chart", "photo"}
-MIN_CAPTION_LENGTH = 10
+from .constants import CAPTION_KEYWORDS, MIN_CAPTION_LENGTH
 
 
 def pair_figures(pages: list[PageExtraction]) -> list[FigurePair]:

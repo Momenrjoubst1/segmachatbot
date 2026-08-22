@@ -105,7 +105,7 @@ function buildHydeSnippet(topic: string): string {
 
 export function rewriteQuery(
   userMessage: string,
-  recentMessages: any[],
+  recentMessages: { role: string; content?: string }[],
   intent: IntentResult,
 ): RewrittenQuery {
   const msg = (userMessage ?? "").trim();

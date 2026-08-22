@@ -1,94 +1,49 @@
-# Deep Code Review - Scratch Notes
+# Deep Code Review - Scratch File
 
-## Phase 0: Reconnaissance ✅ COMPLETE
+## System: Sigma AI Chatbot
+- Full-stack AI assistant with RAG, multi-tier memory, multi-model support
+- Frontend: React 19 + Vite 7 + TypeScript + Tailwind CSS 4 + @assistant-ui/react
+- Backend: Express.js + TypeScript + Vercel AI SDK + Supabase + Redis
+- Scale: ~142 backend TS files (951KB), ~108 frontend TSX files (554KB)
+- Deployment: Docker Compose (frontend, backend, Redis, pdf-processor)
 
-### System Overview
-Sigma AI Chatbot - Full-stack AI chatbot with RAG, memory management, and multi-model support.
+## Module Checklist (Phase 2) — COMPLETED
+- [x] Backend: config/ - Configuration management
+- [x] Backend: middleware/ - Auth, rate limiting, request-id
+- [x] Backend: routes/ - API route handlers (chat, guest, memory, etc.)
+- [x] Backend: services/chat/ - Chat pipeline (10-step)
+- [x] Backend: services/rag/ - RAG pipeline (vector + BM25 + reranking)
+- [x] Backend: services/memory/ - Memory system (session, cross-session, enhanced)
+- [x] Backend: tools/ - AI tools (calendar, code, education, email, files, web)
+- [x] Backend: utils/ - Logging, error handling, timeout, safe-fetch
+- [x] Backend: validators/ - Input validation
+- [x] Frontend: context/ - React contexts (Auth, ChatHistory, etc.)
+- [x] Frontend: features/ai-assistant/ - Main chat interface
+- [x] Frontend: features/calendar/ - Calendar integration
+- [x] Frontend: hooks/ - Custom React hooks
+- [x] Frontend: lib/ - Utilities and API clients
 
-**Tech Stack:**
-- Backend: Express + TypeScript, Vercel AI SDK, Supabase (PostgreSQL), Redis, Vitest
-- Frontend: React 19, Vite 7, TypeScript, Tailwind CSS 4, @assistant-ui/react, React Router 6, i18next
+## Phase 1: Architecture Findings
+- Well-structured 10-step pipeline with good separation of concerns
+- Multi-tier memory system is well-designed (session, cross-session, enhanced)
+- Good security practices: SSRF protection, rate limiting, circuit breakers
+- Auth middleware has L1 cache + Redis circuit breaker pattern (good)
+- Model router with fallback chains provides good resilience
+- Some tight coupling between chat.routes and chat.pipeline
+- Guest routes are well-secured with server-side transcript storage
+- Tool metadata system provides clean extensibility
 
-**Scale:**
-- Backend: ~126 TypeScript files, ~18,552 lines of code
-- Frontend: ~80+ TSX/TS files, ~11,800 lines of code
-- Total: ~30,000+ lines of code
+## Phase 2: Module Findings
+- Backend services are well-organized with clear responsibilities
+- Validation uses Zod schemas consistently
+- Rate limiting has Redis + in-memory fallback
+- RAG pipeline has good caching strategy
+- Memory system has deduplication via Jaccard similarity
+- Frontend uses lazy loading and code splitting effectively
+- Some modules have overly long files (guest.routes.ts 881 lines)
 
-**Architecture:**
-- Monolithic full-stack application with separate frontend/backend
-- Backend: Express API with modular service layer (chat, memory, RAG, tools, analytics)
-- Frontend: React SPA with feature-based organization (ai-assistant, calendar, artifacts)
-- Data layer: Supabase (PostgreSQL) + Redis caching
-- Entry points: backend/src/index.ts (Express server), frontend/src/main.tsx (React app)
-
-### Module Checklist (Backend)
-- [x] config/ - Configuration management (app, chat-title, memory, supabase, redis)
-- [x] middleware/ - Auth, rate limiting, request ID
-- [ ] prompts/ - AI system prompts (security-sensitive, noted but not deeply reviewed)
-- [x] routes/ - API route handlers (chat, analytics, artifacts, feedback, memory, moderation, proxy)
-- [x] services/ - Core business logic
-  - [x] services/chat/ - Chat pipeline, message processing, intent detection, moderation
-  - [x] services/memory/ - Memory management (session, cross-session, enhanced memory)
-  - [x] services/rag/ - RAG pipeline (BM25, embeddings, reranking)
-  - [x] services/security/ - Input validation, file text extraction
-  - [ ] services/analytics/ - Analytics tracking (skimmed, low risk)
-  - [ ] services/agent* - Agent runtime (noted but not deeply reviewed)
-- [ ] tools/ - AI tools (skimmed structure, not deeply reviewed)
-- [x] utils/ - Logging, safe fetch, error handling, timeouts
-- [x] validators/ - Input validation schemas
-
-### Module Checklist (Frontend)
-- [x] components/ - UI components (LoginPage, SessionExpiredModal, SessionWarningBanner)
-- [ ] components/ui/ - Reusable UI components (shadcn wrappers — low risk, skimmed)
-- [x] context/ - React contexts (Auth, ChatDrafts, ChatHistory, ChatMessages, ChatThreads, Connection, RAG, Title)
-- [x] features/ - Feature modules
-  - [x] features/ai-assistant/ - Main chat interface with shadcn components
-  - [ ] features/calendar/ - Calendar integration (skimmed)
-  - [ ] features/artifacts/ - Artifact management (skimmed)
-  - [ ] features/profile/ - User profile components (skimmed)
-- [x] hooks/ - Custom React hooks (auth, calendar sync, WebSocket, smart scroll)
-- [ ] i18n/ - Internationalization (structure noted, not deeply reviewed)
-- [x] lib/ - Utilities and API clients (auth, config, supabase client)
-- [x] utils/ - Helper functions (image proxy)
-
-### Configuration & Tests
-- [x] Backend tsconfig.json, vitest.config.ts, .eslintrc.json
-- [x] Frontend tsconfig.json, vitest.config.ts, vite.config.ts, eslint.config.js
-- [x] All test files (backend 13 files, frontend 17 files)
-- [x] Migration files (full_schema.sql, 001_initial_schema.sql)
-- [x] CI workflow (.github/workflows/ci.yml)
-- [x] docker-compose.yml
-
----
-
-## Phase 1: Architecture-Level Findings ✅ COMPLETE
-
-See DEEP-CODE-REVIEW.md for full report.
-
----
-
-## Phase 2: Module-Specific Findings ✅ COMPLETE
-
-All major modules reviewed. See DEEP-CODE-REVIEW.md for full report.
-
----
-
-## Phase 3: Cross-Cutting Concerns ✅ COMPLETE
-
-See DEEP-CODE-REVIEW.md for full report.
-
----
-
-## Final Statistics
-
-- **Total findings:** 55
-- **Critical:** 3 (proxy SSRF, auth bypass cache, .env in repo)
-- **High:** 8 (rate limiter skip, memory eviction, auth retry, etc.)
-- **Medium:** 18 (moderation fail-open, dedup, BM25 persistence, etc.)
-- **Low:** 16 (code smells, minor inconsistencies)
-- **Notes:** 10 (observations, not defects)
-
-- **Modules fully reviewed:** 12/16 backend, 6/10 frontend
-- **Modules skimmed:** 4/16 backend, 4/10 frontend (low-risk UI components)
-- **Files read:** ~120+
-- **Estimated LOC reviewed:** ~25,000+
+## Phase 3: Cross-cutting Findings
+- Security is generally well-handled across the stack
+- Some dependency version concerns noted
+- Testing strategy needs verification
+- Documentation vs reality alignment is good

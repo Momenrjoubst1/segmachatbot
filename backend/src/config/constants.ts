@@ -166,7 +166,11 @@ export const TEXTBOOK_CONFIG = {
   EMBEDDING_BATCH_SIZE: 20,
   EMBEDDING_DELAY_MS: 1_000,
   EMBEDDING_MAX_RETRIES: 3,
-  EXPECTED_DIMENSIONS: 9_692,
+  // Embedding dimension target. Must be <= 2000 for pgvector HNSW indexing.
+  // gemini-embedding-001 returns 3072 natively; MRL truncation to 1536 retains
+  // near-identical retrieval quality (see embedding-service fitToTargetDim).
+  // Override via EMBEDDING_TARGET_DIM env var. DB columns must match this value.
+  EXPECTED_DIMENSIONS: parseInt(process.env.EMBEDDING_TARGET_DIM || "1536", 10),
   LOCK_TTL_SECONDS: 1_800,
   JOB_TIMEOUT: 3_600,
   SWEEP_INTERVAL_MS: 3_600_000,    // 1 hour
@@ -213,6 +217,17 @@ export const PAGINATION = {
 } as const;
 
 // ==========================================
+// Prompt / A/B Testing
+// ==========================================
+export const PROMPT_CONFIG = {
+  AB_ENABLED: process.env.PROMPT_AB_ENABLED === 'true',
+  AB_VARIANT: (process.env.PROMPT_AB_VARIANT as 'default' | 'concise' | 'detailed' | 'motivational' | 'auto' | undefined) ?? 'auto',
+  AB_FORCE_VARIANT: process.env.PROMPT_AB_FORCE_VARIANT as 'default' | 'concise' | 'detailed' | 'motivational' | undefined,
+  MAX_SYSTEM_TOKENS: process.env.PROMPT_MAX_TOKENS ? parseInt(process.env.PROMPT_MAX_TOKENS, 10) : undefined,
+  METRICS_ENABLED: process.env.PROMPT_METRICS_ENABLED !== 'false',
+} as const;
+
+// ==========================================
 // UI / Frontend
 // ==========================================
 export const UI_CONFIG = {
@@ -236,6 +251,9 @@ export const EMBEDDING_PROVIDER_CONFIG = {
   LOCAL_EMBEDDING_MODEL: process.env.LOCAL_EMBEDDING_MODEL || 'Xenova/paraphrase-multilingual-mpnet-base-v2',
   GOOGLE_API_KEY: process.env.GOOGLE_API_KEY || '',
   GOOGLE_GENERATIVE_AI_API_KEY: process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
+  NVIDIA_API_KEY: process.env.NVIDIA_API_KEY || '',
+  NVIDIA_EMBEDDING_MODEL: process.env.NVIDIA_EMBEDDING_MODEL || 'nvidia/nv-embedqa-e5-v5',
 } as const;
 
 // ==========================================

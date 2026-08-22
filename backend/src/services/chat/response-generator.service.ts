@@ -29,6 +29,10 @@ import { responseCache, CacheMetadata } from "./response-cache.service.js";
 import { checkGrounding } from "./grounding-check.js";
 import { buildCriticSystemPrompt } from "../../prompts/multi-agent.js";
 import type { ToolDefinition } from "../../tools/shared/types.js";
+import type { CoreMessage } from "./moderation.service.js";
+
+// Re-export CoreMessage type from moderation for convenience
+export type { CoreMessage };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,15 +41,13 @@ import type { ToolDefinition } from "../../tools/shared/types.js";
 export interface StreamOptions {
   client: ReturnType<typeof createProviderClient>;
   modelName: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  finalMessages: any[];
+  finalMessages: CoreMessage[];
   finalSystemPrompt: string;
   basePersona: string;
   enabledTools: Record<string, ToolDefinition>;
   activeThreadId: string | undefined;
   userId: string | undefined;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  coreMessages: any[];
+  coreMessages: CoreMessage[];
   conversationSummary: string;
   augmentedSystemPrompt: string;
   reqMetrics: Record<string, string | number | boolean | string[] | undefined>;
@@ -104,14 +106,17 @@ export async function generateAndStreamResponse(
   let currentClient = client;
   // isFallback state is tracked for logging only
 
-  // Build the system prompt â€" self-reflection for single model, or multi-agent protocol
+  // Build the system prompt — self-reflection for single model, or multi-agent protocol
   const resolvedSystemPrompt = MULTI_AGENT_ENABLED
-    ? `${augmentedSystemPrompt}\n\n=========================================\nðŸ¤– MULTI-AGENT PROTOCOL: MAIN AGENT DRAFTING\n=========================================\n${MAIN_AGENT_SYSTEM_PROMPT}`
+    ? `${augmentedSystemPrompt}\n\n=========================================\n🤖 MULTI-AGENT PROTOCOL: MAIN AGENT DRAFTING\n=========================================\n${MAIN_AGENT_SYSTEM_PROMPT}`
     : `${augmentedSystemPrompt}\n\n**QUALITY GUIDELINES:**\n- Double-check facts and citations before responding\n- Use clear, well-structured Markdown\n- Ensure accuracy and completeness\n- Keep responses concise but thorough`;
+
+  // Track the model used for the current attempt so onFinish logs the correct name
+  let attemptModelName = currentModelName;
 
   const streamOptions: Parameters<typeof streamText>[0] = {
     model: currentClient.chat(currentModelName),
-    messages: finalMessages,
+    messages: finalMessages as any[],
     system: resolvedSystemPrompt,
     maxOutputTokens: 4096,
     abortSignal: combinedSignal,
@@ -134,6 +139,7 @@ export async function generateAndStreamResponse(
         finishReason: finishReason,
         session_id: activeThreadId,
         mode: MULTI_AGENT_ENABLED ? "multi-agent" : "single-model",
+        model: attemptModelName,
       });
 
       if (activeThreadId && text) {
@@ -154,7 +160,7 @@ export async function generateAndStreamResponse(
         }
 
         // Report success to model router (resets circuit breaker)
-        modelRouter.reportSuccess(currentModelName);
+        modelRouter.reportSuccess(attemptModelName);
         // Output safety filter
         const safeResponseText = await moderateOutput(
           text,
@@ -186,7 +192,7 @@ export async function generateAndStreamResponse(
         // tryExtractAndStore (e.g. DB timeout) is logged and never surfaces as an
         // UnhandledPromiseRejection that would crash the Node.js process.
         if (userId) {
-          tryExtractAndStore(userId, coreMessages, activeThreadId).catch((err) => {
+          tryExtractAndStore(userId, coreMessages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '' })), activeThreadId).catch((err) => {
             log.error("Background memory extraction failed", {
               error: (err as Error)?.message,
               userId,
@@ -197,12 +203,12 @@ export async function generateAndStreamResponse(
           if (MemoryConfig.memoryBank.enabled) {
             try {
               const messagesWithResponse = [
-                ...finalMessages,
+                ...finalMessages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '' })),
                 { role: "assistant", content: text },
               ];
               const extracted = await enhancedMemory.extractMemories(
                 userId,
-                messagesWithResponse,
+                messagesWithResponse as { role: string; content: string }[],
                 activeThreadId,
               );
               if (extracted.length > 0) {
@@ -271,6 +277,8 @@ export async function generateAndStreamResponse(
 
   while (streamAttempts < MAX_STREAM_ATTEMPTS) {
     streamAttempts++;
+    // Capture model name for this attempt so onFinish logs correctly after fallback
+    attemptModelName = currentModelName;
     try {
       log.info(
         `Streaming response (attempt ${streamAttempts}/${MAX_STREAM_ATTEMPTS})`,
@@ -282,7 +290,7 @@ export async function generateAndStreamResponse(
       if (MULTI_AGENT_ENABLED) {
         const mainAgentResult = await generateText({
           model: currentClient.chat(currentModelName),
-          messages: finalMessages,
+    messages: finalMessages as any[],
           system: resolvedSystemPrompt,
           maxOutputTokens: 4096,
           abortSignal: combinedSignal,
@@ -308,7 +316,7 @@ export async function generateAndStreamResponse(
         const result = streamText({
           model: criticModel,
           messages: [
-            ...finalMessages,
+            ...finalMessages as any[],
             {
               // FIX: Use system role for draft review instead of user role
               role: "system" as const,

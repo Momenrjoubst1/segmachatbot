@@ -34,7 +34,7 @@ export async function getGoogleCalendarAccessToken(): Promise<string> {
     iat: now,
   };
 
-  const base64UrlEncode = (obj: any) =>
+  const base64UrlEncode = (obj: Record<string, unknown>) =>
     Buffer.from(JSON.stringify(obj))
       .toString("base64")
       .replace(/=/g, "")
@@ -65,6 +65,6 @@ export async function getGoogleCalendarAccessToken(): Promise<string> {
     throw new Error(`Failed to retrieve Google Calendar access token: ${errorText}`);
   }
 
-  const data = (await response.json()) as any;
+  const data = (await response.json()) as { access_token: string };
   return data.access_token;
 }

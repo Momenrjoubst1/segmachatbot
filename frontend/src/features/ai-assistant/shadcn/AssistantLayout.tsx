@@ -11,9 +11,11 @@ import type { CalendarEvent } from "@/features/calendar/types";
 import useCalendarSync from "@/features/calendar/hooks/useCalendarSync";
 import { Thread } from "./components/Thread/ThreadWelcome";
 import { useAgenticAction } from "../../../context/AgenticUIBus";
+import { useAssistantLayout } from "../context/AssistantLayoutContext";
 import { BarsSpinner } from "@/components/ui/BarsSpinner";
 import { LoadingSpinner } from "@/components/ui/LoadingStates";
 import { ErrorBoundary } from "@/components/ui/core/ErrorBoundary";
+import { KeyboardShortcutsModal } from "@/components/ui/KeyboardShortcutsModal";
 
 // Lazy load heavy components
 const EmailHistoryPanel = lazy(() => import("../components/EmailHistoryPanel").then(m => ({ default: m.EmailHistoryPanel })));
@@ -22,7 +24,7 @@ const FullScreenCalendar = lazy(() => import("@/components/ui/fullscreen-calenda
 const SchedulingPanel = lazy(() => import("@/features/calendar/components").then(m => ({ default: m.SchedulingPanel })));
 
 // Re-export for backward compatibility
-export { useAssistantSettingsStore } from "./components/Thread/MessageComponents";
+export { useAssistantSettings } from "../context/AssistantSettingsContext";
 export { Thread } from "./components/Thread/ThreadWelcome";
 
 const PanelLoading = () => (
@@ -39,17 +41,13 @@ export const Shadcn: FC<{
   onActiveCourseChange: (course: AcademicCourse | null) => void;
   onCompleteOnboarding: (draftCourses: { course_name: string; credit_hours: number }[]) => Promise<void>;
   onSkipOnboarding?: () => void;
-  activeView: 'chat' | 'calendar';
-  onToggleView: (view: 'chat' | 'calendar') => void;
-  artifactPanelOpen: boolean;
-  setArtifactPanelOpen: (open: boolean) => void;
-  emailHistoryOpen: boolean;
-  setEmailHistoryOpen: (open: boolean) => void;
   isGuestMode?: boolean;
-}> = ({ isOnboarded, isCoursesLoadingVisible, coursesError, retryCourses, onActiveCourseChange, onCompleteOnboarding, onSkipOnboarding, activeView, onToggleView, artifactPanelOpen, setArtifactPanelOpen, emailHistoryOpen, setEmailHistoryOpen, isGuestMode = false }) => {
+}> = ({ isOnboarded, isCoursesLoadingVisible, coursesError, retryCourses, onActiveCourseChange, onCompleteOnboarding, onSkipOnboarding, isGuestMode = false }) => {
+  const { activeView, onToggleView, artifactPanelOpen, setArtifactPanelOpen, emailHistoryOpen, setEmailHistoryOpen } = useAssistantLayout();
   const { t } = useTranslation("errors");
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
-  const { loadThread } = useChatHistory();
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const { loadThread, goToPreviousThread, goToNextThread } = useChatHistory();
 
   // Same behavior as the sidebar "New Chat" button: clear the active thread
   // AND reset the active course, so the welcome screen shows immediately.
@@ -58,6 +56,34 @@ export const Shadcn: FC<{
     onActiveCourseChange(null);
     toast("New chat created");
   }, [loadThread, onActiveCourseChange]);
+
+  // Navigation callbacks for keyboard shortcuts - message navigation still uses events
+  const goToPreviousMessage = useCallback(() => {
+    const event = new CustomEvent("sigma:navigate-previous-message");
+    window.dispatchEvent(event);
+  }, []);
+
+  const goToNextMessage = useCallback(() => {
+    const event = new CustomEvent("sigma:navigate-next-message");
+    window.dispatchEvent(event);
+  }, []);
+
+  const toggleSidebar = useCallback(() => {
+    const event = new CustomEvent("sigma:toggle-sidebar");
+    window.dispatchEvent(event);
+  }, []);
+
+  const toggleArtifacts = useCallback(() => {
+    setArtifactPanelOpen(!artifactPanelOpen);
+  }, [artifactPanelOpen, setArtifactPanelOpen]);
+
+  const toggleEmail = useCallback(() => {
+    setEmailHistoryOpen(!emailHistoryOpen);
+  }, [emailHistoryOpen, setEmailHistoryOpen]);
+
+  const toggleCalendar = useCallback(() => {
+    onToggleView(activeView === 'chat' ? 'calendar' : 'chat');
+  }, [activeView, onToggleView]);
 
   // Calendar state
   const [calendarUserId, setCalendarUserId] = useState<string | undefined>();
@@ -144,14 +170,28 @@ export const Shadcn: FC<{
   }, [setArtifactPanelOpen]);
 
   useKeyboardShortcuts({
-    // Ctrl+Shift+O matches the label shown in the sidebar (and what other
-    // world-class chat apps use). Ctrl+N is kept as a secondary binding.
+    // General shortcuts
     "ctrl+shift+o": startNewChat,
     "ctrl+n": startNewChat,
     "ctrl+k": () => {
       const composer = document.querySelector('[data-slot="aui-composer-input"]') as HTMLElement;
       composer?.focus();
     },
+    "ctrl+/": () => setShortcutsModalOpen(true),
+    "escape": () => {
+      // Use the stable class, not the aria-label — the label is translated
+      // (e.g. Arabic "إيقاف التوليد") and the old selector never matched it.
+      const cancelButton = document.querySelector(
+        ".aui-composer-cancel"
+      ) as HTMLButtonElement | null;
+      cancelButton?.click();
+    },
+    // Navigation shortcuts
+    "ctrl+[": goToPreviousThread,
+    "ctrl+]": goToNextThread,
+    "ctrl+arrowup": goToPreviousMessage,
+    "ctrl+arrowdown": goToNextMessage,
+    // Action shortcuts
     "ctrl+shift+c": () => {
       const messages = document.querySelectorAll('[data-role="assistant"]');
       const last = messages[messages.length - 1];
@@ -163,14 +203,10 @@ export const Shadcn: FC<{
         }
       }
     },
-    "escape": () => {
-      // Use the stable class, not the aria-label — the label is translated
-      // (e.g. Arabic "إيقاف التوليد") and the old selector never matched it.
-      const cancelButton = document.querySelector(
-        ".aui-composer-cancel"
-      ) as HTMLButtonElement | null;
-      cancelButton?.click();
-    },
+    "ctrl+shift+e": toggleSidebar,
+    "ctrl+shift+a": toggleArtifacts,
+    "ctrl+shift+m": toggleEmail,
+    "ctrl+shift+k": toggleCalendar,
   });
 
   // ─── Octopus: Listen for AgenticUI actions from the stream parser ────
@@ -199,7 +235,7 @@ export const Shadcn: FC<{
     if (action.action === "SET_TEXT") {
       const composer = document.querySelector('[data-slot="aui-composer-input"]') as HTMLElement;
       if (composer) {
-        (composer as any).focus();
+        (composer as HTMLElement).focus();
         // Dispatch input event for Lexical to pick up
         const textArea = composer.querySelector('[contenteditable]') as HTMLElement;
         if (textArea) {
@@ -339,6 +375,11 @@ export const Shadcn: FC<{
                 </Suspense>
               </div>
             )}
+            {/* Keyboard Shortcuts Modal */}
+            <KeyboardShortcutsModal
+              open={shortcutsModalOpen}
+              onOpenChange={setShortcutsModalOpen}
+            />
           </div>
     </div>
   );

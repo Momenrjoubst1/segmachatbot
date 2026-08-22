@@ -58,7 +58,10 @@ export function validateAndPrepareRequest(req: {
   }
 
   const body = req.body as {
-    messages?: unknown[];
+    messages?: Array<{
+      role: 'user' | 'assistant' | 'system' | 'tool';
+      content: string | Array<{ type: string; text?: string }>;
+    }>;
     model?: string;
     config?: { modelName?: string };
     data?: { modelName?: string };

@@ -79,8 +79,8 @@ export function AuthCard({ initialTab = "signin", onSuccess, isModal = false }: 
               : "Password reset link sent to your email successfully."
           );
         }
-      } catch (err: any) {
-        setErrorMessage(err.message || "Failed to send reset link");
+      } catch (err: unknown) {
+        setErrorMessage(err instanceof Error ? err.message : "Failed to send reset link");
       } finally {
         setIsSubmitting(false);
       }
@@ -136,8 +136,8 @@ export function AuthCard({ initialTab = "signin", onSuccess, isModal = false }: 
           }, 600);
         }
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || t("signin.errors.default", "Authentication failed"));
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : t("signin.errors.default", "Authentication failed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -152,8 +152,8 @@ export function AuthCard({ initialTab = "signin", onSuccess, isModal = false }: 
         setErrorMessage(error.message || t("signin.errors.google", "Google authentication failed"));
         setIsGoogleSubmitting(false);
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || t("signin.errors.google", "Google authentication failed"));
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : t("signin.errors.google", "Google authentication failed"));
       setIsGoogleSubmitting(false);
     }
   };

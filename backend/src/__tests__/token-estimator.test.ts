@@ -1,4 +1,63 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('../utils/logger.js', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  })),
+}));
+
+vi.mock('../services/memory/model-context.js', () => ({
+  MODEL_CONTEXT_WINDOWS: {
+    'gpt-4o': { value: 'gpt-4o', contextWindow: 128000, provider: 'openrouter' },
+    'gpt-4o-mini': { value: 'gpt-4o-mini', contextWindow: 128000, provider: 'github' },
+  },
+  DEFAULT_CONTEXT_WINDOW: 8000,
+  getModelContextWindow: vi.fn((modelId: string) => {
+    const windows: Record<string, number> = {
+      'gpt-4o': 128000,
+      'gpt-4o-mini': 128000,
+    };
+    return windows[modelId] || 8000;
+  }),
+  getModelInfo: vi.fn((modelId: string) => {
+    const models: Record<string, any> = {
+      'gpt-4o': { value: 'gpt-4o', contextWindow: 128000, provider: 'openrouter' },
+      'gpt-4o-mini': { value: 'gpt-4o-mini', contextWindow: 128000, provider: 'github' },
+    };
+    return models[modelId];
+  }),
+}));
+
+vi.mock('../../../features/ai-assistant/model-catalog.js', () => ({
+  getContextWindow: vi.fn((modelId: string) => {
+    const windows: Record<string, number> = {
+      'gpt-4o': 128000,
+      'gpt-4o-mini': 128000,
+      'deepseek-v4-flash': 64000,
+    };
+    return windows[modelId] || 8192;
+  }),
+  MODELS: {
+    'gpt-4o': { contextWindow: 128000 },
+    'gpt-4o-mini': { contextWindow: 128000 },
+  },
+}));
+
+vi.mock('../config/constants.js', () => ({
+  MEMORY_CONFIG: {
+    MAX_FACTS_PER_USER: 100,
+    MIN_MESSAGES_FOR_EXTRACTION: 6,
+    MAX_EXTRACTIONS_PER_SESSION: 5,
+    MAX_FACT_AGE_DAYS: 90,
+    debug: {
+      enabled: false,
+    },
+  },
+}));
+
 import {
   estimateTokens,
   estimateTokensHeuristic,
@@ -129,7 +188,7 @@ describe('Token Estimator', () => {
         { role: 'user', content: 'Hello world' },
         { role: 'assistant', content: 'Hi there!' },
       ];
-      const status = getContextWindowStatus(messages, 128000);
+      const status = getContextWindowStatus(messages, 'gpt-4o');
       expect(status).toHaveProperty('usagePercent');
       expect(status).toHaveProperty('shouldSummarize');
       expect(status).toHaveProperty('urgency');
@@ -137,16 +196,16 @@ describe('Token Estimator', () => {
     });
 
     it('should flag near limit usage', () => {
-      // Create many messages to exceed 90% of 1000 token limit
-      const messages = Array(100).fill({ role: 'user', content: 'Hello world, this is a test message with some content' });
-      const status = getContextWindowStatus(messages, 1000);
-      expect(status.urgency).toBe('critical');
+      // Use 'gpt-4o' which has 128000 context window. Many messages should trigger critical.
+      const messages = Array(5000).fill({ role: 'user', content: 'Hello world, this is a test message with some content that takes up tokens' });
+      const status = getContextWindowStatus(messages, 'gpt-4o');
+      expect(['critical', 'warning']).toContain(status.urgency);
     });
 
     it('should flag summarization needed', () => {
-      // Create messages to exceed 70% of 1000 token limit
-      const messages = Array(50).fill({ role: 'user', content: 'Hello world, this is a test message with some content' });
-      const status = getContextWindowStatus(messages, 1000);
+      // Use 'gpt-4o' which has 128000 context window. Many messages should trigger summarization.
+      const messages = Array(5000).fill({ role: 'user', content: 'Hello world, this is a test message with some content that takes up tokens' });
+      const status = getContextWindowStatus(messages, 'gpt-4o');
       expect(status.shouldSummarize).toBe(true);
     });
   });

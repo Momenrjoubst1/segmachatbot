@@ -27,14 +27,25 @@ async function fetchGoogleCalendarEvents(accessToken: string, calendarId: string
     throw new Error(`Google Calendar API error: ${response.statusText}`);
   }
 
-  const data = await response.json() as { items?: any[] };
+  interface GoogleCalendarEvent {
+    id?: string;
+    summary?: string;
+    description?: string;
+    location?: string;
+    htmlLink?: string;
+    start?: { dateTime?: string; date?: string };
+    end?: { dateTime?: string; date?: string };
+    attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string }>;
+    [key: string]: unknown;
+  }
+  const data = await response.json() as { items?: GoogleCalendarEvent[] };
   return data.items || [];
 }
 
 // ============================================
 // Helper: Parse event dates
 // ============================================
-function parseEventDate(event: any): { start: string; end: string } {
+function parseEventDate(event: { start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }): { start: string; end: string } {
   const start = event.start?.dateTime || event.start?.date || new Date().toISOString();
   const end = event.end?.dateTime || event.end?.date || new Date().toISOString();
   return { start, end };
@@ -117,8 +128,20 @@ registerTool("get_upcoming_events", {
       const timeMaxISO = timeMax.toISOString();
 
       // Try Google Calendar first
-      let googleEvents: any[] = [];
-      let useGoogle = false;
+  interface GoogleCalendarEvent {
+    id?: string;
+    summary?: string;
+    description?: string;
+    location?: string;
+    htmlLink?: string;
+    start?: { dateTime?: string; date?: string };
+    end?: { dateTime?: string; date?: string };
+    attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string }>;
+    [key: string]: unknown;
+  }
+
+  let googleEvents: GoogleCalendarEvent[] = [];
+  let useGoogle = false;
 
       try {
         // Get user's calendar settings
@@ -164,7 +187,7 @@ registerTool("get_upcoming_events", {
       }
 
       // Combine and format events
-      const allEvents: any[] = [];
+      const allEvents: Array<{ id?: string; title: string; start_time: string; end_time: string; description?: string; location?: string; is_all_day?: boolean; provider?: string; external_link?: string; color?: string; attendees?: unknown[] }> = [];
 
       if (useGoogle && googleEvents.length > 0) {
         for (const event of googleEvents) {
@@ -183,7 +206,7 @@ registerTool("get_upcoming_events", {
             is_all_day: isAllDay,
             provider: "google",
             external_link: event.htmlLink || "",
-            attendees: (event.attendees || []).map((a: any) => ({
+            attendees: (event.attendees || []).map((a) => ({
               email: a.email,
               name: a.displayName || a.email,
               status: a.responseStatus || "pending",

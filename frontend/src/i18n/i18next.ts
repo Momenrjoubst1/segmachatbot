@@ -26,6 +26,9 @@ import enProfile from "@/i18n/locales/en/profile.json";
 import enMessages from "@/i18n/locales/en/messages.json";
 import enErrors from "@/i18n/locales/en/errors.json";
 import enValidation from "@/i18n/locales/en/validation.json";
+import enKeyboardShortcuts from "@/i18n/locales/en/keyboardShortcuts.json";
+import enBotStatus from "@/i18n/locales/en/botStatus.json";
+import enStudy from "@/i18n/locales/en/study.json";
 
 // ── Arabic namespaces ───────────────────────────────────────────────
 import arCommon from "@/i18n/locales/ar/common.json";
@@ -38,6 +41,9 @@ import arProfile from "@/i18n/locales/ar/profile.json";
 import arMessages from "@/i18n/locales/ar/messages.json";
 import arErrors from "@/i18n/locales/ar/errors.json";
 import arValidation from "@/i18n/locales/ar/validation.json";
+import arKeyboardShortcuts from "@/i18n/locales/ar/keyboardShortcuts.json";
+import arBotStatus from "@/i18n/locales/ar/botStatus.json";
+import arStudy from "@/i18n/locales/ar/study.json";
 
 // ── Legacy flat dictionaries (kept for backward-compat wrapper) ─────
 import { en as enLegacy } from "@/i18n/locales/en";
@@ -54,6 +60,9 @@ export const NAMESPACES = [
   "messages",
   "errors",
   "validation",
+  "keyboardShortcuts",
+  "botStatus",
+  "study",
   "legacy",
 ] as const;
 
@@ -71,6 +80,9 @@ const resources = {
     messages: enMessages,
     errors: enErrors,
     validation: enValidation,
+    keyboardShortcuts: enKeyboardShortcuts,
+    botStatus: enBotStatus,
+    study: enStudy,
     legacy: enLegacy,
   },
   ar: {
@@ -84,6 +96,9 @@ const resources = {
     messages: arMessages,
     errors: arErrors,
     validation: arValidation,
+    keyboardShortcuts: arKeyboardShortcuts,
+    botStatus: arBotStatus,
+    study: arStudy,
     legacy: arLegacy,
   },
 } as const;

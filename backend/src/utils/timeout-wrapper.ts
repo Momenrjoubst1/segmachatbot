@@ -10,6 +10,17 @@ import { createLogger } from './logger.js';
 
 const log = createLogger('timeout-wrapper');
 
+/** Typed error thrown when an operation exceeds its time budget. */
+export class TimeoutError extends Error {
+  override readonly name = "TimeoutError";
+  constructor(
+    public readonly operationName: string,
+    message?: string,
+  ) {
+    super(message ?? `Operation "${operationName}" timed out`);
+  }
+}
+
 export interface TimeoutOptions {
   timeoutMs: number;
   operationName: string;
@@ -29,11 +40,10 @@ export async function withTimeout<T>(
   
   const timeoutPromise = new Promise<never>((_, reject) => {
     const timeout = setTimeout(() => {
-      const error = new Error(
-        errorMessage || `Operation "${operationName}" timed out after ${timeoutMs}ms`
+      const error = new TimeoutError(
+        operationName,
+        errorMessage || `Operation "${operationName}" timed out after ${timeoutMs}ms`,
       );
-      (error as any).code = 'TIMEOUT';
-      (error as any).operationName = operationName;
       
       log.error(`Operation timeout: ${operationName}`, { timeoutMs });
       
@@ -56,7 +66,7 @@ export async function withTimeout<T>(
     return await Promise.race([operation, timeoutPromise]);
   } catch (error) {
     // Re-throw timeout errors
-    if ((error as any)?.code === 'TIMEOUT') {
+    if (error instanceof TimeoutError) {
       throw error;
     }
     // Re-throw other errors
@@ -76,7 +86,7 @@ export async function withTimeoutFallback<T>(
   try {
     return await withTimeout(operation, options);
   } catch (error) {
-    if ((error as any)?.code === 'TIMEOUT') {
+    if (error instanceof TimeoutError) {
       log.warn(`Operation timed out, using fallback: ${options.operationName}`, { fallback });
       return fallback;
     }

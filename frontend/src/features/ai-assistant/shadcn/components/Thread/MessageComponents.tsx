@@ -8,11 +8,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/cn";
-import { LoadingSpinner } from "@/components/ui/LoadingStates";
+import { ErrorBoundary } from "@/components/ui/core/ErrorBoundary";
 import { MarkdownText } from "../../../ui/markdown-text";
 import { Perspective } from "@/components/ui/perspective-highlight";
 import { MessageTiming } from "../../../ui/message-timing";
+import { BotStatusInline } from "../../../ui/bot-activity/components/BotStatusInline";
+import { MessageSkeleton } from "../../../ui/bot-activity/components/MessageSkeleton";
 import { QuoteBlock } from "../../../ui/quote";
 import { DirectiveText } from "../../../ui/directive-text";
 import { TooltipIconButton } from "../../../ui/tooltip-icon-button";
@@ -23,6 +24,7 @@ import {
   ComposerPrimitive,
   ErrorPrimitive,
   MessagePrimitive,
+  useAui,
   useAuiState,
 } from "../../../shims/assistant-ui-compat-shim";
 import {
@@ -39,32 +41,14 @@ import {
   ThumbsDownIcon,
   ThumbsUpIcon,
 } from "lucide-react";
-import { create } from "zustand";
 import { LexicalComposerInput } from "@assistant-ui/react-lexical";
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import { type DirectiveChipProps } from "@assistant-ui/react-lexical";
 import { WrenchIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-
-// ─── Assistant Settings Store ────────────────────────────────────────────────────
-
-interface AssistantSettingsState {
-  disable3D: boolean;
-  toggle3D: () => void;
-}
-
-export const useAssistantSettingsStore = create<AssistantSettingsState>((set) => ({
-  disable3D: typeof window !== "undefined" ? localStorage.getItem("assistant_disable_3d") === "true" : false,
-  toggle3D: () =>
-    set((state) => {
-      const newValue = !state.disable3D;
-      if (typeof window !== "undefined") {
-        localStorage.setItem("assistant_disable_3d", String(newValue));
-      }
-      return { disable3D: newValue };
-    }),
-}));
+import { useAssistantSettings } from "../../../context/AssistantSettingsContext";
+import { cn } from "@/lib/cn";
 
 // ─── Directive Chip (shared between Composer and EditComposer) ────────────────────
 
@@ -86,163 +70,6 @@ export function DirectiveChip(props: DirectiveChipProps) {
       <span className="aui-directive-chip-label">{label}</span>
     </span>
   );
-}
-
-// ─── Tool Activity Helpers ────────────────────────────────────────────────────────
-
-type ToolActivityStatus = {
-  type?: "running" | "complete" | "incomplete" | "requires-action" | string;
-};
-
-type ToolActivityResult = {
-  status?: string;
-  message?: string;
-};
-
-const toolActivityLabels: Record<
-  string,
-  {
-    running: string;
-    complete: string;
-    requiresAction?: string;
-    noResults?: string;
-    unavailable?: string;
-    failed?: string;
-  }
-> = {
-  web_search: {
-    running: "Searching the web...",
-    complete: "Finished searching the web.",
-    noResults: "I could not find useful results on the web.",
-    failed: "Web search failed.",
-  },
-  calculator: {
-    running: "Calculating...",
-    complete: "Finished calculating.",
-    failed: "Calculation failed.",
-  },
-  get_time: {
-    running: "Checking the time...",
-    complete: "Finished checking the time.",
-    failed: "Time check failed.",
-  },
-  get_weather: {
-    running: "Checking the weather...",
-    complete: "Finished checking the weather.",
-    failed: "Weather check failed.",
-  },
-  send_email: {
-    running: "Preparing the email...",
-    complete: "Email sent.",
-    requiresAction: "Waiting for your confirmation to send the email.",
-    failed: "Email preparation failed.",
-  },
-  create_calendar_event: {
-    running: "Preparing the calendar event...",
-    complete: "Calendar event ready.",
-    requiresAction: "Waiting for your confirmation to create the event.",
-    failed: "Calendar event setup failed.",
-  },
-  get_course_info: {
-    running: "Looking up course information...",
-    complete: "Finished looking up the course information.",
-    noResults: "I could not find useful course information.",
-    failed: "Course lookup failed.",
-  },
-  generate_flashcards: {
-    running: "Preparing flashcards...",
-    complete: "Flashcards are ready.",
-    failed: "Flashcards generation failed.",
-  },
-  code_executor: {
-    running: "Running the code...",
-    complete: "Code execution finished.",
-    failed: "Code execution failed.",
-  },
-  create_artifact: {
-    running: "Creating the content...",
-    complete: "Content is ready.",
-    failed: "Content creation failed.",
-  },
-};
-
-const fallbackToolActivity = {
-  running: "Using a tool...",
-  complete: "Tool step complete.",
-  requiresAction: "Waiting for your confirmation to continue.",
-  noResults: "No useful results found.",
-  unavailable: "This tool is currently unavailable.",
-  failed: "Tool step failed.",
-};
-
-function parseToolActivityResult(result: unknown): ToolActivityResult | null {
-  if (!result) return null;
-  if (typeof result === "string") {
-    try {
-      return JSON.parse(result) as ToolActivityResult;
-    } catch {
-      return null;
-    }
-  }
-  if (typeof result === "object") return result as ToolActivityResult;
-  return null;
-}
-
-type ActivityState = {
-  label: string;
-  kind: "thinking" | "writing" | "tool";
-};
-
-function getToolActivity(part: any): ActivityState | null {
-  if (!part || part.type !== "tool-call" || !part.toolName) return null;
-
-  const labels = toolActivityLabels[part.toolName] ?? fallbackToolActivity;
-  const status = (part.status ?? {}) as ToolActivityStatus;
-  const statusType = status.type ?? "running";
-  const result = parseToolActivityResult(part.result ?? part.output ?? part.toolResult ?? part.response);
-  const resultStatus = result?.status;
-
-  const isRequiresAction =
-    statusType === "requires-action" ||
-    resultStatus === "needs_confirmation" ||
-    resultStatus === "manual";
-  const isNoResults = resultStatus === "no_results";
-  const isUnavailable = resultStatus === "unavailable" || resultStatus === "rate_limited";
-  const isFailed =
-    statusType === "incomplete" ||
-    resultStatus === "error" ||
-    resultStatus === "failed";
-
-  const label = statusType === "running"
-    ? labels.running
-    : isRequiresAction
-      ? labels.requiresAction ?? fallbackToolActivity.requiresAction
-      : isNoResults
-        ? labels.noResults ?? fallbackToolActivity.noResults
-        : isUnavailable
-          ? labels.unavailable ?? fallbackToolActivity.unavailable
-          : isFailed
-            ? labels.failed ?? fallbackToolActivity.failed
-            : labels.complete;
-
-  return { label, kind: "tool" };
-}
-
-function getAssistantActivity(
-  parts: { type: string; toolName?: string; status?: { type?: string } }[],
-  messageStatus: { type?: string } | undefined,
-): ActivityState | null {
-  if (messageStatus?.type !== "running") return null;
-
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const activity = getToolActivity(parts[i]);
-    if (activity) return activity;
-  }
-
-  const hasTextContent = parts.some((part) => part.type === "text");
-  if (hasTextContent) return { label: "Writing response...", kind: "writing" };
-
-  return { label: "Thinking...", kind: "thinking" };
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────────
@@ -324,7 +151,7 @@ const MessageError: FC = () => {
 };
 
 const FriendlyErrorMessage: FC = () => {
-  const raw = useAuiState((s) => (s.message.status as any)?.error?.message ?? "") as string;
+  const raw = useAuiState((s) => ((s.message.status as Record<string, unknown>)?.error as Record<string, unknown>)?.message ?? "") as string;
   const info = useMemo(() => classifyFetchError(raw), [raw]);
   const { t } = useTranslation("errors");
   const [copied, setCopied] = useState(false);
@@ -369,59 +196,8 @@ const FriendlyErrorMessage: FC = () => {
   );
 };
 
-const AssistantStatusLine: FC = () => {
-  const parts = useAuiState(
-    (s) => s.message.parts as unknown as { type: string; toolName?: string; status?: { type?: string } }[]
-  );
-  const messageStatus = useAuiState((s) => s.message.status);
-  const activity = getAssistantActivity(parts, messageStatus);
-
-  if (!activity) return null;
-
-  if (activity.kind === "thinking") {
-    return (
-      <div className="flex items-center gap-2 mt-2">
-        <SimpleThinkingLoader />
-        <span className="text-sm text-muted-foreground/80 animate-pulse">
-          {activity.label}
-        </span>
-      </div>
-    );
-  }
-
-  if (activity.kind === "tool") {
-    return (
-      <div className="flex items-center gap-2 mt-2 mb-1">
-        <div className="flex gap-1">
-          <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:0ms]" />
-          <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:150ms]" />
-          <div className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce [animation-delay:300ms]" />
-        </div>
-        <span className="text-sm text-muted-foreground/80">
-          {activity.label}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-2 mt-2">
-      <LoadingSpinner size="sm" />
-      <span className="text-sm text-muted-foreground/80">
-        {activity.label}
-      </span>
-    </div>
-  );
-};
-
-const SimpleThinkingLoader: FC = () => {
-  return (
-    <div className="flex gap-1.5">
-      <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-pulse [animation-delay:0ms]" />
-      <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-pulse [animation-delay:200ms]" />
-      <div className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-pulse [animation-delay:400ms]" />
-    </div>
-  );
+const AssistantStatusLine: FC<{ onStop: () => void; onRetry: () => void }> = ({ onStop, onRetry }) => {
+  return <BotStatusInline onStop={onStop} onRetry={onRetry} />;
 };
 
 export const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({ className, ...rest }) => {
@@ -463,7 +239,7 @@ const ActionBarButton: FC<{ tooltip: string; className?: string; onClick?: () =>
 );
 
 const AssistantActionBar: FC = () => {
-  const { disable3D, toggle3D } = useAssistantSettingsStore();
+  const { disable3D, toggle3D } = useAssistantSettings();
   const { t } = useTranslation();
   const isCopied = useAuiState((s) => s.message.isCopied);
   const isPositive = useAuiState((s) => Boolean((s.message as { feedback?: { isPositive?: boolean } }).feedback?.isPositive));
@@ -593,15 +369,16 @@ const EditComposer: FC = () => {
 
 export const UserMessage: FC = () => {
   const status = useAuiState((s) => s.message.status);
-  const hasError = (status as any)?.type === "error" || (status as any)?.type === "failed";
+  const hasError = (status as Record<string, unknown>)?.type === "error" || (status as Record<string, unknown>)?.type === "failed";
   const branchCount = useAuiState(
-    (s) => (s.message as any).branchCount as number | undefined,
+    (s) => (s.message as Record<string, unknown>).branchCount as number | undefined,
   );
   const isForked = (branchCount ?? 1) > 1;
   const { t } = useTranslation();
 
   return (
-    <MessagePrimitive.Root
+    <ErrorBoundary fallback={<div className="text-destructive text-sm p-2">Failed to render user message</div>}>
+      <MessagePrimitive.Root
       data-slot="aui_user-message-root"
       data-role="user"
       className="fade-in slide-in-from-bottom-1 mx-auto grid w-full min-w-0 max-w-3xl animate-in auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 px-2 duration-150 [&:where(>*)]:col-start-2"
@@ -647,23 +424,38 @@ export const UserMessage: FC = () => {
         </div>
       )}
 
-      <BranchPicker
-        data-slot="aui_user-branch-picker"
-        className="col-span-full col-start-1 row-start-3 -mr-1 justify-end"
-      />
-    </MessagePrimitive.Root>
+<BranchPicker
+          data-slot="aui_user-branch-picker"
+          className="col-span-full col-start-1 row-start-3 -mr-1 justify-end"
+        />
+      </MessagePrimitive.Root>
+    </ErrorBoundary>
   );
 };
 
 export const AssistantMessage: FC = () => {
   const ACTION_BAR_PT = "pt-1.5";
   const ACTION_BAR_HEIGHT = `-mb-7.5 min-h-7.5 ${ACTION_BAR_PT}`;
-  const disable3D = useAssistantSettingsStore((s) => s.disable3D);
+  const { disable3D } = useAssistantSettings();
   const messageId = useAuiState((s) => s.message.id);
   const { activeThreadMessages } = useChatHistory();
-  const chatMessage = activeThreadMessages?.find((m: any) => m.id === messageId) as { interrupted?: boolean } | undefined;
+  const chatMessage = activeThreadMessages?.find((m) => m.id === messageId) as { interrupted?: boolean } | undefined;
+
+  const aui = useAui();
 
   const handleRetryInterrupted = useCallback(() => {
+    reloadBtnRef.current?.click();
+  }, []);
+
+  const handleStopFromStatus = useCallback(() => {
+    try {
+      aui.thread().cancelRun();
+    } catch {
+      // Runtime not in cancellable state — ignore.
+    }
+  }, [aui]);
+
+  const handleRetryFromStatus = useCallback(() => {
     reloadBtnRef.current?.click();
   }, []);
 
@@ -683,7 +475,8 @@ export const AssistantMessage: FC = () => {
   }, [messageId]);
 
   return (
-    <MessagePrimitive.Root
+    <ErrorBoundary fallback={<div className="text-destructive text-sm p-2">Failed to render assistant message</div>}>
+      <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
       className="fade-in slide-in-from-bottom-1 relative mx-auto w-full min-w-0 max-w-3xl animate-in duration-150"
@@ -699,6 +492,10 @@ export const AssistantMessage: FC = () => {
           className="wrap-break-word px-2 text-[15.5px] leading-8 text-foreground md:text-base"
           dir="auto"
         >
+          {/* Status indicator anchored at the TOP of the message bubble so
+              it doesn't get pushed down by streaming text — Claude.ai style.
+              Idle state renders null, so no extra space when the message is done. */}
+          <AssistantStatusLine onStop={handleStopFromStatus} onRetry={handleRetryFromStatus} />
           <MessagePrimitive.Parts>
             {({ part }) => {
               if (part.type === "text") {
@@ -707,9 +504,9 @@ export const AssistantMessage: FC = () => {
                 }
                 return (
                   <div style={{ position: "relative", isolation: "isolate" }}>
-                    <Perspective 
-                      maxRotateX={1} 
-                      maxRotateY={5} 
+                    <Perspective
+                      maxRotateX={1}
+                      maxRotateY={5}
                       smoothing={0.1}
                       cardClassName="max-w-none p-0 bg-transparent shadow-none"
                     >
@@ -721,7 +518,10 @@ export const AssistantMessage: FC = () => {
               return null;
             }}
           </MessagePrimitive.Parts>
-          <AssistantStatusLine />
+          {/* Empty-state skeleton — shows two placeholder lines while the
+              bot is working but hasn't produced any text yet. Renders null
+              once text arrives, so it auto-disappears on first token. */}
+          <MessageSkeleton />
           <MessageError />
 
           {chatMessage?.interrupted && (
@@ -753,6 +553,7 @@ export const AssistantMessage: FC = () => {
         </div>
       </div>
     </MessagePrimitive.Root>
+  </ErrorBoundary>
   );
 };
 

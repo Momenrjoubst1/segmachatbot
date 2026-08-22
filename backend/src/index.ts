@@ -14,6 +14,7 @@ import { requestIdMiddleware } from "./middleware/request-id.js";
 import { logger, initSentry, log } from "./utils/logger.js";
 import { validateConfigurationOrExit } from "./config/config-validator.js";
 import { validateToolRegistry } from "./tools/tool-metadata.js";
+import { initTools } from "./tools/tool-definitions-aggregator.js";
 import { createErrorResponse, logError, AppError } from "./utils/error-handler.js";
 
 initSentry();
@@ -28,7 +29,9 @@ import proxyRoutes from "./routes/proxy.routes.js";
 import moderationRoutes from "./routes/moderation.routes.js";
 import textbookRoutes from "./routes/textbook.routes.js";
 import toolsRoutes from "./routes/tools.routes.js";
+import { studyRoutes } from "./routes/study.routes.js";
 import { initializeBM25FromDB } from "./services/rag/bm25-search.js";
+import { warmUpReranker } from "./services/rag/document-reranker.js";
 
 // ==========================================
 // Startup validation
@@ -40,6 +43,8 @@ function logStartupConfigSummary(): void {
   if (process.env.GITHUB_TOKEN) providersAvailable.push("GitHub");
   if (process.env.OPENROUTER_API_KEY) providersAvailable.push("OpenRouter");
   if (process.env.FIREWORKS_API_KEY) providersAvailable.push("Fireworks");
+  if (process.env.BIGMODEL_API_KEY) providersAvailable.push("BigModel");
+  if (process.env.GEMINI_API_KEY) providersAvailable.push("Gemini");
 
   logger.info("Startup configuration summary", {
     model: process.env.ASSISTANT_DEFAULT_MODEL,
@@ -75,12 +80,19 @@ if (!toolValidation.valid) {
   log.info('✅ Tool registry validation passed');
 }
 
+// Initialize tools (with per-tool error isolation)
+await initTools();
+
+// Pre-warm reranker to avoid cold-start on first request
+warmUpReranker().catch((err) => {
+  log.warn("Reranker warm-up failed (non-fatal)", { error: err.message });
+});
+
 testRedisConnection();
 initializeBM25FromDB();
 logStartupConfigSummary();
 
 const app = express();
-app.disable('x-powered-by');
 app.set("trust proxy", appConfig.trustProxyHops);
 
 // Helmet sets: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection,
@@ -121,9 +133,10 @@ app.use("/api/artifacts", authMiddleware, artifactsRoutes);
 app.use("/api/analytics", authMiddleware, analyticsRoutes);
 app.use("/api/textbooks", authMiddleware, textbookRoutes);
 app.use("/api/tools", authMiddleware, toolsRoutes);
+app.use("/api/study", authMiddleware, studyRoutes);
 
 if (process.env.NODE_ENV === "development") {
-  app.post("/api/dev/reprocess/:id", async (req: Request, res: Response) => {
+  app.post("/api/dev/reprocess/:id", authMiddleware, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { supabase } = await import("./config/supabase.config.js");
@@ -157,18 +170,18 @@ if (process.env.NODE_ENV === "development") {
 
       res.json({ ok: true, textbook_id: id });
     } catch (err) {
-      res.status(500).json({ error: (err as Error).message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
-  app.post("/api/dev/reembed/:id", async (req: Request, res: Response) => {
+  app.post("/api/dev/reembed/:id", authMiddleware, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { embedTextbookChunks } = await import("./services/textbook/textbook-embeddings.js");
       const embedded = await embedTextbookChunks(id);
       res.json({ ok: true, textbook_id: id, embedded });
     } catch (err) {
-      res.status(500).json({ error: (err as Error).message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 }
@@ -239,7 +252,7 @@ app.use(
 if (appConfig.nodeEnv !== "test") {
   logger.info(`Final Port Config: ${PORT}`);
 
-  const server = app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, appConfig.nodeEnv === "production" ? "0.0.0.0" : "127.0.0.1", () => {
     logger.info(`Sigma AI Backend running on http://localhost:${PORT}`);
 
     // Start textbook processing worker (non-blocking, only processes when jobs exist)

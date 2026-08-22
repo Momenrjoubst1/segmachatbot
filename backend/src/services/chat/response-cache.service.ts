@@ -93,7 +93,7 @@ function getItemKey(key: string, userId?: string): string {
 // Node.js is single-threaded, but async I/O means two concurrent `cacheResponse`
 // calls can interleave at await points.  We chain each write onto the previous
 // one so that the READ-MUTATE-WRITE sequence for the index is never split.
-let _writeLock: Promise<any> = Promise.resolve();
+let _writeLock: Promise<unknown> = Promise.resolve();
 
 function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
   const next = _writeLock.then(fn, fn);

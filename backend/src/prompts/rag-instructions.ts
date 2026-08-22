@@ -38,6 +38,14 @@ export function buildRAGInstructions(options: RAGOptions): string {
 You have access to a private knowledge base (retrieved via ${methodLabel}). You MUST use the provided context below to answer the user's queries.
 If the answer is NOT found in the context below, you must politely inform the user that you don't have that specific information in your current documents, but you can still help them generally based on your roles above.
 
+## Citation Format (MANDATORY) — تنسيق الاستشهاد الإلزامي
+
+Every factual claim derived from the provided context MUST include an inline citation using this exact format:
+\`[Source: DocumentName]\`
+
+Place the citation immediately after the sentence or claim it supports. Example:
+"The Sigma platform launched in 2024 [Source: PlatformHistory.pdf] and serves 50,000+ students [Source: UserStats.docx]."
+
 ## Sources Formatting (STRICTLY REQUIRED) — تنسيق المصادر
 
 At the very end of your response, you MUST always append a beautifully formatted, professional "Sources" section exactly matching this Markdown template:

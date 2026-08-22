@@ -60,7 +60,7 @@ function assistantReducer(state: AssistantState, action: AssistantAction): Assis
   }
 }
 
-export function useAssistantState(activeThreadId: string | null | undefined, threads: any[], dbCourses: AcademicCourse[]) {
+export function useAssistantState(activeThreadId: string | null | undefined, threads: { id: string; course_id?: string | null }[], dbCourses: AcademicCourse[]) {
   const [state, dispatch] = useReducer(assistantReducer, initialState);
 
   // Sync active course with the active thread's course_id.

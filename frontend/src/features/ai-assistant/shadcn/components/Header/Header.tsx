@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { AnimatedDock } from "@/components/ui/animated-dock";
 import { useAgenticAction } from "../../../../../context/AgenticUIBus";
+import { BotStatusPulseDot } from "../../../ui/bot-activity/components/BotStatusPulseDot";
 
 export interface HeaderProps {
   sidebarCollapsed: boolean;
@@ -62,6 +63,10 @@ export const Header: FC<HeaderProps> = ({
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 px-4">
+      {/* Live status dot — same component used in the sidebar. Reads
+          from the bot activity bridge, so it works outside the AUI
+          runtime. Sits at the very left of the header. */}
+      <BotStatusPulseDot size="sm" className="ml-1" />
       <AnimatedDock
         className="h-10 px-2 pb-1.5 bg-white border border-[#EBE5DF] rounded-xl gap-2 flex items-center justify-center shadow-sm mx-0"
         items={[
@@ -78,7 +83,7 @@ export const Header: FC<HeaderProps> = ({
             arrowPath: "M12 0 C12 0, 16 2, 14 6 C12 10, 6 6, 8 10 C10 14, 16 12, 14 16 C12 20, 6 18, 8 22 L10 26 L12 30 L14 26 L12 22"
           },
           {
-            onClick: () => handleFeatureClick('email', onToggleEmailHistory),
+            onClick: () => handleFeatureClick('email', () => onToggleEmailHistory?.()),
             Icon: <Mail className="size-4" />,
             title: "Email History",
             arrowPath: "M12 0 C12 0, 6 2, 10 6 C14 10, 8 8, 12 12 C16 16, 10 14, 14 18 C18 22, 12 20, 12 24 L10 26 L12 30 L14 26 L12 24"

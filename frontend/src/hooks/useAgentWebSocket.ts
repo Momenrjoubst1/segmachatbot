@@ -314,7 +314,7 @@ export const useAgentWebSocket = ({
   const retryMessage = useCallback(() => {
     // Find user text before the interrupted message
     const msgs = activeThreadMessages;
-    const interruptedIdx = msgs.findIndex((m) => (m as any).interrupted);
+    const interruptedIdx = msgs.findIndex((m) => m.interrupted);
     if (interruptedIdx === -1) return;
 
     let userText = "";
