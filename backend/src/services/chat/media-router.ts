@@ -16,13 +16,41 @@
  *   {"stealth/ox-alpha":["video","audio"],"gemini-*":["video","audio"]}
  * Defaults cover the gemini family plus ox-alpha.
  */
+import crypto from "crypto";
 import { createLogger } from "../../utils/logger.js";
+import redis from "../../config/redis/client.js";
 import { registerMediaPayload } from "./media-registry.js";
 import { stageMediaForGemini } from "../media/gemini-files.js";
 import { transcribeR2Audio } from "../media/transcription.js";
-import { downloadR2ObjectToBuffer, presignR2Get, statR2Object } from "../textbook/r2-client.js";
+import { downloadR2ObjectToBuffer, statR2Object } from "../textbook/r2-client.js";
 
 const log = createLogger("media-router");
+
+// ── resolution caches ───────────────────────────────────────────────────────
+// Media refs are re-sent with every turn of a conversation; cache expensive
+// resolutions so repeat turns don't re-transcribe.
+
+async function cachedTranscript(
+  r2Key: string,
+  filename: string,
+  mimeType: string,
+  languageHint?: string,
+): Promise<string | null> {
+  const cacheKey = `media:transcript:${crypto.createHash("sha256")
+    .update(`${r2Key}:${languageHint ?? ""}`)
+    .digest("hex")}`;
+  try {
+    const hit = await redis.get(cacheKey);
+    if (hit) return hit;
+  } catch { /* best-effort */ }
+  const transcript = await transcribeR2Audio(r2Key, filename, mimeType, languageHint);
+  if (transcript) {
+    try {
+      await redis.set(cacheKey, transcript, "EX", 24 * 3600);
+    } catch { /* best-effort */ }
+  }
+  return transcript;
+}
 
 // ── capabilities ────────────────────────────────────────────────────────────
 
@@ -165,7 +193,7 @@ export async function resolveMediaPart(args: {
     }
     log.warn("Gemini staging failed — falling back to transcript/note", { r2Key });
     if (kind === "audio") {
-      const transcript = await transcribeR2Audio(r2Key, filename, mimeType, args.languageHint);
+      const transcript = await cachedTranscript(r2Key, filename, mimeType, args.languageHint);
       if (transcript) return { text: `[Audio: ${filename}]\n${transcript}` };
     }
     return { text: `[${kind}: ${filename} — could not be processed]` };
@@ -188,30 +216,53 @@ export async function resolveMediaPart(args: {
         }),
       };
     }
-    const transcript = await transcribeR2Audio(r2Key, filename, mimeType, args.languageHint);
+    const transcript = await cachedTranscript(r2Key, filename, mimeType, args.languageHint);
     if (transcript) {
       return { text: `[Audio attachment: ${filename} — transcription]\n${transcript}` };
     }
     return { text: `[Audio attachment: ${filename} — could not be transcribed]` };
   }
 
-  // ── Video on OpenAI-compatible capable models: sentinel + wire rewrite ──
+  // ── Video on OpenAI-compatible capable models: sentinel + wire rewrite.
+  // Live-probed against OpenRouter: ox-alpha routes dataURL video but
+  // REJECTS https URLs ("No endpoints found that support video URLs"), so
+  // presigned URLs are never used — anything above the inline cap should
+  // have been swapped to Gemini at pipeline step 1.5.
   const size = await statR2Object(r2Key);
-  let dataUrl: string | undefined;
-  let url: string | undefined;
-  if (size !== null && size <= DATA_URL_MAX_BYTES) {
+  if (size !== null && size > DATA_URL_MAX_BYTES) {
+    log.warn("Oversized video reached inline resolution — missed step-1.5 swap", { r2Key, size });
+    return { text: `[video: ${filename} — exceeds the inline limit for this model]` };
+  }
+  try {
     const bytes = await downloadR2ObjectToBuffer(r2Key);
-    dataUrl = `data:${mimeType};base64,${bytes.toString("base64")}`;
-  } else {
-    url = (await presignR2Get(r2Key, 3600)) || undefined;
-    if (!url) {
-      // No presign available — last resort inline regardless of size.
-      const bytes = await downloadR2ObjectToBuffer(r2Key);
-      dataUrl = `data:${mimeType};base64,${bytes.toString("base64")}`;
+    const dataUrl = `data:${mimeType};base64,${bytes.toString("base64")}`;
+    return {
+      sentinel: registerMediaPayload({ kind: "video", mediaType: mimeType, filename, dataUrl }),
+    };
+  } catch (err) {
+    log.warn("Video download failed", { r2Key, error: (err as Error).message });
+    return { text: `[video: ${filename} — could not be loaded]` };
+  }
+}
+
+/**
+ * True when any attached video exceeds MEDIA_DATA_URL_MAX_BYTES — such
+ * conversations must be answered by a Files-API-capable model (Gemini),
+ * because OpenRouter-compatible models cannot fetch video URLs and cannot
+ * hold arbitrarily large inline payloads.
+ */
+export async function hasOversizedVideo(messages: unknown, userId: string): Promise<boolean> {
+  if (!Array.isArray(messages)) return false;
+  for (const m of messages as RawMsgLike[]) {
+    for (const part of partsOf(m)) {
+      if (part?.type !== "file") continue;
+      const mime = String(part.mimeType || part.mediaType || "").toLowerCase();
+      if (!mime.startsWith("video/")) continue;
+      const key = ownedR2Key(partRawData(part), userId);
+      if (!key) continue;
+      const size = await statR2Object(key);
+      if (size !== null && size > DATA_URL_MAX_BYTES) return true;
     }
   }
-
-  return {
-    sentinel: registerMediaPayload({ kind: "video", mediaType: mimeType, filename, dataUrl, url }),
-  };
+  return false;
 }

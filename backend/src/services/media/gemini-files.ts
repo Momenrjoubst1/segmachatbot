@@ -124,15 +124,22 @@ async function uploadToGeminiFiles(
 
     // Step 3: poll until ACTIVE (videos are processed asynchronously).
     if (fileMeta.state !== "ACTIVE") {
+      // Prefer the returned uri; fall back to constructing the v1beta path —
+      // note the /v1beta/ segment: {name} alone 404s.
+      const pollUrl = fileMeta.uri || `${API_BASE}/v1beta/${fileMeta.name}`;
       const deadline = Date.now() + POLL_TIMEOUT_MS;
       let state = fileMeta.state;
+      let lastStatus = 0;
       while (state === "PROCESSING" && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        const pollRes = await fetch(`${API_BASE}/${fileMeta.name}`, {
+        const pollRes = await fetch(pollUrl, {
           headers: { "X-Goog-Api-Key": key },
           signal: AbortSignal.timeout(15_000),
         });
-        if (!pollRes.ok) break;
+        if (!pollRes.ok) {
+          lastStatus = pollRes.status;
+          continue; // transient — keep polling until the deadline
+        }
         const polled = (await pollRes.json()) as { state?: string; error?: { message?: string } };
         state = polled.state ?? "";
         if (state === "FAILED") {
@@ -141,7 +148,7 @@ async function uploadToGeminiFiles(
         }
       }
       if (state !== "ACTIVE") {
-        log.warn("Gemini Files not ACTIVE before timeout", { state });
+        log.warn("Gemini Files not ACTIVE before timeout", { state, lastStatus });
         return null;
       }
     }

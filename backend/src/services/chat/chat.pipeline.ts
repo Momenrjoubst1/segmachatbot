@@ -42,7 +42,7 @@ import { buildMemoryContext } from "./pipeline/memory.js";
 import { assembleSystemPrompt } from "./pipeline/system-prompt.js";
 import { resolveThread } from "./pipeline/thread.js";
 import { persistLastUserMessage } from "./pipeline/persist.js";
-import { getMediaRequirements, supportsMedia, getMediaFallbackModel } from "./media-router.js";
+import { getMediaRequirements, supportsMedia, getMediaFallbackModel, hasOversizedVideo } from "./media-router.js";
 import { runWithMediaRegistry } from "./media-registry.js";
 import { manageContextWindow } from "./pipeline/summarization.js";
 import { runUIFastPasses } from "./pipeline/ui-fastpass.js";
@@ -158,12 +158,16 @@ async function executeChatPipelineInner(
     // When the conversation carries video/audio attachments, make sure the
     // answering model ingests them natively; otherwise swap to the media
     // fallback (Gemini) BEFORE message processing so media parts are resolved
-    // for the right target. Non-swap failures degrade to Whisper transcripts.
+    // for the right target. Videos above the inline dataURL cap also route to
+    // Gemini — OpenRouter-compatible models cannot fetch video URLs.
     const mediaReqs = getMediaRequirements(messages);
     if (mediaReqs.video > 0 || mediaReqs.audio > 0) {
+      const oversizedVideo =
+        mediaReqs.video > 0 ? await hasOversizedVideo(messages, userId) : false;
       const needsSwap =
         (mediaReqs.video > 0 && !supportsMedia(modelName, "video")) ||
-        (mediaReqs.audio > 0 && !supportsMedia(modelName, "audio"));
+        (mediaReqs.audio > 0 && !supportsMedia(modelName, "audio")) ||
+        (oversizedVideo && !modelName.toLowerCase().startsWith("gemini"));
       if (needsSwap) {
         const mediaModel = getMediaFallbackModel();
         try {
