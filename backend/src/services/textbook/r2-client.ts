@@ -11,7 +11,7 @@
  * All operations are no-ops (with a warn log) when R2 is not configured.
  */
 
-import { S3Client, ListObjectsV2Command, DeleteObjectsCommand } from "@aws-sdk/client-s3";
+import { S3Client, ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { createReadStream } from "fs";
@@ -66,6 +66,22 @@ export async function presignR2Get(key: string, ttlSeconds = 3600): Promise<stri
 
   const command = new GetObjectCommand({ Bucket: _bucket, Key: key });
   return getSignedUrl(client, command, { expiresIn: ttlSeconds });
+}
+
+/**
+ * Size of an R2 object in bytes (HEAD request — no download).
+ * Returns null when the object is missing or R2 is unconfigured.
+ */
+export async function statR2Object(key: string): Promise<number | null> {
+  const client = r2Client();
+  if (!client || !_bucket) return null;
+
+  try {
+    const res = await client.send(new HeadObjectCommand({ Bucket: _bucket, Key: key }));
+    return res.ContentLength ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -171,6 +187,32 @@ export async function uploadR2Object(
   } catch (err) {
     log.error("R2 upload error", { key, error: (err as Error).message });
     return null;
+  }
+}
+
+/**
+ * Delete a single R2 object by key.
+ * Returns true on success, false on failure.
+ */
+export async function deleteR2Object(key: string): Promise<boolean> {
+  const client = r2Client();
+  if (!client || !_bucket) {
+    log.warn("R2 not configured — skipping delete", { key });
+    return false;
+  }
+
+  try {
+    await client.send(
+      new DeleteObjectsCommand({
+        Bucket: _bucket,
+        Delete: { Objects: [{ Key: key }], Quiet: true },
+      })
+    );
+    log.info("R2 object deleted", { key });
+    return true;
+  } catch (err) {
+    log.error("R2 delete error", { key, error: err instanceof Error ? err.message : String(err) });
+    return false;
   }
 }
 

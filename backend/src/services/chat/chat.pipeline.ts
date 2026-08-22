@@ -42,6 +42,8 @@ import { buildMemoryContext } from "./pipeline/memory.js";
 import { assembleSystemPrompt } from "./pipeline/system-prompt.js";
 import { resolveThread } from "./pipeline/thread.js";
 import { persistLastUserMessage } from "./pipeline/persist.js";
+import { getMediaRequirements, supportsMedia, getMediaFallbackModel } from "./media-router.js";
+import { runWithMediaRegistry } from "./media-registry.js";
 import { manageContextWindow } from "./pipeline/summarization.js";
 import { runUIFastPasses } from "./pipeline/ui-fastpass.js";
 import type { CoreMessage } from "./moderation.service.js";
@@ -113,6 +115,15 @@ export async function executeChatPipeline(
   req: Request,
   res: Response,
 ): Promise<void> {
+  // The media registry must span message processing AND the outbound model
+  // fetch — AsyncLocalStorage carries it across the whole request.
+  return runWithMediaRegistry(() => executeChatPipelineInner(req, res));
+}
+
+async function executeChatPipelineInner(
+  req: Request,
+  res: Response,
+): Promise<void> {
   const steps = new StepEventEmitter();
   try {
     // ---- Step 1: Validation ----
@@ -143,9 +154,36 @@ export async function executeChatPipeline(
     log.info("Using model", { model: modelName, provider });
     let client = createProviderClient(provider as Parameters<typeof createProviderClient>[0]);
 
+    // ---- Step 1.5: Media capability routing ----
+    // When the conversation carries video/audio attachments, make sure the
+    // answering model ingests them natively; otherwise swap to the media
+    // fallback (Gemini) BEFORE message processing so media parts are resolved
+    // for the right target. Non-swap failures degrade to Whisper transcripts.
+    const mediaReqs = getMediaRequirements(messages);
+    if (mediaReqs.video > 0 || mediaReqs.audio > 0) {
+      const needsSwap =
+        (mediaReqs.video > 0 && !supportsMedia(modelName, "video")) ||
+        (mediaReqs.audio > 0 && !supportsMedia(modelName, "audio"));
+      if (needsSwap) {
+        const mediaModel = getMediaFallbackModel();
+        try {
+          const { provider: mProvider, modelName: mName } = getProviderAndModel(mediaModel);
+          client = createProviderClient(mProvider as Parameters<typeof createProviderClient>[0]);
+          modelName = mName;
+          log.info("Media fallback model activated", { model: mName, provider: mProvider });
+        } catch (err) {
+          log.warn("Media fallback unavailable — transcripts will be used", {
+            requested: mediaModel,
+            error: (err as Error).message,
+          });
+        }
+      }
+      res.setHeader("X-Media-Mode", "true");
+    }
+
     // ---- Step 2+3: Process & moderate ----
     const processed = await withTimeout(
-      processAndModerate(messages, selectedModel, metrics),
+      processAndModerate(messages, modelName, metrics, userId),
       {
         timeoutMs: TIMEOUTS.MODERATION,
         operationName: 'moderation',

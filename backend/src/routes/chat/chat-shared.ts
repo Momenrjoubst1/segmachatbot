@@ -3,6 +3,14 @@ import type { Request } from "express";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createLogger } from "../../utils/logger.js";
+import { mediaAwareFetch } from "../../services/chat/media-wire.js";
+
+/**
+ * Every OpenAI-compatible client routes its outbound request through the
+ * media wire patch, which rewrites ⟦MEDIA:…⟧ sentinels into provider-native
+ * video_url / input_audio blocks. Bodies without media pass through untouched.
+ */
+const MEDIA_AWARE_FETCH = mediaAwareFetch();
 
 // Note: `Request.user` is declared globally by `middleware/auth.middleware.ts`
 // — no need to redeclare it here.
@@ -240,6 +248,7 @@ export function createProviderClient(provider: ProviderName) {
     const baichatKey = process.env.BAICHAT_API_KEY;
     if (!baichatKey) throw new Error("Missing BAICHAT_API_KEY in environment");
     return createOpenAI({
+      fetch: MEDIA_AWARE_FETCH,
       baseURL: "https://api.chat.b.ai/v1",
       apiKey: baichatKey,
     });
@@ -249,6 +258,7 @@ export function createProviderClient(provider: ProviderName) {
     const bigmodelKey = process.env.BIGMODEL_API_KEY;
     if (!bigmodelKey) throw new Error("Missing BIGMODEL_API_KEY in environment");
     return createOpenAI({
+      fetch: MEDIA_AWARE_FETCH,
       baseURL: "https://open.bigmodel.cn/api/paas/v4",
       apiKey: bigmodelKey,
     });
@@ -262,6 +272,7 @@ export function createProviderClient(provider: ProviderName) {
     
     const cleanEndpoint = azureEndpoint.replace(/\/$/, '');
     return createOpenAI({
+      fetch: MEDIA_AWARE_FETCH,
       baseURL: `${cleanEndpoint}/openai/v1`,
       apiKey: azureKey,
       headers: {
@@ -273,6 +284,7 @@ export function createProviderClient(provider: ProviderName) {
   if (provider === "github") {
     if (!process.env.GITHUB_TOKEN) throw new Error("Missing GITHUB_TOKEN in environment");
     return createOpenAI({
+      fetch: MEDIA_AWARE_FETCH,
       baseURL: "https://models.github.ai/inference",
       apiKey: process.env.GITHUB_TOKEN,
     });
@@ -282,6 +294,7 @@ export function createProviderClient(provider: ProviderName) {
     const groqKey = process.env.GROQ_API_KEY;
     if (!groqKey) throw new Error("Missing GROQ_API_KEY in environment");
     return createOpenAI({
+      fetch: MEDIA_AWARE_FETCH,
       baseURL: "https://api.groq.com/openai/v1",
       apiKey: groqKey,
     });
@@ -290,6 +303,7 @@ export function createProviderClient(provider: ProviderName) {
   if (provider === "fireworks") {
     if (!process.env.FIREWORKS_API_KEY) throw new Error("Missing FIREWORKS_API_KEY in environment");
     return createOpenAI({
+      fetch: MEDIA_AWARE_FETCH,
       baseURL: "https://api.fireworks.ai/inference/v1",
       apiKey: process.env.FIREWORKS_API_KEY,
     });
@@ -298,6 +312,7 @@ export function createProviderClient(provider: ProviderName) {
   if (provider === "novita") {
     if (!process.env.NOVITA_API_KEY) throw new Error("Missing NOVITA_API_KEY in environment");
     return createOpenAI({
+      fetch: MEDIA_AWARE_FETCH,
       baseURL: "https://api.novita.ai/openai",
       apiKey: process.env.NOVITA_API_KEY,
     });
@@ -307,6 +322,7 @@ export function createProviderClient(provider: ProviderName) {
     const nvidiaKey = process.env.NVIDIA_API_KEY;
     if (!nvidiaKey) throw new Error("Missing NVIDIA_API_KEY in environment");
     return createOpenAI({
+      fetch: MEDIA_AWARE_FETCH,
       baseURL: "https://integrate.api.nvidia.com/v1",
       apiKey: nvidiaKey,
     });
@@ -316,6 +332,7 @@ export function createProviderClient(provider: ProviderName) {
     const cerebrasKey = process.env.CEREBRAS_API_KEY;
     if (!cerebrasKey) throw new Error("Missing CEREBRAS_API_KEY in environment");
     return createOpenAI({
+      fetch: MEDIA_AWARE_FETCH,
       baseURL: "https://api.cerebras.ai/v1",
       apiKey: cerebrasKey,
     });

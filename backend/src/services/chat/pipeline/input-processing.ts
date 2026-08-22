@@ -15,6 +15,8 @@ import type { RequestMetrics } from "./types.js";
 export interface InputProcessingResult {
   coreMessages: CoreMessage[];
   hasImages: boolean;
+  /** Video/audio attachments resolved for the answering model. */
+  mediaCount: number;
   blocked: boolean;
   blockError?: string;
 }
@@ -23,9 +25,10 @@ export async function processAndModerate(
   messages: Array<Record<string, unknown>>,
   selectedModel: string,
   metrics: RequestMetrics,
+  userId?: string,
 ): Promise<InputProcessingResult> {
   // ---- Step 2: process messages ----
-  const processed: ProcessedMessages = await processMessages(messages, selectedModel);
+  const processed: ProcessedMessages = await processMessages(messages, selectedModel, userId);
   let coreMessages: CoreMessage[] = processed.coreMessages as CoreMessage[];
 
   if (processed.imageAnalysisFailed) {
@@ -39,6 +42,7 @@ export async function processAndModerate(
     return {
       coreMessages,
       hasImages: processed.hasImages,
+      mediaCount: processed.mediaCount,
       blocked: true,
       blockError: modResult.error,
     };
@@ -50,6 +54,7 @@ export async function processAndModerate(
   return {
     coreMessages,
     hasImages: processed.hasImages,
+    mediaCount: processed.mediaCount,
     blocked: false,
   };
 }

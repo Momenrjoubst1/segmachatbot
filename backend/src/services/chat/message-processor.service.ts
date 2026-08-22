@@ -15,6 +15,8 @@ import {
   createProviderClient,
 } from "../../routes/chat/chat-shared.js";
 import type { CoreMessage } from "./moderation.service.js";
+import { resolveMediaPart, ownedR2Key } from "./media-router.js";
+import { downloadR2ObjectToBuffer } from "../textbook/r2-client.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -134,6 +136,8 @@ export function isVisionCapableModel(modelName: string): boolean {
 export interface ProcessedMessages {
   coreMessages: CoreMessage[];
   hasImages: boolean;
+  /** Video/audio attachments resolved during processing. */
+  mediaCount: number;
   imageAnalysisFailed?: boolean;
   imageAnalysisError?: string;
 }
@@ -143,8 +147,11 @@ export interface ProcessedMessages {
  *
  * Steps:
  *  1. Filter & map to coreMessages shape
+ *  1.5 Resolve video/audio attachments per the answering model's capabilities
+ *      (native file parts / wire sentinels / transcripts) and stage r2://
+ *      document refs into extractable base64
  *  2. Extract text from file attachments
- *  3. Flatten non-image messages
+ *  3. Flatten messages without non-text parts
  *  4. Run vision analysis for non-native-vision models (or fallback to text)
  */
 interface RawMessage {
@@ -163,10 +170,12 @@ interface RawMessage {
 export async function processMessages(
   messages: RawMessage[],
   selectedModel: string,
+  userId?: string,
 ): Promise<ProcessedMessages> {
   const metrics: ProcessedMessages = {
     coreMessages: [],
     hasImages: false,
+    mediaCount: 0,
   };
 
   // ---- Step 1: Map raw messages to coreMessages ----
@@ -300,6 +309,79 @@ export async function processMessages(
       return msg;
     });
 
+  // ---- Step 1.5: Resolve media attachments per the answering model ----
+  // Video/audio parts arrive as generic file parts carrying r2:// refs.
+  // They are converted here into (a) native AI SDK file parts for Gemini
+  // (inline or Files-API fileUri), (b) wire sentinels for capable
+  // OpenAI-compatible models (rewritten by media-wire on fetch), or
+  // (c) Whisper transcript text for everything else.
+  if (userId) {
+    try {
+      for (const msg of coreMessages) {
+        if (!Array.isArray(msg.content)) continue;
+        const parts = msg.content as Array<Record<string, unknown>>;
+        const hasMediaPart = parts.some((p) => {
+          const mime = String(p?.mimeType || "").toLowerCase();
+          return p?.type === "file" && (mime.startsWith("video/") || mime.startsWith("audio/"));
+        });
+        if (!hasMediaPart) continue;
+
+        type ContentItem = { type: string; text?: string; image?: string; data?: string | URL; mimeType?: string; filename?: string };
+        const rebuilt: ContentItem[] = [];
+        for (const part of parts) {
+          const mime = String(part?.mimeType || "").toLowerCase();
+          if (part?.type !== "file" || !(mime.startsWith("video/") || mime.startsWith("audio/"))) {
+            rebuilt.push(part as ContentItem);
+            continue;
+          }
+          const resolved = await resolveMediaPart({ part, userId, targetModel: selectedModel });
+          if (!resolved) {
+            rebuilt.push(part as ContentItem);
+            continue;
+          }
+          metrics.mediaCount += 1;
+          if (resolved.file) {
+            // URL instance → @ai-sdk/google emits fileData.fileUri (not base64).
+            const data = resolved.file.data;
+            rebuilt.push({
+              type: "file",
+              mimeType: resolved.file.mimeType,
+              data: /^https?:\/\//i.test(data) ? new URL(data) : data,
+              filename: typeof part.filename === "string" ? part.filename : undefined,
+            });
+          } else if (resolved.sentinel) {
+            rebuilt.push({ type: "text", text: resolved.sentinel });
+          } else if (resolved.text) {
+            rebuilt.push({ type: "text", text: resolved.text });
+          }
+        }
+        msg.content = rebuilt;
+      }
+    } catch (mediaErr) {
+      log.warn("Media resolution failed (non-fatal)", { error: (mediaErr as Error).message });
+    }
+  }
+
+  // ---- Step 1.7: Stage r2:// document refs into extractable base64 ----
+  if (userId) {
+    for (const msg of coreMessages) {
+      if (!Array.isArray(msg.content)) continue;
+      for (const part of msg.content as Array<Record<string, unknown>>) {
+        if (part?.type !== "file") continue;
+        const data = String(part.data || "");
+        const key = ownedR2Key(data, userId);
+        if (!key) continue;
+        try {
+          const bytes = await downloadR2ObjectToBuffer(key);
+          part.data = `data:${String(part.mimeType || "application/octet-stream")};base64,${bytes.toString("base64")}`;
+        } catch (err) {
+          log.warn("Document ref download failed", { key, error: (err as Error).message });
+          part.data = "";
+        }
+      }
+    }
+  }
+
   // ---- Step 2: File pre-processing — extract text from attachments ----
   const hasFileParts = coreMessages.some(
     (msg) =>
@@ -364,11 +446,15 @@ export async function processMessages(
     }
   }
 
-  // ---- Step 3: Flatten non-image messages after file processing ----
+  // ---- Step 3: Flatten messages without non-text parts ----
+  // Native file parts (e.g. Gemini fileUri media) must survive flattening —
+  // only messages with no image AND no file parts collapse to plain strings.
   for (const msg of coreMessages) {
     if (!Array.isArray(msg.content)) continue;
-    const imageParts = msg.content.filter((p: Record<string, unknown>) => p.type === "image");
-    if (imageParts.length === 0) {
+    const nonTextParts = (msg.content as Array<Record<string, unknown>>).filter(
+      (p: Record<string, unknown>) => p.type === "image" || p.type === "file",
+    );
+    if (nonTextParts.length === 0) {
       const textParts = msg.content.filter((p: Record<string, unknown>) => p.type === "text");
       msg.content =
         textParts.map((p: Record<string, unknown>) => (p.text as string) || "").join("\n") || " ";
