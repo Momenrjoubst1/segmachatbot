@@ -28,6 +28,7 @@ import analyticsRoutes from "./routes/analytics.routes.js";
 import proxyRoutes from "./routes/proxy.routes.js";
 import moderationRoutes from "./routes/moderation.routes.js";
 import textbookRoutes from "./routes/textbook.routes.js";
+import sttRoutes from "./routes/stt.routes.js";
 import toolsRoutes from "./routes/tools.routes.js";
 import { studyRoutes } from "./routes/study.routes.js";
 import { initializeBM25FromDB } from "./services/rag/bm25-search.js";
@@ -132,6 +133,7 @@ app.use("/api/memory", authMiddleware, memoryRoutes);
 app.use("/api/artifacts", authMiddleware, artifactsRoutes);
 app.use("/api/analytics", authMiddleware, analyticsRoutes);
 app.use("/api/textbooks", authMiddleware, textbookRoutes);
+app.use("/api/stt", authMiddleware, sttRoutes);
 app.use("/api/tools", authMiddleware, toolsRoutes);
 app.use("/api/study", authMiddleware, studyRoutes);
 
@@ -254,6 +256,12 @@ if (appConfig.nodeEnv !== "test") {
 
   const server = app.listen(PORT, appConfig.nodeEnv === "production" ? "0.0.0.0" : "127.0.0.1", () => {
     logger.info(`Sigma AI Backend running on http://localhost:${PORT}`);
+
+    // Voice dictation relay — /ws/stt (Deepgram Nova-3 streaming)
+    import("./ws/stt-ws.js").then(({ attachSttWebSocket }) => {
+      attachSttWebSocket(server);
+      logger.info("STT WebSocket ready");
+    }).catch((err) => logger.warn("STT WebSocket attach failed", { error: err.message }));
 
     // Start textbook processing worker (non-blocking, only processes when jobs exist)
     import("./services/textbook/textbook-worker.js").then(({ startTextbookWorker }) => {

@@ -36,6 +36,7 @@
     "nodemailer": "^9.0.5",
     "pdf-parse": "^2.4.5",
     "uuid": "^13.0.0",
+    "ws": "^8.18.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -45,6 +46,7 @@
     "@types/node": "^22.0.0",
     "@types/nodemailer": "^8.0.0",
     "@types/supertest": "^7.2.1",
+    "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "@vitest/coverage-v8": "^4.1.1",

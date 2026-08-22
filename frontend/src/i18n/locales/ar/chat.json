@@ -243,6 +243,9 @@
   "suggestion.findInTextbookPrompt": "Alqi haythu yutawqi' hadha al-mawdoo' fi kutub al-madrasa al-marf'o'a",
   "photo.limitReached": "يمكن إرسال {{max}} صور كحد أقصى في الرسالة — تم حذف الصور الزائدة",
   "photo.processingFailed": "تعذّر تحسين الصورة، سيتم إرسالها بالحجم الأصلي",
+  "attachment.signinRequired": "إرفاق الملفات بحاجة لحساب مسجّل الدخول — سجّل دخولك وجرب من جديد",
+  "attachment.uploadFailed": "ما قدرنا نرفع الملف — جرب مرة تانية",
+  "attachment.textTooLarge": "الملفات النصية لازم تكون أصغر من {{maxMb}}MB",
   "sources.title": "المصادر ({{count}})",
   "sources.page": "صفحة",
   "sources.confidence": "{{pct}}%",
@@ -253,5 +256,8 @@
   "photo.downloadImage": "تنزيل الصورة",
   "photo.downloadStarted": "بدأ تنزيل الصورة",
   "photo.loadFailed": "تعذّر تحميل الصورة",
-  "photo.openPreview": "معاينة الصورة"
+  "photo.openPreview": "معاينة الصورة",
+  "voice.start": "تحدث الآن (إملاء صوتي)",
+  "voice.stop": "إيقاف الإملاء",
+  "voice.micDenied": "تم رفض الوصول للميكروفون. اسمح به من إعدادات الموقع في المتصفح ثم أعد المحاولة."
 }

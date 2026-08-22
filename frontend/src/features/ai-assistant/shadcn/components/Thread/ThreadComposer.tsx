@@ -3,6 +3,7 @@ import {
   ComposerAddAttachment,
   ComposerAttachments,
 } from "../../../ui/attachment";
+import { MicButton } from "../../../ui/MicButton";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ComposerTriggerPopover } from "../../../ui/composer-trigger-popover";
@@ -45,7 +46,10 @@ const ComposerAction: FC<{ disabled?: boolean }> = ({ disabled }) => {
 
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <ComposerAddAttachment />
+      <div className="flex items-center gap-0.5">
+        <MicButton />
+        <ComposerAddAttachment />
+      </div>
       <div className="composer-send-group relative flex items-center gap-1.5">
 
         {/* ── live status indicator: tokens + elapsed ──────────

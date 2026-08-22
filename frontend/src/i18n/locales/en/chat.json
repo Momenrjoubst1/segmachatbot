@@ -243,6 +243,9 @@
   "suggestion.findInTextbookPrompt": "Find where this topic is covered in my uploaded textbooks",
   "photo.limitReached": "Up to {{max}} images per message — extra photos were removed",
   "photo.processingFailed": "Couldn't optimize the photo — sending it at original size",
+  "attachment.signinRequired": "File attachments need a signed-in account — sign in and try again",
+  "attachment.uploadFailed": "Couldn't upload the file — please try again",
+  "attachment.textTooLarge": "Text files must be under {{maxMb}}MB",
   "sources.title": "Sources ({{count}})",
   "sources.page": "p.",
   "sources.confidence": "{{pct}}%",
@@ -253,5 +256,8 @@
   "photo.downloadImage": "Download image",
   "photo.downloadStarted": "Image download started",
   "photo.loadFailed": "Failed to load image",
-  "photo.openPreview": "Image preview"
+  "photo.openPreview": "Image preview",
+  "voice.start": "Speak now (voice dictation)",
+  "voice.stop": "Stop dictation",
+  "voice.micDenied": "Microphone access was denied. Allow it in the browser site settings and try again."
 }
