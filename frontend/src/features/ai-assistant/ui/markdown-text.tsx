@@ -16,6 +16,14 @@ import { CopyIcon, PlayIcon, RefreshCwIcon, DownloadIcon, ShareIcon, Loader2Icon
 import { cn } from "@/lib/cn";
 import { getAssistantAuthHeaders } from "@/lib/auth";
 import { useGuestMode } from "@/context/GuestModeContext";
+import { useTranslation } from "react-i18next";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { ImageOffIcon, ZoomInIcon } from "lucide-react";
 import { CursorBlinker } from "./CursorBlinker";
 import { useBotStatus } from "./useBotStatus";
 import { useAuiState } from "@assistant-ui/react";
@@ -332,6 +340,118 @@ const CustomSyntaxHighlighter: FC<{ language: string; code: string }> = memo(({ 
   );
 });
 
+// ─── Markdown Image (AI-generated / embedded images) ────────────────────────
+
+const MarkdownImage: FC<{ src?: string; alt?: string }> = ({ src, alt }) => {
+  const { t } = useTranslation("chat");
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
+  const [zoomed, setZoomed] = useState(false);
+
+  if (!src) return null;
+
+  const handleDownload = async () => {
+    const filename = `sigma-image-${Date.now()}.png`;
+    try {
+      // download="" attribute is ignored cross-origin — fetch a blob instead.
+      const res = await fetch(src);
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+      toast.success(t("photo.downloadStarted"));
+    } catch {
+      window.open(src, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  return (
+    <span className="my-3 inline-block max-w-full">
+      <span
+        role={status === "loaded" ? "button" : undefined}
+        tabIndex={status === "loaded" ? 0 : undefined}
+        onClick={() => status === "loaded" && setZoomed(true)}
+        onKeyDown={(e) => e.key === "Enter" && status === "loaded" && setZoomed(true)}
+        className={cn(
+          "relative block max-w-full overflow-hidden rounded-xl border border-border/40 bg-muted/40",
+          status === "loaded" && "cursor-zoom-in transition-opacity hover:opacity-90",
+        )}
+      >
+        <img
+          src={src}
+          alt={alt || ""}
+          loading="lazy"
+          onLoad={() => setStatus("loaded")}
+          onError={() => setStatus("error")}
+          className={cn(
+            "block h-auto max-h-[440px] w-auto max-w-full object-contain",
+            status !== "loaded" && "invisible",
+          )}
+        />
+        {status === "loading" && (
+          <span className="absolute inset-0 flex min-h-[180px] w-full items-center justify-center">
+            <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+          </span>
+        )}
+        {status === "error" && (
+          <span className="flex min-h-[140px] w-full flex-col items-center justify-center gap-2 p-4 text-muted-foreground">
+            <ImageOffIcon className="size-7" />
+            <span className="text-xs">{t("photo.loadFailed")}</span>
+          </span>
+        )}
+        {status === "loaded" && (
+          <span className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 opacity-0 transition-opacity hover:opacity-100 focus-within:opacity-100 [div:hover>&]:opacity-100">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDownload();
+              }}
+              className="state-layer flex items-center gap-1.5 rounded-lg bg-background/85 px-2.5 py-1.5 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm hover:bg-background"
+              aria-label={t("photo.downloadImage")}
+            >
+              <DownloadIcon className="size-3.5" />
+              {t("photo.downloadImage")}
+            </button>
+            <span className="ml-auto rounded-lg bg-background/85 p-1.5 text-foreground shadow-sm backdrop-blur-sm">
+              <ZoomInIcon className="size-3.5" />
+            </span>
+          </span>
+        )}
+      </span>
+
+      <Dialog open={zoomed} onOpenChange={setZoomed}>
+        <DialogContent className="max-h-[92dvh] border-border/50 p-2 sm:max-w-4xl [&>button]:rounded-full [&>button]:bg-foreground/60">
+          <DialogTitle className="sr-only">{alt || t("photo.openPreview")}</DialogTitle>
+          {status === "loaded" && (
+            <div className="flex max-h-[85dvh] flex-col items-center gap-3 overflow-hidden">
+              <img
+                src={src}
+                alt={alt || ""}
+                className="min-h-0 max-h-[75dvh] w-auto max-w-full rounded-lg object-contain"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownload}
+                className="gap-1.5"
+              >
+                <DownloadIcon className="size-4" />
+                {t("photo.downloadImage")}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </span>
+  );
+};
+
 const defaultComponents = memoizeMarkdownComponents({
   h1: ({ className, ...props }) => (
     <h1
@@ -407,6 +527,7 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
+  img: (props) => <MarkdownImage {...props} />,
   blockquote: ({ className, ...props }) => (
     <blockquote
       className={cn(

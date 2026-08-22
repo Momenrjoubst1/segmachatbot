@@ -249,5 +249,9 @@
   "sources.openPage": "Open page {{page}} of {{name}}",
   "sources.viewerTitle": "{{name}} — page {{page}}",
   "sources.noTextbook": "Textbook not available",
-  "sources.documents": "Documents"
+  "sources.documents": "Documents",
+  "photo.downloadImage": "Download image",
+  "photo.downloadStarted": "Image download started",
+  "photo.loadFailed": "Failed to load image",
+  "photo.openPreview": "Image preview"
 }

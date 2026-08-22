@@ -249,5 +249,9 @@
   "sources.openPage": "فتح صفحة {{page}} من {{name}}",
   "sources.viewerTitle": "{{name}} — صفحة {{page}}",
   "sources.noTextbook": "الكتاب غير متوفر",
-  "sources.documents": "المستندات"
+  "sources.documents": "المستندات",
+  "photo.downloadImage": "تنزيل الصورة",
+  "photo.downloadStarted": "بدأ تنزيل الصورة",
+  "photo.loadFailed": "تعذّر تحميل الصورة",
+  "photo.openPreview": "معاينة الصورة"
 }
