@@ -16,6 +16,7 @@ import {
 } from "../../../context/AgenticUIBus";
 import { getAssistantAuthHeaders } from "@/lib/auth";
 import { useGuestMode } from "@/context/GuestModeContext";
+import i18n from "@/i18n/i18next";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3004";
 const THREAD_ID_UPDATE_DELAY_MS = Number(import.meta.env.VITE_THREAD_ID_UPDATE_DELAY_MS || "200");
@@ -107,7 +108,7 @@ export function legacyGuestStreamToUIMessageStream(
 }
 
 class GuestChatTransport extends AssistantChatTransport<UIMessage> {
-  protected override processResponseStream(
+  protected processResponseStream(
     stream: ReadableStream<Uint8Array>,
   ): ReadableStream<UIMessageChunk> {
     return legacyGuestStreamToUIMessageStream(stream);
@@ -119,9 +120,14 @@ class GuestChatTransport extends AssistantChatTransport<UIMessage> {
  * Transform AI SDK message format to guest API format.
  * Extracts the last user message and conversation history.
  */
-function transformToGuestBody(body: any): { message: string; conversationHistory: Array<{ role: string; content: string }> } {
+interface GuestBodyMessage {
+  role: string;
+  content: string | Array<{ type: string; text?: string }>;
+  parts?: Array<{ text?: string }>;
+}
+function transformToGuestBody(body: { messages?: GuestBodyMessage[] }): { message: string; conversationHistory: Array<{ role: string; content: string }> } {
   const messages = body.messages ?? [];
-  const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
 
   // AI SDK: content can be string OR array of parts; assistant-ui: parts[0].text
   const userText = (() => {
@@ -129,22 +135,22 @@ function transformToGuestBody(body: any): { message: string; conversationHistory
     if (lastUserMsg.parts?.[0]?.text) return lastUserMsg.parts[0].text;
     if (typeof lastUserMsg.content === "string") return lastUserMsg.content;
     if (Array.isArray(lastUserMsg.content)) {
-      const textPart = lastUserMsg.content.find((p: any) => p.type === "text");
+      const textPart = lastUserMsg.content.find((p) => p.type === "text");
       return textPart?.text ?? "";
     }
     return "";
   })();
 
   const historyWithoutLastUser = messages
-    .filter((m: any) => m.role === "user" || m.role === "assistant")
+    .filter((m) => m.role === "user" || m.role === "assistant")
     .slice(0, -1)
     .slice(-10)
-    .map((m: any) => {
+    .map((m) => {
       let text = "";
       if (m.parts?.[0]?.text) text = m.parts[0].text;
       else if (typeof m.content === "string") text = m.content;
       else if (Array.isArray(m.content)) {
-        const tp = m.content.find((p: any) => p.type === "text");
+        const tp = m.content.find((p) => p.type === "text");
         text = tp?.text ?? "";
       }
       return { role: m.role, content: text };
@@ -305,7 +311,7 @@ const AuthenticatedMessageSyncer = () => {
 
     const existingMap = new Map(activeThreadMessages.map((m) => [m.id, m]));
     for (const m of aiMessages) {
-      const textPart = m.parts?.find((p) => p.type === "text");
+      const textPart = m.parts?.find((p: { type: string }) => p.type === "text");
       const content = textPart && "text" in textPart ? textPart.text : "";
       const existing = existingMap.get(m.id);
       if (!existing) {
@@ -458,10 +464,10 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
         // Check for image content - model doesn't support images in guest mode.
         // Only flag REAL embedded images (data URLs / <img> markup) — a plain
         // text mention like "image/logo.png" is not an image attachment.
-        const bodyHasImage = (parsed: any): boolean => {
+        const bodyHasImage = (parsed: { message?: string; conversationHistory?: Array<{ content?: string }> }): boolean => {
           const allText = [
             parsed.message,
-            ...(parsed.conversationHistory?.map((m: any) => m.content) ?? []),
+            ...(parsed.conversationHistory?.map((m) => m.content) ?? []),
           ].join(" ");
           return allText.includes("<img") || allText.includes("data:image/");
         };
@@ -475,7 +481,7 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
           }
         } else if (body && typeof body === "object") {
           try {
-            hasImage = bodyHasImage(body as any);
+            hasImage = bodyHasImage(body as { message?: string; conversationHistory?: Array<{ content?: string }> });
           } catch (e) {
             console.error("[guest customFetch] Failed to parse object body:", e);
           }
@@ -497,15 +503,15 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
 
         if (typeof body === "string") {
           try {
-            const parsed = JSON.parse(body);
-            const transformed = transformToGuestBody(parsed);
+            const parsed: unknown = JSON.parse(body);
+            const transformed = transformToGuestBody(parsed as { messages?: GuestBodyMessage[] });
             body = JSON.stringify(transformed);
           } catch (e) {
             console.error("[guest customFetch] Failed to transform body:", e);
           }
         } else if (body && typeof body === "object") {
           try {
-            const transformed = transformToGuestBody(body as any);
+            const transformed = transformToGuestBody(body as { messages?: GuestBodyMessage[] });
             body = JSON.stringify(transformed);
           } catch (e) {
             console.error("[guest customFetch] Failed to transform object body:", e);
@@ -530,6 +536,19 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
               }
             }
             parsed.ragEnabled = ragEnabled;
+
+            // Downscale photo attachments + enforce per-message image cap
+            // (client-side, so oversized phone photos never hit the wire).
+            const isChatSend = typeof input === "string" && input.includes("/api/chat");
+            if (isChatSend) {
+              const { downscaleUIMessageImages } = await import("@/lib/image-downscale");
+              const { body: transformed, droppedCount } = await downscaleUIMessageImages(parsed);
+              Object.assign(parsed, transformed as Record<string, unknown>);
+              if (droppedCount > 0) {
+                toast.warning(i18n.t("chat.photo.limitReached", { max: 3 }));
+              }
+            }
+
             body = JSON.stringify(parsed);
           } catch { /* keep original body */ }
         }
