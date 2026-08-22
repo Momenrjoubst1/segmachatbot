@@ -7,7 +7,7 @@
  */
 
 /** All known tool group identifiers */
-export type ToolGroup = 'email' | 'calendar' | 'web_search' | 'code_executor' | 'fonts' | 'general';
+export type ToolGroup = 'email' | 'calendar' | 'tasks' | 'web_search' | 'code_executor' | 'fonts' | 'general';
 
 /** Map of tool names (from TOOL_DEFINITIONS keys) to their group */
 const TOOL_GROUP_MAP: Record<string, ToolGroup> = {
@@ -38,6 +38,11 @@ const TOOL_GROUP_MAP: Record<string, ToolGroup> = {
   update_calendar_event: 'calendar',
   find_optimal_time: 'calendar',
   email_to_meeting: 'calendar',
+  create_task: 'tasks',
+  update_task: 'tasks',
+  complete_task: 'tasks',
+  delete_task: 'tasks',
+  get_tasks: 'tasks',
   web_search: 'web_search',
   code_executor: 'code_executor',
   ide_execute_code: 'code_executor',
@@ -100,10 +105,28 @@ function buildCalendarToolInstructions(): string {
   return `
 ## Calendar Tool Instructions — تعليمات التقويم
 
-- When creating calendar events, always confirm the date, time, and duration with the user before calling create_calendar_event.
+- You have FULL control of the user's calendar. Create, update, and delete events immediately when asked — do NOT ask for confirmation before calling the tools.
+- When the user gives a date and time (or it is clearly implied), just create the event with create_calendar_event.
 - Use find_free_slots to check availability before proposing a time.
 - Use get_upcoming_events to show the user their schedule.
-- Use email_to_meeting to convert an email thread into a calendar event when the user requests it.`;
+- Use update_calendar_event to reschedule or edit (needs the event ID from get_upcoming_events).
+- Use delete_calendar_event to remove an event when the user asks.
+- Use email_to_meeting to convert an email thread into a calendar event when the user requests it.
+- If the user's request is ambiguous about WHICH event or WHAT time, ask a brief clarifying question — otherwise act.`;
+}
+
+/** Task-management tool instructions */
+function buildTaskToolInstructions(): string {
+  return `
+## Task Tool Instructions — تعليمات المهام
+
+- You have FULL control of the user's task list. Create, update, complete, and delete tasks immediately when asked — no confirmation step.
+- Use get_tasks before creating a task if the user refers to an existing one ("that task", "the math homework") so you can reuse its ID.
+- create_task: add a task (title required; due_date and priority optional).
+- complete_task: mark a task done when the user says they finished it.
+- update_task: change title/details/due date/priority; pass linked_event_id: null to unlink.
+- delete_task: remove permanently when the user asks to delete.
+- Report the result briefly and naturally ("تمت إضافة المهمة!", "Done — marked complete!").`;
 }
 
 /** Fonts-library specific tool instructions */
@@ -171,6 +194,10 @@ export function buildToolInstructions(enabledTools: string[]): string {
 
   if (groups.includes('calendar')) {
     parts.push(buildCalendarToolInstructions());
+  }
+
+  if (groups.includes('tasks')) {
+    parts.push(buildTaskToolInstructions());
   }
 
   if (groups.includes('fonts')) {

@@ -29,6 +29,7 @@ import enValidation from "@/i18n/locales/en/validation.json";
 import enKeyboardShortcuts from "@/i18n/locales/en/keyboardShortcuts.json";
 import enBotStatus from "@/i18n/locales/en/botStatus.json";
 import enStudy from "@/i18n/locales/en/study.json";
+import enTasks from "@/i18n/locales/en/tasks.json";
 
 // ── Arabic namespaces ───────────────────────────────────────────────
 import arCommon from "@/i18n/locales/ar/common.json";
@@ -44,6 +45,7 @@ import arValidation from "@/i18n/locales/ar/validation.json";
 import arKeyboardShortcuts from "@/i18n/locales/ar/keyboardShortcuts.json";
 import arBotStatus from "@/i18n/locales/ar/botStatus.json";
 import arStudy from "@/i18n/locales/ar/study.json";
+import arTasks from "@/i18n/locales/ar/tasks.json";
 
 // ── Legacy flat dictionaries (kept for backward-compat wrapper) ─────
 import { en as enLegacy } from "@/i18n/locales/en";
@@ -83,6 +85,7 @@ const resources = {
     keyboardShortcuts: enKeyboardShortcuts,
     botStatus: enBotStatus,
     study: enStudy,
+    tasks: enTasks,
     legacy: enLegacy,
   },
   ar: {
@@ -99,6 +102,7 @@ const resources = {
     keyboardShortcuts: arKeyboardShortcuts,
     botStatus: arBotStatus,
     study: arStudy,
+    tasks: arTasks,
     legacy: arLegacy,
   },
 } as const;

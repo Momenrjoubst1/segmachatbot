@@ -48,6 +48,7 @@ const TOOL_KEYWORDS_AR = [
   "ابحث", "بحث",
   "جدول", "فعالية", "حدث",
   "إيميل", "ايميل", "بريد",
+  "مهمة", "مهام", "تذكير", "موعد", "التقويم",
 ] as const;
 
 const TOOL_KEYWORDS_EN = [
@@ -56,6 +57,7 @@ const TOOL_KEYWORDS_EN = [
   "calculate", "compute",
   "search", "find", "look up",
   "event", "calendar", "schedule",
+  "task", "todo", "to-do", "reminder", "appointment", "meeting",
 ] as const;
 
 const SMALL_TALK_PATTERNS_AR = [
@@ -90,11 +92,13 @@ const PERSONAL_KEYWORDS_AR = [
   "مواد", "مادتي", "جدولي", "جدولي الدراسي",
   "علاماتي", "درجاتي", "معدلي",
   "تسجيلي", "موادي", "فصلي",
+  "مهامي", "مهماتي", "قائمة مهامي",
 ] as const;
 
 const PERSONAL_KEYWORDS_EN = [
   "my courses", "my schedule", "my grades", "my gpa",
   "my classes", "my subjects", "my enrollment",
+  "my tasks", "my todos", "my to-dos", "task list",
 ] as const;
 
 const QUESTION_INDICATORS_AR = [

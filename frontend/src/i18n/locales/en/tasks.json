@@ -1,0 +1,19 @@
+{
+  "title": "Tasks",
+  "subtitle_one": "{{count}} open",
+  "subtitle_other": "{{count}} open",
+  "addPlaceholder": "Add a task…",
+  "add": "Add task",
+  "empty": "No tasks yet — ask the assistant or add one above.",
+  "complete": "Mark as completed",
+  "reopen": "Reopen task",
+  "overdue": "Overdue",
+  "due": "Due {{date}}",
+  "deleteTask": "Delete task",
+  "priority": {
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "urgent": "Urgent"
+  }
+}

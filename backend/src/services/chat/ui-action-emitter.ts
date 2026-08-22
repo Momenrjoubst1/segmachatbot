@@ -120,6 +120,11 @@ export function panelOpenCalendar(): UIActionPayload {
   return createUIAction("panel", "OPEN_CALENDAR");
 }
 
+/** Open the tasks panel (calendar view with the task list). */
+export function panelOpenTasks(): UIActionPayload {
+  return createUIAction("panel", "OPEN_TASKS");
+}
+
 /** Open the email history panel. */
 export function panelOpenEmail(): UIActionPayload {
   return createUIAction("panel", "OPEN_EMAIL");
@@ -163,6 +168,7 @@ the action, and hide them from the user.
 | header   | TOGGLE_RAG    | {}                         | Toggle Knowledge Base on/off         |
 | header   | SET_VIEW      | { "view": "chat"|"calendar"}| Switch between chat and calendar view |
 | panel    | OPEN_CALENDAR | {}                         | Open the calendar panel              |
+| panel    | OPEN_TASKS    | {}                         | Open the tasks panel                 |
 | panel    | OPEN_EMAIL    | {}                         | Open the email history panel         |
 | panel    | OPEN_ARTIFACTS| { "artifactId"?: "..." }   | Open the artifacts panel             |
 

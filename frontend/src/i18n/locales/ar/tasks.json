@@ -1,0 +1,23 @@
+{
+  "title": "المهام",
+  "subtitle_zero": "لا مهام مفتوحة",
+  "subtitle_one": "مهمة واحدة مفتوحة",
+  "subtitle_two": "مهمتان مفتوحتان",
+  "subtitle_few": "{{count}} مهام مفتوحة",
+  "subtitle_many": "{{count}} مهمة مفتوحة",
+  "subtitle_other": "{{count}} مهمة مفتوحة",
+  "addPlaceholder": "أضف مهمة…",
+  "add": "إضافة مهمة",
+  "empty": "لا توجد مهام بعد — اطلب من المساعد أو أضف مهمة من الأعلى.",
+  "complete": "تحديد كمكتملة",
+  "reopen": "إعادة فتح المهمة",
+  "overdue": "متأخرة",
+  "due": "الاستحقاق {{date}}",
+  "deleteTask": "حذف المهمة",
+  "priority": {
+    "low": "منخفضة",
+    "medium": "متوسطة",
+    "high": "عالية",
+    "urgent": "عاجلة"
+  }
+}

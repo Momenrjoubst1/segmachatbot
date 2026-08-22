@@ -55,6 +55,30 @@
       "create_calendar_event": {
         "label": "إنشاء حدث"
       },
+      "get_upcoming_events": {
+        "label": "مراجعة الجدول"
+      },
+      "update_calendar_event": {
+        "label": "تحديث الحدث"
+      },
+      "delete_calendar_event": {
+        "label": "حذف الحدث"
+      },
+      "create_task": {
+        "label": "إضافة مهمة"
+      },
+      "update_task": {
+        "label": "تحديث المهمة"
+      },
+      "complete_task": {
+        "label": "إكمال المهمة"
+      },
+      "delete_task": {
+        "label": "حذف المهمة"
+      },
+      "get_tasks": {
+        "label": "مراجعة المهام"
+      },
       "get_course_info": {
         "label": "البحث عن معلومات المساق"
       },

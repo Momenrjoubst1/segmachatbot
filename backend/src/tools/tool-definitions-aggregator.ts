@@ -28,6 +28,7 @@ const TOOL_IMPORTS: Array<{ name: string; importFn: () => Promise<unknown> }> = 
   { name: "scheduler", importFn: () => import("./calendar/scheduler/index.js") },
   { name: "find_optimal_time", importFn: () => import("./calendar/scheduler/find-optimal-time.js") },
   { name: "email_to_meeting", importFn: () => import("./calendar/scheduler/email-to-meeting.js") },
+  { name: "tasks", importFn: () => import("./tasks/index.js") },
 ];
 
 let toolsInitialized = false;

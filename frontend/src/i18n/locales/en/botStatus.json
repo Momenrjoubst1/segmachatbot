@@ -55,6 +55,30 @@
       "create_calendar_event": {
         "label": "Creating event"
       },
+      "get_upcoming_events": {
+        "label": "Checking schedule"
+      },
+      "update_calendar_event": {
+        "label": "Updating event"
+      },
+      "delete_calendar_event": {
+        "label": "Deleting event"
+      },
+      "create_task": {
+        "label": "Adding task"
+      },
+      "update_task": {
+        "label": "Updating task"
+      },
+      "complete_task": {
+        "label": "Completing task"
+      },
+      "delete_task": {
+        "label": "Deleting task"
+      },
+      "get_tasks": {
+        "label": "Checking tasks"
+      },
       "get_course_info": {
         "label": "Looking up course info"
       },

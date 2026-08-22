@@ -135,7 +135,7 @@ async function persistAndStreamReply(
   if (userText) {
     await supabase.from("chat_messages").insert([{ session_id: threadId, role: "user", content: userText }]);
   }
-  await supabase.from("chat_messages").insert([{ session_id: threadId, role: "assistant", content: reply }]);
+  await supabase.from("chat_messages").insert([{ session_id: threadId, role: "assistant", content: reply, model: "canned" }]);
 
   if (!res.headersSent) {
     res.setHeader("Content-Type", "text/plain; charset=utf-8");

@@ -30,6 +30,7 @@ export interface AgenticUIActionMap {
   };
   "panel": {
     OPEN_CALENDAR: {};
+    OPEN_TASKS: {};
     OPEN_EMAIL: {};
     OPEN_ARTIFACTS: { artifactId?: string };
   };

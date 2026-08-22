@@ -22,6 +22,7 @@ const EmailHistoryPanel = lazy(() => import("../components/EmailHistoryPanel").t
 const ArtifactPanel = lazy(() => import("@/features/artifacts/ArtifactPanel").then(m => ({ default: m.ArtifactPanel })));
 const FullScreenCalendar = lazy(() => import("@/components/ui/fullscreen-calendar").then(m => ({ default: m.FullScreenCalendar })));
 const SchedulingPanel = lazy(() => import("@/features/calendar/components").then(m => ({ default: m.SchedulingPanel })));
+const TaskList = lazy(() => import("@/features/tasks/components/TaskList"));
 
 // Re-export for backward compatibility
 export { useAssistantSettings } from "../context/AssistantSettingsContext";
@@ -221,6 +222,8 @@ export const Shadcn: FC<{
   useAgenticAction("panel", useCallback((action) => {
     if (action.action === "OPEN_CALENDAR") {
       onToggleView('calendar');
+    } else if (action.action === "OPEN_TASKS") {
+      onToggleView('calendar');
     } else if (action.action === "OPEN_EMAIL") {
       setEmailHistoryOpen(true);
     } else if (action.action === "OPEN_ARTIFACTS") {
@@ -269,44 +272,55 @@ export const Shadcn: FC<{
               className="relative flex flex-1 overflow-hidden min-w-0"
             >
               {!isGuestMode && activeView === 'calendar' ? (
-                <div className="flex-1 h-full overflow-y-auto custom-scrollbar bg-background">
-                  {calendar.isCalendarLoading ? (
-                    <div className="flex items-center justify-center h-full">
-                      <LoadingSpinner size="md" />
-                    </div>
-                  ) : (
-                    <Suspense fallback={<PanelLoading />}>
-                      <ErrorBoundary componentName="FullScreenCalendar">
-                        <FullScreenCalendar
-                          data={calendarData}
-                          onCreateEvent={() => setShowScheduler(true)}
-                          onEditEvent={(_event) => {
-                            // Open the scheduler with the event data
-                            setShowScheduler(true)
-                          }}
-                          onDeleteEvent={handleDeleteEvent}
-                        />
-                      </ErrorBoundary>
-                    </Suspense>
-                  )}
-
-                  {/* Scheduling Panel Slide-in */}
-                  {showScheduler && (
-                    <div className="fixed right-0 top-0 bottom-0 w-[420px] border-l border-white/[0.08] bg-[#0f0f10] z-50 overflow-y-auto shadow-2xl">
+                <div className="flex-1 h-full flex overflow-hidden bg-background">
+                  <div className="flex-1 min-w-0 h-full overflow-y-auto custom-scrollbar">
+                    {calendar.isCalendarLoading ? (
+                      <div className="flex items-center justify-center h-full">
+                        <LoadingSpinner size="md" />
+                      </div>
+                    ) : (
                       <Suspense fallback={<PanelLoading />}>
-                        <ErrorBoundary componentName="SchedulingPanel">
-                          <SchedulingPanel
-                            onSubmit={handleCreateEvent}
-                            onCancel={() => setShowScheduler(false)}
-                            initialData={{
-                              start_time: selectedDate.toISOString(),
-                              end_time: new Date(selectedDate.getTime() + 60 * 60 * 1000).toISOString(),
+                        <ErrorBoundary componentName="FullScreenCalendar">
+                          <FullScreenCalendar
+                            data={calendarData}
+                            onCreateEvent={() => setShowScheduler(true)}
+                            onEditEvent={(_event) => {
+                              // Open the scheduler with the event data
+                              setShowScheduler(true)
                             }}
+                            onDeleteEvent={handleDeleteEvent}
                           />
                         </ErrorBoundary>
                       </Suspense>
-                    </div>
-                  )}
+                    )}
+
+                    {/* Scheduling Panel Slide-in */}
+                    {showScheduler && (
+                      <div className="fixed right-0 top-0 bottom-0 w-[420px] border-l border-white/[0.08] bg-[#0f0f10] z-50 overflow-y-auto shadow-2xl">
+                        <Suspense fallback={<PanelLoading />}>
+                          <ErrorBoundary componentName="SchedulingPanel">
+                            <SchedulingPanel
+                              onSubmit={handleCreateEvent}
+                              onCancel={() => setShowScheduler(false)}
+                              initialData={{
+                                start_time: selectedDate.toISOString(),
+                                end_time: new Date(selectedDate.getTime() + 60 * 60 * 1000).toISOString(),
+                              }}
+                            />
+                          </ErrorBoundary>
+                        </Suspense>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tasks panel — always visible next to the calendar */}
+                  <aside className="hidden md:flex w-72 shrink-0 border-l border-border">
+                    <Suspense fallback={<PanelLoading />}>
+                      <ErrorBoundary componentName="TaskList">
+                        <TaskList userId={calendarUserId} className="w-full" />
+                      </ErrorBoundary>
+                    </Suspense>
+                  </aside>
                 </div>
               ) : (
                 <Thread
