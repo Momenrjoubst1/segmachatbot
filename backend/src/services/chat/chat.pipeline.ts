@@ -46,6 +46,15 @@ import { manageContextWindow } from "./pipeline/summarization.js";
 import { runUIFastPasses } from "./pipeline/ui-fastpass.js";
 import type { CoreMessage } from "./moderation.service.js";
 
+function cleanSourceName(source?: string): string {
+  if (!source) return "Knowledge Base";
+  return source
+    .replace(/^Textbook:\s*/i, "")
+    .replace(/\.pdf$/i, "")
+    .replace(/[_-]/g, " ")
+    .trim() || "Knowledge Base";
+}
+
 /** Tools that receive `__userId` in their execute args - now from metadata system */
 const TOOLS_NEEDING_USER_ID: ReadonlySet<string> = new Set(getToolsRequiringUserId());
 
@@ -209,6 +218,41 @@ export async function executeChatPipeline(
     metrics.ragSuccess = ragResult.ragSuccess;
     metrics.ragDocsCount = ragResult.rankedDocs.length;
     metrics.ragSources = ragResult.ragSources;
+
+    // ---- Build structured RAG sources for the frontend ----
+    if (ragResult.rankedDocs.length > 0) {
+      const seen = new Set<string>();
+      const structuredSources: Array<{
+        source: string;
+        page: number | undefined;
+        textbookId: string | undefined;
+        similarity: number;
+      }> = [];
+
+      for (const doc of ragResult.rankedDocs) {
+        if (structuredSources.length >= 8) break;
+
+        const rawSource =
+          (typeof doc.metadata?.source === "string" ? doc.metadata.source :
+           typeof doc.metadata?.source_url === "string" ? doc.metadata.source_url :
+           typeof doc.metadata?.file_name === "string" ? doc.metadata.file_name : undefined);
+
+        const source = cleanSourceName(rawSource);
+        const page = typeof doc.metadata?.page_number === "number" ? doc.metadata.page_number : undefined;
+        const textbookId = typeof doc.metadata?.textbook_id === "string" ? doc.metadata.textbook_id : undefined;
+
+        const key = `${source}|${page ?? ""}|${textbookId ?? ""}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        structuredSources.push({ source, page, textbookId, similarity: doc.similarity });
+      }
+
+      const headerJson = JSON.stringify(structuredSources);
+      if (Buffer.byteLength(headerJson, "utf8") <= 6144) {
+        res.setHeader("X-RAG-Sources", headerJson);
+      }
+    }
 
     // ---- Step 5b: Textbook QA model override ----
     // When textbook chunks are present, use a stronger model for better answers.
