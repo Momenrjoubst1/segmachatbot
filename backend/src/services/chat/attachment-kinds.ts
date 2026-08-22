@@ -125,13 +125,20 @@ export const KIND_ORDER: AttachmentKind[] = ["video", "audio", "text", "document
 
 /**
  * Resolve the kind for a candidate upload. Returns null when no spec accepts it.
+ * An explicit mime always wins over filename guessing (audio/webm must not be
+ * captured by the video spec just because .webm is listed there).
  */
 export function detectKind(mimeType: string, fileName: string): AttachmentKind | null {
   const mt = (mimeType || "").split(";")[0].trim().toLowerCase();
   const ext = ("." + (fileName.split(".").pop() || "").toLowerCase()) || "";
+
+  if (mt) {
+    for (const key of KIND_ORDER) {
+      if (KIND_SPECS[key].mimeTypes.includes(mt)) return KIND_SPECS[key].kind;
+    }
+  }
   for (const key of KIND_ORDER) {
-    const spec = KIND_SPECS[key];
-    if (spec.mimeTypes.includes(mt) || spec.extensions.includes(ext)) return spec.kind;
+    if (KIND_SPECS[key].extensions.includes(ext)) return KIND_SPECS[key].kind;
   }
   return null;
 }

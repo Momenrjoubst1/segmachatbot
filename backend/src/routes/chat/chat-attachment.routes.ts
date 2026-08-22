@@ -32,6 +32,7 @@ import {
   QuotaExceededError,
   reserveUploadBytes,
 } from "../../services/chat/attachment-quota.js";
+import { uploadLimiter } from "../../middleware/rate-limiters.js";
 
 const log = createLogger("chat-attachment-routes");
 const router = Router();
@@ -81,6 +82,7 @@ async function readHead(filePath: string): Promise<Buffer> {
 
 router.post(
   "/attachments",
+  uploadLimiter,
   upload.single("file"),
   handleMulterError,
   asyncHandler(async (req: Request, res: Response) => {

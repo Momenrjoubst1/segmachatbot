@@ -117,6 +117,33 @@ const validationRules: ConfigValidationRule[] = [
     severity: 'critical',
   },
 
+  // Chat attachment media routing (optional tuning vars)
+  {
+    name: 'media-capabilities',
+    validate: () => {
+      const raw = process.env.MODEL_MEDIA_CAPABILITIES;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+            return { valid: false, error: 'MODEL_MEDIA_CAPABILITIES must be a JSON object mapping model patterns to ["video","audio"]' };
+          }
+        } catch {
+          return { valid: false, error: 'MODEL_MEDIA_CAPABILITIES is not valid JSON' };
+        }
+      }
+      for (const key of ['UPLOAD_DAILY_BYTES_LIMIT', 'MEDIA_DATA_URL_MAX_BYTES'] as const) {
+        const value = process.env[key];
+        if (!value) continue;
+        if (!Number.isFinite(Number(value)) || Number(value) <= 0) {
+          return { valid: false, error: `${key} must be a positive number of bytes` };
+        }
+      }
+      return { valid: true };
+    },
+    severity: 'warning',
+  },
+
   // Server Configuration
   {
     name: 'port',

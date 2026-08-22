@@ -300,3 +300,37 @@ export const guestStatusLimiter = rateLimit({
   },
   keyGenerator: (req) => ipKeyGenerator(req.ip || ''),
 });
+
+// ─── 9. Message feedback — prevent rating spam on POST /api/feedback/message
+// Per-user (falls back to IP for unauthenticated hits). Generous enough for
+// normal toggling across a conversation, tight enough to stop bulk writes.
+export const feedbackLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 30,             // 30 requests per minute per user
+  standardHeaders: true,
+  legacyHeaders: false,
+  ...optionalStore('rl:feedback:'),
+  passOnStoreError: true,
+  message: {
+    error: 'too_many_requests',
+    message: 'Too many feedback submissions. Please slow down.',
+    retryAfter: 60,
+  },
+  keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip || ''),
+});
+
+// ─── 7. Chat attachment uploads — protect R2 storage & bandwidth ──────────
+export const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minute window
+  max: 30,                  // 30 uploads per user per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  ...optionalStore('rl:upload:'),
+  passOnStoreError: true,
+  message: {
+    error: 'too_many_requests',
+    message: 'Too many file uploads. Please wait a few minutes and try again.',
+    retryAfter: 15 * 60,
+  },
+  keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip || ''),
+});
