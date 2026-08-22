@@ -384,9 +384,15 @@ export async function executeChatPipeline(
       res.setHeader("X-Model-Fallback", JSON.stringify(validation.modelFallback));
     }
 
-    // ---- Step 8: Persist user message ----
+    // ---- Step 8: Persist user message (with attachment metadata) ----
+    const lastUserRawParts = (() => {
+      const lastUser = [...(messages as Array<{ role?: string; parts?: unknown }>)]
+        .reverse()
+        .find((m) => m?.role === "user");
+      return lastUser?.parts;
+    })();
     await withTimeout(
-      persistLastUserMessage({ activeThreadId, coreMessages }),
+      persistLastUserMessage({ activeThreadId, userId, coreMessages, rawParts: lastUserRawParts }),
       {
         timeoutMs: TIMEOUTS.DB_WRITE,
         operationName: 'persist_message',

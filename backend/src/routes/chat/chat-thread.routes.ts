@@ -67,7 +67,7 @@ router.get("/threads/:id", asyncHandler(async (req, res) => {
 
   const { data: messages, error } = await supabase
     .from('chat_messages')
-    .select('id, role, content, is_pinned, parent_message_id, created_at')
+    .select('id, role, content, is_pinned, parent_message_id, feedback, created_at')
     .eq('session_id', id)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -75,7 +75,24 @@ router.get("/threads/:id", asyncHandler(async (req, res) => {
   if (error) throw error;
 
   const chronological = (messages || []).reverse();
-  res.json(chronological);
+
+  // Hydrate attachment metadata so the client can restore attachments
+  // after reload. Ownership is guaranteed by ensureThreadOwnership above.
+  let attachmentsByMessage = new Map<string, unknown[]>();
+  const messageIds = chronological.map((m: { id: string }) => m.id);
+  if (messageIds.length > 0) {
+    try {
+      const { getAttachmentsByMessageIds } = await import(
+        "../../services/chat/attachments-store.js"
+      );
+      attachmentsByMessage = await getAttachmentsByMessageIds(messageIds) as Map<string, unknown[]>;
+    } catch { /* non-fatal — messages still load without attachments */ }
+  }
+
+  res.json(chronological.map((msg: Record<string, unknown>) => {
+    const attachments = attachmentsByMessage.get(String(msg.id));
+    return attachments?.length ? { ...msg, attachments } : msg;
+  }));
 }));
 
 // ==========================================
