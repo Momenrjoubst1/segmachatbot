@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import { useGuestMode } from "@/context/GuestModeContext";
 import { unstable_useComposerInput } from "../shims/assistant-ui-compat-shim";
 import { useDictation } from "@/hooks/useDictation";
+import { voiceDebugBus } from "@/lib/stt/voice-debug-bus";
 
 interface MicButtonProps {
   className?: string;
@@ -36,6 +37,7 @@ export const MicButton: FC<MicButtonProps> = ({ className }) => {
   const baseRef = useRef<string>("");
 
   const pushDebug = useCallback((kind: string, detail?: string) => {
+    voiceDebugBus.event(kind, detail);
     if (!VOICE_DEBUG) return;
     setDebugLines((prev) =>
       [...prev.slice(-9), { t: Date.now() % 100000, kind, detail }],
@@ -101,7 +103,44 @@ export const MicButton: FC<MicButtonProps> = ({ className }) => {
     return () => clearInterval(id);
   }, [recording]);
 
-  if (isGuestMode || limitReached || status === "disabled") return null;
+  // Publish lifecycle to the debug bus
+  useEffect(() => {
+    voiceDebugBus.setState(status);
+  }, [status]);
+  useEffect(() => {
+    voiceDebugBus.setMounted(true, "");
+    voiceDebugBus.event("mic_mounted", "composer mic ready");
+    return () => voiceDebugBus.setMounted(false, "unmounted");
+  }, []);
+
+  const hideReason =
+    isGuestMode
+      ? "guest_mode"
+      : limitReached
+        ? "limit_reached"
+        : status === "disabled"
+          ? "stt_disabled"
+          : "";
+
+  // Publish hide reason and show it under ?voiceDebug=1 instead of silence
+  useEffect(() => {
+    if (hideReason) voiceDebugBus.setMounted(false, hideReason);
+  }, [hideReason]);
+
+  if (hideReason) {
+    if (VOICE_DEBUG) {
+      return (
+        <div
+          data-testid="voice-debug-hidden"
+          dir="ltr"
+          className="fixed bottom-24 left-4 z-[99999] rounded-lg border border-amber-400/40 bg-black/90 p-2 font-mono text-[10px] text-amber-300"
+        >
+          MIC HIDDEN: {hideReason} (status={status})
+        </div>
+      );
+    }
+    return null;
+  }
 
   const handleClick = async () => {
     if (recording || status === "stopping") {

@@ -27,6 +27,10 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useSendState } from "@/context/SendStateContext";
 import { ComposerStatus } from "../../../ui/bot-activity/components/ComposerStatus";
+import {
+  VoiceDebugOverlay,
+  VOICE_DEBUG_PARAM,
+} from "../../../ui/VoiceDebugOverlay";
 
 /**
  * Discrete send-button state machine:
@@ -133,6 +137,7 @@ export const ThreadComposer: FC = () => {
   const { limitReached } = useGuestMode();
   const mention = useUnstableMentionAdapter({ fallbackIcon: WrenchIcon });
   const isThreadEmpty = useAuiState((s) => s.thread.isEmpty);
+  void VOICE_DEBUG_PARAM;
 
   const updateComposerForKeyboard = useCallback(() => {
     const viewport = window.visualViewport;
@@ -221,6 +226,7 @@ export const ThreadComposer: FC = () => {
             {t("composerDisclaimer")}
           </p>
         )}
+        {VOICE_DEBUG_PARAM.enabled && <VoiceDebugOverlay />}
       </ComposerPrimitive.Root>
     </ComposerPrimitive.Unstable_TriggerPopoverRoot>
   );
