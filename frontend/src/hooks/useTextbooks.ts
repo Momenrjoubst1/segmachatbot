@@ -23,16 +23,53 @@ export interface TextbookStatus {
   has_structure_tree: boolean;
 }
 
+// ─── Module-level shared cache ──────────────────────────────────────────────
+// Multiple components (BookPageViewer per sourced message, CurriculumPanel,
+// TextbookUpload…) mount this hook; without sharing, each instance fires its
+// own /api/textbooks request. One cache + one in-flight promise = one network
+// call per TTL window regardless of how many consumers mount.
+const CACHE_TTL_MS = 60_000;
+
+let textbooksCache: { data: Textbook[]; expiresAt: number } | null = null;
+let inflightFetch: Promise<Textbook[]> | null = null;
+
+async function fetchTextbooksRaw(): Promise<Textbook[]> {
+  const res = await authFetch(`${BACKEND_URL}/api/textbooks`);
+  if (!res.ok) throw new Error("Failed to fetch textbooks");
+  const data = await res.json();
+  return data.textbooks || [];
+}
+
+async function getTextbooksCached(force = false): Promise<Textbook[]> {
+  if (!force && textbooksCache && textbooksCache.expiresAt > Date.now()) {
+    return textbooksCache.data;
+  }
+  // Dedup concurrent callers onto the same network round-trip.
+  if (!inflightFetch) {
+    inflightFetch = fetchTextbooksRaw()
+      .then((data) => {
+        textbooksCache = { data, expiresAt: Date.now() + CACHE_TTL_MS };
+        return data;
+      })
+      .finally(() => {
+        inflightFetch = null;
+      });
+  }
+  return inflightFetch;
+}
+
+function invalidateTextbooksCache(): void {
+  textbooksCache = null;
+}
+
 export function useTextbooks() {
   const [textbooks, setTextbooks] = useState<Textbook[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchTextbooks = useCallback(async () => {
     try {
-      const res = await authFetch(`${BACKEND_URL}/api/textbooks`);
-      if (!res.ok) throw new Error("Failed to fetch textbooks");
-      const data = await res.json();
-      setTextbooks(data.textbooks || []);
+      const list = await getTextbooksCached();
+      setTextbooks(list);
     } catch (err) {
       console.error("[useTextbooks] Fetch error:", err);
     } finally {
@@ -90,6 +127,7 @@ export function useTextbooks() {
         });
       });
 
+      invalidateTextbooksCache();
       await fetchTextbooks();
       return result;
     },
@@ -112,6 +150,7 @@ export function useTextbooks() {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Delete failed");
+      invalidateTextbooksCache();
       await fetchTextbooks();
     },
     [fetchTextbooks]

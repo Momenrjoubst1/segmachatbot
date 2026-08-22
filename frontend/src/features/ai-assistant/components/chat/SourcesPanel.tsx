@@ -94,6 +94,17 @@ function StructuredSourcesList({
 }) {
   const { t } = useTranslation("chat");
 
+  // Hybrid retrieval scores (0.5*weighted + 0.5*RRF) top out around ~0.45,
+  // so raw*100 reads as a misleadingly low "37%" for an excellent match.
+  // Normalize RELATIVE to the best source in this answer: top = 100%, the
+  // rest keep their proportional gap. Monotonic, comparable within a
+  // message — which is exactly what a confidence chip should communicate.
+  const bestScore = sources.reduce((m, s) => Math.max(m, s.similarity), 0);
+  const toPct = (score: number): number | null => {
+    if (!(bestScore > 0)) return null;
+    return Math.max(1, Math.min(100, Math.round((score / bestScore) * 100)));
+  };
+
   return (
     <div className="space-y-2">
       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -102,7 +113,7 @@ function StructuredSourcesList({
       <div className="flex flex-wrap gap-2">
         {sources.map((s, i) => {
           const hasPage = typeof s.page === "number" && s.page > 0;
-          const confidence = Math.round(s.similarity * 100);
+          const confidence = toPct(s.similarity);
 
           return (
             <Tooltip key={i}>
@@ -124,9 +135,11 @@ function StructuredSourcesList({
                       {t("sources.page")} {s.page}
                     </span>
                   )}
-                  <span className="text-[10px] text-muted-foreground/70">
-                    {t("sources.confidence", { pct: confidence })}
-                  </span>
+                  {confidence !== null && (
+                    <span className="text-[10px] text-muted-foreground/70">
+                      {t("sources.confidence", { pct: confidence })}
+                    </span>
+                  )}
                 </button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
