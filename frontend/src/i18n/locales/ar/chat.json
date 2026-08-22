@@ -242,5 +242,12 @@
   "suggestion.findInTextbookLabel": "Alqi fi al-mawdoo'",
   "suggestion.findInTextbookPrompt": "Alqi haythu yutawqi' hadha al-mawdoo' fi kutub al-madrasa al-marf'o'a",
   "photo.limitReached": "يمكن إرسال {{max}} صور كحد أقصى في الرسالة — تم حذف الصور الزائدة",
-  "photo.processingFailed": "تعذّر تحسين الصورة، سيتم إرسالها بالحجم الأصلي"
+  "photo.processingFailed": "تعذّر تحسين الصورة، سيتم إرسالها بالحجم الأصلي",
+  "sources.title": "المصادر ({{count}})",
+  "sources.page": "صفحة",
+  "sources.confidence": "{{pct}}%",
+  "sources.openPage": "فتح صفحة {{page}} من {{name}}",
+  "sources.viewerTitle": "{{name}} — صفحة {{page}}",
+  "sources.noTextbook": "الكتاب غير متوفر",
+  "sources.documents": "المستندات"
 }

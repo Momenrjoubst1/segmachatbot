@@ -242,5 +242,12 @@
   "suggestion.findInTextbookLabel": "Locate in material",
   "suggestion.findInTextbookPrompt": "Find where this topic is covered in my uploaded textbooks",
   "photo.limitReached": "Up to {{max}} images per message — extra photos were removed",
-  "photo.processingFailed": "Couldn't optimize the photo — sending it at original size"
+  "photo.processingFailed": "Couldn't optimize the photo — sending it at original size",
+  "sources.title": "Sources ({{count}})",
+  "sources.page": "p.",
+  "sources.confidence": "{{pct}}%",
+  "sources.openPage": "Open page {{page}} of {{name}}",
+  "sources.viewerTitle": "{{name}} — page {{page}}",
+  "sources.noTextbook": "Textbook not available",
+  "sources.documents": "Documents"
 }
