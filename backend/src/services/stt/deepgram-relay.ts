@@ -19,9 +19,21 @@ import redis from "../../config/redis/client.js";
 
 const log = createLogger("stt-relay");
 
+/**
+ * STT language is ARABIC-FIRST for this product. nova-3's `multi` code-
+ * switching mode is ENGLISH/SPANISH ONLY — feeding it Levantine Arabic
+ * yields transliterated gibberish or empty transcripts (verified against
+ * the live API 2026-08-24: `nova-3&language=ar` returns perfect Arabic).
+ * `language=ar` covers MSA + dialects; English utterances still transcribe
+ * acceptably under the ar model. Override via env if that ever changes.
+ */
+const STT_MODEL = process.env.STT_DEEPGRAM_MODEL?.trim() || "nova-3";
+const STT_LANGUAGE = process.env.STT_DEEPGRAM_LANGUAGE?.trim() || "ar";
+
 const DEEPGRAM_WS_URL =
   "wss://api.deepgram.com/v1/listen" +
-  "?model=nova-3&language=multi&smart_format=true&punctuate=true" +
+  `?model=${encodeURIComponent(STT_MODEL)}&language=${encodeURIComponent(STT_LANGUAGE)}` +
+  "&smart_format=true&punctuate=true" +
   "&endpointing=800&encoding=linear16&sample_rate=16000&channels=1";
 
 const MAX_SESSION_MS =

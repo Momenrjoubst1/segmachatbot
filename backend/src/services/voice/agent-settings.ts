@@ -283,7 +283,9 @@ export function buildAgentSettings(
   const sharedSecret = requireEnv(env, "VOICE_AGENT_SHARED_SECRET");
 
   const listenModel = env.VOICE_AGENT_LISTEN_MODEL?.trim() || "nova-3";
-  const listenLanguage = env.VOICE_AGENT_LISTEN_LANGUAGE?.trim() || "multi";
+  // Arabic-first: nova-3 "multi" is en/es code-switching ONLY and mangles
+  // Levantine Arabic (verified 2026-08-24). Default to `ar`.
+  const listenLanguage = env.VOICE_AGENT_LISTEN_LANGUAGE?.trim() || "ar";
   const inputSampleRate = Number(env.VOICE_AGENT_INPUT_SAMPLE_RATE || 16000);
   const outputSampleRate = Number(env.VOICE_AGENT_OUTPUT_SAMPLE_RATE || 24000);
 

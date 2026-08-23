@@ -87,10 +87,11 @@ describe("buildAgentSettings", () => {
     expect(summary.speakProvider).toBe("eleven_labs");
 
     const agent = settings.agent as Record<string, any>;
+    // Arabic-first: nova-3 "multi" is en/es ONLY and mangles Levantine Arabic.
     expect(agent.listen.provider).toMatchObject({
       type: "deepgram",
       model: "nova-3",
-      language: "multi",
+      language: "ar",
     });
     // BYO think: open_ai protocol + our adapter URL + bearer secret
     expect(agent.think.provider.type).toBe("open_ai");
