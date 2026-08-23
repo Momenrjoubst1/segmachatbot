@@ -60,7 +60,7 @@ export const chatMessagesSchema = z.object({
   messages: z.array(
     z.object({
       role: z.enum(['user', 'assistant', 'system']),
-      content: z.string().max(32000),
+      content: z.string().max(400_000),
     })
   ).min(1),
 });

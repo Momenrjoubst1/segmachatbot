@@ -136,7 +136,7 @@ class InputValidationService {
     options: ValidationOptions = {},
   ): Promise<ValidationResult> {
     const maxMessageLength = options.maxMessageLength
-      ?? parseInt(process.env.MAX_MESSAGE_LENGTH || '8000', 10);
+      ?? parseInt(process.env.MAX_MESSAGE_LENGTH || '400000', 10);
     const enableInjectionDetection = options.enableInjectionDetection
       ?? process.env.ENABLE_INJECTION_DETECTION !== 'false';
     const enableModeration = options.enableModeration
@@ -223,7 +223,7 @@ class InputValidationService {
    * Synchronous quick check (no profanity, no async work).
    * Suitable for high-throughput pre-LLM filtering where latency matters.
    */
-  validateQuick(message: string, maxLength = 8000): ValidationResult {
+  validateQuick(message: string, maxLength = 400_000): ValidationResult {
     const issues: ValidationIssue[] = [];
     let riskScore = 0;
 

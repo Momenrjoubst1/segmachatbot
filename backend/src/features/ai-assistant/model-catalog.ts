@@ -12,10 +12,12 @@ export {
   getKnownModelIds,
   isKnownModel,
   DEFAULT_CONTEXT_WINDOW,
+  MAX_OUTPUT_TOKENS,
+  getModelMaxOutputTokens,
   type ModelContextInfo,
 } from '../../services/memory/model-context.js';
 
-import { MODEL_CONTEXT_WINDOWS } from '../../services/memory/model-context.js';
+import { MODEL_CONTEXT_WINDOWS, DEFAULT_CONTEXT_WINDOW } from '../../services/memory/model-context.js';
 import type { ModelContextInfo } from '../../services/memory/model-context.js';
 
 export type KnownModelId = keyof typeof MODEL_CONTEXT_WINDOWS;
@@ -25,7 +27,7 @@ export type KnownModelId = keyof typeof MODEL_CONTEXT_WINDOWS;
  */
 export function getContextWindow(modelId: string): number {
   const model = MODEL_CONTEXT_WINDOWS[modelId] as ModelContextInfo | undefined;
-  return model?.contextWindow ?? 8_000;
+  return model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
 }
 
 /** Flat array of all known models (mirrors frontend MODELS constant) */

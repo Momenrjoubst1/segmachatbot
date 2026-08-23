@@ -1,3 +1,5 @@
+// Unified policy: every supported model runs a 1,000,000-token context window.
+// Keep in sync with backend/src/services/memory/model-context.ts
 export const MODELS = [
   // ==========================================
   // 0. BigModel (ZhipuAI) - GLM Models
@@ -7,7 +9,7 @@ export const MODELS = [
     value: "glm-4-flash",
     icon: "/icons/bigmodel.svg",
     disabled: false,
-    contextWindow: 128_000,
+    contextWindow: 1_000_000,
     provider: "bigmodel" as const,
   },
   {
@@ -15,8 +17,20 @@ export const MODELS = [
     value: "glm-5.2",
     icon: "/icons/bigmodel.svg",
     disabled: false,
-    contextWindow: 128_000,
+    contextWindow: 1_000_000,
     provider: "bigmodel" as const,
+  },
+
+  // ==========================================
+  // 0b. Baichat (B.AI platform)
+  // ==========================================
+  {
+    name: "DeepSeek V4 Flash (B.AI - Default)",
+    value: "deepseek-v4-flash",
+    icon: "/icons/openai.svg",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "baichat" as const,
   },
 
   // ==========================================
@@ -71,7 +85,7 @@ export const MODELS = [
     value: "gpt-5.4",
     icon: "/icons/openai.svg",
     disabled: false,
-    contextWindow: 128_000,
+    contextWindow: 1_000_000,
     provider: "azure" as const,
   },
 
@@ -83,7 +97,7 @@ export const MODELS = [
     value: "gpt-4o-mini",
     icon: "/icons/github.svg",
     disabled: false,
-    contextWindow: 128_000,
+    contextWindow: 1_000_000,
     provider: "github" as const,
   },
   {
@@ -91,7 +105,7 @@ export const MODELS = [
     value: "gpt-4o",
     icon: "/icons/openrouter.svg",
     disabled: false,
-    contextWindow: 128_000,
+    contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
 
@@ -103,7 +117,7 @@ export const MODELS = [
     value: "llama-3.3-70b-versatile",
     icon: "/icons/meta.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "groq" as const,
   },
   {
@@ -111,7 +125,15 @@ export const MODELS = [
     value: "llama-3.1-8b-instant",
     icon: "/icons/meta.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
+    provider: "groq" as const,
+  },
+  {
+    name: "Qwen 3.6 27B (Groq)",
+    value: "qwen/qwen3.6-27b",
+    icon: "/icons/qwen.svg",
+    disabled: false,
+    contextWindow: 1_000_000,
     provider: "groq" as const,
   },
   {
@@ -119,7 +141,7 @@ export const MODELS = [
     value: "openai/gpt-oss-120b",
     icon: "/icons/openai.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "groq" as const,
   },
   {
@@ -127,7 +149,7 @@ export const MODELS = [
     value: "openai/gpt-oss-20b",
     icon: "/icons/openai.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "groq" as const,
   },
   {
@@ -135,7 +157,7 @@ export const MODELS = [
     value: "qwen/qwen3-32b",
     icon: "/icons/qwen.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "groq" as const,
   },
   {
@@ -143,7 +165,7 @@ export const MODELS = [
     value: "meta-llama/llama-4-scout-17b-16e-instruct",
     icon: "/icons/meta.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "groq" as const,
   },
   {
@@ -151,7 +173,7 @@ export const MODELS = [
     value: "mixtral-8x7b-32768",
     icon: "/icons/mistral.svg",
     disabled: false,
-    contextWindow: 32_768,
+    contextWindow: 1_000_000,
     provider: "groq" as const,
   },
 
@@ -171,7 +193,15 @@ export const MODELS = [
     value: "qwen/qwen-2.5-72b-instruct:free",
     icon: "/icons/qwen.svg",
     disabled: false,
-    contextWindow: 32_000,
+    contextWindow: 1_000_000,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "Claude 3.5 Haiku (Free)",
+    value: "anthropic/claude-3.5-haiku",
+    icon: "/icons/openrouter.svg",
+    disabled: false,
+    contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
   {
@@ -179,7 +209,7 @@ export const MODELS = [
     value: "nvidia/nemotron-3-ultra-550b-a55b:free",
     icon: "/icons/nvidia.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
   {
@@ -187,7 +217,7 @@ export const MODELS = [
     value: "nvidia/nemotron-3.5-lightning-30b-a3b:free",
     icon: "/icons/nvidia.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
   {
@@ -195,7 +225,7 @@ export const MODELS = [
     value: "nvidia/nemotron-3-super-49b-a49b:free",
     icon: "/icons/nvidia.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
   {
@@ -203,7 +233,7 @@ export const MODELS = [
     value: "nvidia/nemotron-3-nano-30b-a3b:free",
     icon: "/icons/nvidia.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
   {
@@ -211,7 +241,7 @@ export const MODELS = [
     value: "nvidia/nemotron-nano-9b-v2:free",
     icon: "/icons/nvidia.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
   {
@@ -219,7 +249,7 @@ export const MODELS = [
     value: "nvidia/nemotron-nano-12b-2-vl:free",
     icon: "/icons/nvidia.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
   {
@@ -227,7 +257,7 @@ export const MODELS = [
     value: "google/gemma-4-26b-a4b:free",
     icon: "/icons/google.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
   {
@@ -235,7 +265,7 @@ export const MODELS = [
     value: "openai/gpt-oss-20b:free",
     icon: "/icons/openai.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
   {
@@ -243,7 +273,23 @@ export const MODELS = [
     value: "poolside/laguna-s-2.1:free",
     icon: "/icons/poolside.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "Laguna XS 2.1 (Free)",
+    value: "poolside/laguna-xs-2.1:free",
+    icon: "/icons/poolside.svg",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "Dots3 Note Preview (Free)",
+    value: "dots-studio/dots3-note-preview:free",
+    icon: "/icons/openrouter.svg",
+    disabled: false,
+    contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
   {
@@ -251,7 +297,7 @@ export const MODELS = [
     value: "liquid/lfm2.5-2.6b:free",
     icon: "/icons/liquid.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
 
@@ -263,7 +309,7 @@ export const MODELS = [
     value: "accounts/fireworks/models/gemma-4-31b-it",
     icon: "/icons/google.svg",
     disabled: false,
-    contextWindow: 262_144,
+    contextWindow: 1_000_000,
     provider: "fireworks" as const,
   },
 
@@ -275,7 +321,7 @@ export const MODELS = [
     value: "inclusionai/ling-3.0-tiny",
     icon: "/icons/novita.svg",
     disabled: false,
-    contextWindow: 262_144,
+    contextWindow: 1_000_000,
     provider: "novita" as const,
   },
 
@@ -287,7 +333,7 @@ export const MODELS = [
     value: "nvidia/llama-3.1-nemotron-70b-instruct",
     icon: "/icons/nvidia.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "nvidia" as const,
   },
   {
@@ -295,7 +341,7 @@ export const MODELS = [
     value: "nvidia/llama-3.3-70b-instruct",
     icon: "/icons/nvidia.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "nvidia" as const,
   },
   {
@@ -303,7 +349,7 @@ export const MODELS = [
     value: "nvidia/deepseek-r1",
     icon: "/icons/nvidia.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "nvidia" as const,
   },
   {
@@ -311,7 +357,7 @@ export const MODELS = [
     value: "meta/llama-3.1-8b-instruct",
     icon: "/icons/nvidia.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "nvidia" as const,
   },
   {
@@ -319,7 +365,7 @@ export const MODELS = [
     value: "meta/llama-3.1-70b-instruct",
     icon: "/icons/nvidia.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "nvidia" as const,
   },
   {
@@ -327,7 +373,7 @@ export const MODELS = [
     value: "qwen/qwen2.5-72b-instruct",
     icon: "/icons/nvidia.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "nvidia" as const,
   },
 
@@ -339,7 +385,7 @@ export const MODELS = [
     value: "llama-3.3-70b",
     icon: "/icons/cerebras.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "cerebras" as const,
   },
   {
@@ -347,7 +393,7 @@ export const MODELS = [
     value: "llama-3.1-8b",
     icon: "/icons/cerebras.svg",
     disabled: false,
-    contextWindow: 131_072,
+    contextWindow: 1_000_000,
     provider: "cerebras" as const,
   },
 ] as const;

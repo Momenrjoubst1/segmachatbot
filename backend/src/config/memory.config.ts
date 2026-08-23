@@ -4,6 +4,11 @@
  */
 
 import { createLogger } from "../utils/logger.js";
+import {
+  MAX_CHAT_HISTORY_MESSAGES,
+  KEEP_FIRST_MESSAGES,
+  KEEP_LAST_MESSAGES,
+} from "./constants.js";
 
 const log = createLogger('memory-config');
 
@@ -12,14 +17,14 @@ export const MemoryConfig = {
   // Context Window Management
   // ==========================================
   contextWindow: {
-    // الحد الأقصى للرسائل قبل التلخيص
-    maxMessages: parseInt(process.env.MEMORY_MAX_MESSAGES || '50'),
-    
+    // الحد الأقصى للرسائل قبل التلخيص (نافذة مليون توكن تستوعب تاريخاً أطول بكثير)
+    maxMessages: parseInt(process.env.MEMORY_MAX_MESSAGES || String(MAX_CHAT_HISTORY_MESSAGES)),
+
     // عدد الرسائل الأولى التي تُحفظ دائماً
-    keepFirstMessages: parseInt(process.env.MEMORY_KEEP_FIRST || '5'),
-    
+    keepFirstMessages: parseInt(process.env.MEMORY_KEEP_FIRST || String(KEEP_FIRST_MESSAGES)),
+
     // عدد الرسائل الأخيرة التي تُحفظ دائماً
-    keepLastMessages: parseInt(process.env.MEMORY_KEEP_LAST || '40'),
+    keepLastMessages: parseInt(process.env.MEMORY_KEEP_LAST || String(KEEP_LAST_MESSAGES)),
     
     // الحد الأدنى للرسائل قبل بدء التلخيص
     minMessagesForSummary: parseInt(process.env.MEMORY_MIN_FOR_SUMMARY || '12'),

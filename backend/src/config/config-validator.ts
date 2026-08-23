@@ -176,15 +176,15 @@ const validationRules: ConfigValidationRule[] = [
   {
     name: 'memory-config',
     validate: () => {
-      const maxMessages = parseInt(process.env.MEMORY_MAX_MESSAGES || '50');
+      const maxMessages = parseInt(process.env.MEMORY_MAX_MESSAGES || '500');
       const minMessages = parseInt(process.env.MEMORY_MIN_FOR_SUMMARY || '12');
-      
+
       if (maxMessages < minMessages) {
         return { valid: false, error: 'MEMORY_MAX_MESSAGES must be >= MEMORY_MIN_FOR_SUMMARY' };
       }
-      
+
       const keepFirst = parseInt(process.env.MEMORY_KEEP_FIRST || '5');
-      const keepLast = parseInt(process.env.MEMORY_KEEP_LAST || '40');
+      const keepLast = parseInt(process.env.MEMORY_KEEP_LAST || '100');
       
       if (keepFirst + keepLast > maxMessages) {
         return { valid: false, error: 'MEMORY_KEEP_FIRST + MEMORY_KEEP_LAST must be <= MEMORY_MAX_MESSAGES' };

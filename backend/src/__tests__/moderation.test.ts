@@ -26,7 +26,7 @@ describe('Moderation Service', () => {
 
   describe('Length Check', () => {
     it('should block messages exceeding MAX_MESSAGE_CHARS', async () => {
-      const longMessage = 'a'.repeat(32_001);
+      const longMessage = 'a'.repeat(400_001);
       const messages: CoreMessage[] = [u(longMessage)];
 
       const result = await moderateInput(messages);

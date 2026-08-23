@@ -351,12 +351,23 @@ export async function runRagPipeline(args: {
     const hasTextbookChunks = rankedDocs.some(d => d.metadata?.textbook_id);
 
     // Calculate RAG budget based on model context window
-    const reservedForPrompt = 6000; // system prompt + messages + output reserve
+    // Reserve ~15% for the system prompt + conversation + output instead of a
+    // flat guess, so big windows get proportionally large RAG budgets.
+    const reservedForPrompt = Math.max(
+      6000,
+      Math.floor(getModelContextWindow(selectedModel) * 0.15),
+    );
     const ragBudgetTokens = calculateRAGBudget(selectedModel, reservedForPrompt);
 
-    // Truncate RAG sources to fit budget
+    // Truncate RAG sources to fit budget — scale the per-source cap with the
+    // budget so large-window models aren't pinned to the 1,500-token default
+    // (actual content is still bounded by each chunk's real size).
     const truncationResult = truncateRAGSources(rankedDocs, {
       totalBudgetTokens: ragBudgetTokens,
+      maxTokensPerSource: Math.max(
+        1500,
+        Math.floor(ragBudgetTokens / Math.max(1, rankedDocs.length)),
+      ),
       strategy: 'hybrid',
       preserveBoundaries: true,
     });

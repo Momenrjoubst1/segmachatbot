@@ -5,7 +5,8 @@ import { streamText } from "ai";
 import { asyncHandler } from "../utils/express-async-wrapper.js";
 import { createLogger } from "../utils/logger.js";
 import { moderateInput } from "../services/chat/moderation.service.js";
-import { createProviderClient, getProviderAndModel } from "./chat/chat-shared.js";
+import { createProviderClient, getProviderAndModel, stripThinkTags } from "./chat/chat-shared.js";
+import { getModelMaxOutputTokens } from "../services/memory/model-context.js";
 import { guestIpLimiter, guestStatusLimiter } from "../middleware/rate-limiters.js";
 import { withTimeout, TIMEOUTS } from "../utils/timeout-wrapper.js";
 import redis from "../config/redis/client.js";
@@ -806,7 +807,7 @@ router.post(
     for (const currentModelId of guestCandidateModels) {
       try {
         const resolved = getProviderAndModel(currentModelId);
-        const providerClient = createProviderClient(resolved.provider);
+        const providerClient = createProviderClient(resolved.provider, { reasoningTap: true });
         const modelName = resolved.modelName;
 
         log.info("Attempting guest chat stream", {
@@ -819,8 +820,12 @@ router.post(
           model: providerClient.chat(modelName),
           messages,
           system: GUEST_SYSTEM_PROMPT,
-          maxOutputTokens: 4096,
+          maxOutputTokens: getModelMaxOutputTokens(currentModelId),
           abortSignal: AbortSignal.timeout(120_000),
+          // Surface Gemini thoughts when the guest model supports them.
+          providerOptions: {
+            google: { thinkingConfig: { includeThoughts: true } },
+          },
         });
 
         for await (const chunk of result.textStream) {
@@ -834,6 +839,11 @@ router.post(
               length: fullResponse.length,
               max: MAX_RESPONSE_CHARS,
             });
+            // Make the cut-off visible instead of silently ending mid-sentence,
+            // and persist the marker so the stored transcript reflects it.
+            const truncationMarker = "\n\n_[تم اختصار الرد لأنه تجاوز الحد الأقصى للطول]_";
+            fullResponse += truncationMarker;
+            res.write(`0:${JSON.stringify(truncationMarker)}\n`);
             break;
           }
         }
@@ -868,9 +878,10 @@ router.post(
     }
 
     // --- Persist to server-side transcript AFTER successful stream ---
+    // <think> blocks are UI-only; never store them in the guest transcript.
     await appendTranscript(guestId, [
       { role: "user", content: message.trim() },
-      { role: "assistant", content: fullResponse },
+      { role: "assistant", content: stripThinkTags(fullResponse) },
     ]);
 
     res.end();

@@ -6,14 +6,14 @@
 // ==========================================
 // Message / Content Limits
 // ==========================================
-export const MAX_MESSAGE_CHARS = 32_000;           // حد طول الرسالة (للاعتدال)
+export const MAX_MESSAGE_CHARS = 400_000;          // حد طول الرسالة (~100k توكن — يناسب نافذة مليون)
 export const MAX_CHUNK_CHARS = 1_000;              // حد طول القطعة (للـ RAG)
 export const OVERLAP_CHARS = 100;                  // تداخل بين القطع
 export const MIN_MESSAGE_LENGTH = 10;              // أدنى طول للتلخيص
 export const MAX_SUMMARY_TOKENS = 500;             // أقصى توكنات للملخص
-export const MAX_CHAT_HISTORY_MESSAGES = 50;       // أقصى رسائل في السياق
+export const MAX_CHAT_HISTORY_MESSAGES = 500;      // أقصى رسائل في السياق
 export const KEEP_FIRST_MESSAGES = 5;              // رسائل أولى تُحفظ دائماً
-export const KEEP_LAST_MESSAGES = 40;              // رسائل أخيرة تُحفظ دائماً
+export const KEEP_LAST_MESSAGES = 100;             // رسائل أخيرة تُحفظ دائماً
 export const MIN_MESSAGES_FOR_SUMMARY = 12;        // أدنى رسائل قبل التلخيص
 
 // ==========================================

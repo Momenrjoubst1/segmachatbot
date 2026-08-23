@@ -13,6 +13,7 @@ import { stepCountIs, streamText, generateText } from "ai";
 import { triggerChatTitlingAsync } from "../chat-title-generator.service.js";
 import { tryExtractAndStore } from "../memory/memory-context-builder.js";
 import { MemoryConfig } from "../../config/memory.config.js";
+import { getModelMaxOutputTokens } from "../memory/model-context.js";
 import { contextCache } from "../memory/context-cache.service.js";
 import { enhancedMemory } from "../memory/enhanced-memory.service.js";
 import {
@@ -23,6 +24,7 @@ import {
   modelRouter,
   getGracefulDegradationMessage,
   getProviderAndModel,
+  stripThinkTags,
 } from "../../routes/chat/chat-shared.js";
 import { moderateOutput } from "./moderation.service.js";
 import { responseCache, CacheMetadata } from "./response-cache.service.js";
@@ -118,8 +120,13 @@ export async function generateAndStreamResponse(
     model: currentClient.chat(currentModelName),
     messages: finalMessages as any[],
     system: resolvedSystemPrompt,
-    maxOutputTokens: 4096,
+    maxOutputTokens: getModelMaxOutputTokens(currentModelName),
     abortSignal: combinedSignal,
+    // Surface model reasoning ("thoughts") to the client when the provider
+    // supports it (e.g. Gemini thinking). Other providers ignore this key.
+    providerOptions: {
+      google: { thinkingConfig: { includeThoughts: true } },
+    },
     onFinish: async ({
       text,
       usage,
@@ -130,6 +137,10 @@ export async function generateAndStreamResponse(
       finishReason?: string;
     }) => {
       reqMetrics.totalTimeMs = Date.now() - (reqMetrics.startTime as number);
+
+      // Reasoning tap: <think>…</think> blocks are UI-only — strip them before
+      // grounding checks, moderation, persistence, and caching.
+      const visibleText = text ? stripThinkTags(text) : text;
 
       log.info("chat_metrics", {
         event: "chat_metrics",
@@ -142,11 +153,11 @@ export async function generateAndStreamResponse(
         model: attemptModelName,
       });
 
-      if (activeThreadId && text) {
+      if (activeThreadId && visibleText) {
         // ---- Grounding Check (verify response is backed by RAG sources) ----
         if (options.retrievedDocsForGrounding && options.retrievedDocsForGrounding.length > 0) {
           try {
-            const groundingResult = checkGrounding(text, options.retrievedDocsForGrounding);
+            const groundingResult = checkGrounding(visibleText, options.retrievedDocsForGrounding);
             log.info("Grounding check result", {
               isGrounded: groundingResult.isGrounded,
               percentage: `${groundingResult.groundedPercentage}%`,
@@ -163,7 +174,7 @@ export async function generateAndStreamResponse(
         modelRouter.reportSuccess(attemptModelName);
         // Output safety filter
         const safeResponseText = await moderateOutput(
-          text,
+          visibleText,
           userId || "",
           activeThreadId,
         );
@@ -205,7 +216,7 @@ export async function generateAndStreamResponse(
             try {
               const messagesWithResponse = [
                 ...finalMessages.map(m => ({ role: m.role, content: typeof m.content === 'string' ? m.content : '' })),
-                { role: "assistant", content: text },
+                { role: "assistant", content: visibleText },
               ];
               const extracted = await enhancedMemory.extractMemories(
                 userId,
@@ -243,12 +254,12 @@ export async function generateAndStreamResponse(
         // ---- Semantic Response Cache: Store new response ----
         // Cache the response for future similar questions
         // Skip if cache was bypassed or if tools were used (dynamic responses)
-        if (cacheMetadata && !cacheMetadata.bypassed && text) {
+        if (cacheMetadata && !cacheMetadata.bypassed && visibleText) {
           try {
             await responseCache.cacheResponse(
               cacheMetadata.queryText,
               cacheMetadata.queryEmbedding,
-              text,
+              visibleText,
               {
                 model: cacheMetadata.model,
                 ragSources: cacheMetadata.ragSources,
@@ -293,7 +304,7 @@ export async function generateAndStreamResponse(
           model: currentClient.chat(currentModelName),
     messages: finalMessages as any[],
           system: resolvedSystemPrompt,
-          maxOutputTokens: 4096,
+          maxOutputTokens: getModelMaxOutputTokens(currentModelName),
           abortSignal: combinedSignal,
           ...(Object.keys(enabledTools).length > 0
             ? { tools: enabledTools, stopWhen: stepCountIs(15) }
@@ -325,9 +336,10 @@ export async function generateAndStreamResponse(
             },
           ],
           system: criticSystemPrompt,
-          maxOutputTokens: 4096,
+          maxOutputTokens: getModelMaxOutputTokens(secondModelName),
           abortSignal: combinedSignal,
           onFinish: streamOptions.onFinish,
+          providerOptions: streamOptions.providerOptions,
         });
 
         // Use pipeUIMessageStreamToResponse for Express response streaming in AI SDK v6
@@ -359,7 +371,7 @@ export async function generateAndStreamResponse(
         if (nextModel && nextModel !== currentModelName) {
           const { provider: fallbackProvider, modelName: fallbackModelName } =
             getProviderAndModel(nextModel);
-          currentClient = createProviderClient(fallbackProvider);
+          currentClient = createProviderClient(fallbackProvider, { reasoningTap: true });
           currentModelName = fallbackModelName;
           // isFallback = true (tracked for logging only)
 

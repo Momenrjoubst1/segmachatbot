@@ -9,7 +9,7 @@
  * - Runtime adaptation based on available context
  */
 
-import { getModelContextWindow, getModelInfo, type ModelContextInfo } from './model-context.js';
+import { getModelContextWindow, getModelInfo, MAX_OUTPUT_TOKENS, type ModelContextInfo } from './model-context.js';
 import { estimateTokens } from './token-estimator.js';
 import { createLogger } from '../../utils/logger.js';
 
@@ -91,10 +91,12 @@ const DEFAULT_LAYERS: Omit<LayerBudget, 'allocatedTokens' | 'actualTokens' | 'co
     isRequired: true,
   },
   {
+    // Carries enrolled-course context AND attached thread-file text — on
+    // million-token windows this can hold a large document, not just a summary.
     name: 'user_courses',
     priority: 70,
     minTokens: 0,
-    maxTokens: 800,
+    maxTokens: 32_768,
     isRequired: false,
   },
   {
@@ -140,7 +142,10 @@ export function calculateContextBudget(
 ): ContextBudget {
   const modelId = config.modelId as KnownModelId;
   const maxContextTokens = getModelContextWindow(modelId);
-  const reservedOutputTokens = config.reservedOutputTokens ?? 4096;
+  // Reserve headroom for the response output, scaling with the window but
+  // never exceeding the configured max output tokens (default 64k).
+  const reservedOutputTokens =
+    config.reservedOutputTokens ?? Math.min(MAX_OUTPUT_TOKENS, Math.floor(maxContextTokens * 0.1));
   const availableForPrompt = maxContextTokens - reservedOutputTokens;
 
   // Build layer budgets with actual content

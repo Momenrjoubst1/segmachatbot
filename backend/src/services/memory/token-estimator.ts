@@ -408,7 +408,6 @@ export function calculateTrimPlan(
   modelId: string = 'gpt-4o-mini',
   targetTokensRatio: number = 0.7, // Target 70% usage
   keepFirstMin = parseInt(process.env.MEMORY_KEEP_FIRST || '5'),
-  _keepLastMin = parseInt(process.env.MEMORY_KEEP_LAST || '10'),
 ): TrimPlan {
   const maxTokens = getModelContextWindow(modelId);
   const targetTokens = Math.floor(maxTokens * targetTokensRatio);

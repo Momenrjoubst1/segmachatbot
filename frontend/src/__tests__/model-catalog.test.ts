@@ -41,14 +41,14 @@ describe('model-catalog', () => {
   });
 
   describe('DEFAULT_CONTEXT_WINDOW', () => {
-    it('is 128000', () => {
-      expect(DEFAULT_CONTEXT_WINDOW).toBe(128_000);
+    it('is 1,000,000 (unified policy)', () => {
+      expect(DEFAULT_CONTEXT_WINDOW).toBe(1_000_000);
     });
   });
 
   describe('getContextWindow', () => {
     it('returns context window for a known model', () => {
-      expect(getContextWindow('glm-4-flash')).toBe(128_000);
+      expect(getContextWindow('glm-4-flash')).toBe(1_000_000);
     });
 
     it('returns context window for gemini-2.5-flash', () => {
@@ -56,7 +56,7 @@ describe('model-catalog', () => {
     });
 
     it('returns context window for mixtral model', () => {
-      expect(getContextWindow('mixtral-8x7b-32768')).toBe(32_768);
+      expect(getContextWindow('mixtral-8x7b-32768')).toBe(1_000_000);
     });
 
     it('returns default context window for unknown model', () => {

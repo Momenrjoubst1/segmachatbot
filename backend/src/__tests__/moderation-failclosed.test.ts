@@ -32,12 +32,13 @@ describe('Moderation Fail-Closed Behavior', () => {
 
   it('moderateInput should block messages exceeding MAX_MESSAGE_CHARS', async () => {
     const { moderateInput } = await import('../services/chat/moderation.service.js');
-    const longMessage = 'a'.repeat(33000);
+    // MAX_MESSAGE_CHARS is 400,000 — must exceed it to hit the length branch
+    const longMessage = 'a'.repeat(400_001);
     const result = await moderateInput([
       { role: 'user', content: longMessage }
     ]);
     expect(result.blocked).toBe(true);
-    expect(result.error).toBeDefined();
+    expect(result.error).toContain('طويلة جداً');
   });
 
   it('moderateInput should BLOCK when moderator is unavailable (fail-closed default)', async () => {
