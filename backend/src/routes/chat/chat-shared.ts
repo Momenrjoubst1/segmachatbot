@@ -208,7 +208,7 @@ export const newChatLimiter = rateLimit({
 
 export const DEFAULT_MODEL =
   process.env.ASSISTANT_DEFAULT_MODEL?.trim() ||
-  "deepseek-v4-flash";
+  "stealth/ox-alpha";
 
 export const ALLOWED_MODELS = [
   // Baichat

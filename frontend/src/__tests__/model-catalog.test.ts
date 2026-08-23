@@ -28,15 +28,15 @@ describe('model-catalog', () => {
       });
     });
 
-    it('has GLM-4 Flash as first model', () => {
-      expect(MODELS[0].value).toBe('glm-4-flash');
-      expect(MODELS[0].provider).toBe('bigmodel');
+    it('has Ox-Alpha as first model (app default)', () => {
+      expect(MODELS[0].value).toBe('stealth/ox-alpha');
+      expect(MODELS[0].provider).toBe('openrouter');
     });
   });
 
   describe('DEFAULT_MODEL_ID', () => {
-    it('is set to glm-4-flash', () => {
-      expect(DEFAULT_MODEL_ID).toBe('glm-4-flash');
+    it('is set to stealth/ox-alpha', () => {
+      expect(DEFAULT_MODEL_ID).toBe('stealth/ox-alpha');
     });
   });
 

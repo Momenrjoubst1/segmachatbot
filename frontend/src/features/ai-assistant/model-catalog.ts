@@ -2,7 +2,31 @@
 // Keep in sync with backend/src/services/memory/model-context.ts
 export const MODELS = [
   // ==========================================
-  // 0. BigModel (ZhipuAI) - GLM Models
+  // 0. OpenRouter (primary — app default)
+  // ==========================================
+  {
+    name: "Ox-Alpha (OpenRouter - Primary)",
+    value: "stealth/ox-alpha",
+    icon: "/icons/openrouter.svg",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "openrouter" as const,
+  },
+
+  // ==========================================
+  // 0b. Baichat (B.AI platform)
+  // ==========================================
+  {
+    name: "DeepSeek V4 Flash (B.AI)",
+    value: "deepseek-v4-flash",
+    icon: "/icons/openai.svg",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "baichat" as const,
+  },
+
+  // ==========================================
+  // 1. BigModel (ZhipuAI) - GLM Models
   // ==========================================
   {
     name: "GLM-4 Flash (BigModel - Fast)",
@@ -19,30 +43,6 @@ export const MODELS = [
     disabled: false,
     contextWindow: 1_000_000,
     provider: "bigmodel" as const,
-  },
-
-  // ==========================================
-  // 0b. Baichat (B.AI platform)
-  // ==========================================
-  {
-    name: "DeepSeek V4 Flash (B.AI - Default)",
-    value: "deepseek-v4-flash",
-    icon: "/icons/openai.svg",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "baichat" as const,
-  },
-
-  // ==========================================
-  // 0c. OpenRouter (primary)
-  // ==========================================
-  {
-    name: "Ox-Alpha (OpenRouter - Primary)",
-    value: "stealth/ox-alpha",
-    icon: "/icons/openrouter.svg",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "openrouter" as const,
   },
 
   // ==========================================
