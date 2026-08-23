@@ -12,7 +12,6 @@ import { ComposerQuotePreview, SelectionToolbar } from "../../../ui/quote";
 
 import {
   ComposerPrimitive,
-  unstable_useComposerInput,
   useAuiState,
   useUnstableMentionAdapter,
   useUnstableSlashCommandAdapter,
@@ -142,33 +141,27 @@ export const ThreadComposer: FC = () => {
   const { limitReached } = useGuestMode();
   const mention = useUnstableMentionAdapter({ fallbackIcon: WrenchIcon });
   const isThreadEmpty = useAuiState((s) => s.thread.isEmpty);
-  const input = unstable_useComposerInput();
   void VOICE_DEBUG_PARAM;
 
   // ── "/" prompt templates (Claude-style) ────────────────────────────────
   // Type "/" in the composer → pick a template → its prompt fills the box.
+  // We write through the Lexical editor itself (select-all + insertText):
+  // guaranteed visible, fires Lexical's change events so the runtime store
+  // stays in sync. The runtime-level setText() can silently no-op.
   const insertTemplate = useCallback(
     (prompt: string) => {
-      const current = input?.value ?? "";
-      let next: string;
-      if (!current.trim()) {
-        next = prompt;
-      } else if (/\/[\w-]*$/.test(current)) {
-        // Replace the trailing "/query" trigger text with the template.
-        next = current.replace(/\/[\w-]*$/, prompt);
-      } else {
-        next = `${current.replace(/\s+$/, "")}\n\n${prompt}`;
-      }
-      input?.setText(next);
+      // Run after the popover finishes stripping the "/query" trigger text.
       window.setTimeout(() => {
-        document
-          .querySelector<HTMLElement>(
-            '[data-slot="aui_composer-shell"] [contenteditable="true"]',
-          )
-          ?.focus();
-      }, 60);
+        const el = document.querySelector<HTMLElement>(
+          '[data-slot="aui_composer-shell"] [contenteditable="true"]',
+        );
+        if (!el) return;
+        el.focus();
+        document.execCommand("selectAll", false);
+        document.execCommand("insertText", false, prompt);
+      }, 50);
     },
-    [input],
+    [],
   );
 
   const { adapter: slashAdapter, action: slashAction } =
