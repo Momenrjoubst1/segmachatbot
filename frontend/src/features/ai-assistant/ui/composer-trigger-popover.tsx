@@ -168,6 +168,19 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
       )}
       {...props}
     >
+      {/* Behavior sub-primitive — required for the popover to open at all.
+          Exactly one of Directive/Action may be rendered. */}
+      {directive ? (
+        <ComposerPrimitive.Unstable_TriggerPopover.Directive
+          formatter={directive.formatter}
+          onInserted={directive.onInserted}
+        />
+      ) : action ? (
+        <ComposerPrimitive.Unstable_TriggerPopover.Action
+          onExecute={action.onExecute}
+          removeOnExecute={action.removeOnExecute}
+        />
+      ) : null}
       <Categories iconMap={iconMap} fallbackIcon={fallbackIcon} emptyLabel={emptyCategoriesLabel} />
       <Items
         iconMap={iconMap}

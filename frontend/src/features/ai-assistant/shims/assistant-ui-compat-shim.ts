@@ -143,30 +143,12 @@ export const useUnstableMentionAdapter = (options?: any) => {
   };
 };
 
-const RealSlashAdapter = RealAssistantUI.unstable_useSlashCommandAdapter;
-export const useUnstableSlashCommandAdapter = (options: any) => {
-  const commands = (options?.commands ?? []).map((command: any) => ({
-    name: command.id,
-    label: `/${command.id}`,
-    description: command.description,
-    icon: command.icon,
-    execute: command.execute ? () => command.execute(command) : undefined,
-  }));
-
-  const adapter = RealSlashAdapter({ commands });
-
-  return useMemo(
-    () => ({
-      adapter,
-      action: {
-        onExecute: (item: any) => item.execute?.(),
-      },
-      ...(options?.iconMap ? { iconMap: options.iconMap } : {}),
-      ...(options?.fallbackIcon ? { fallbackIcon: options.fallbackIcon } : {}),
-    }),
-    [adapter, options?.iconMap, options?.fallbackIcon],
-  );
-};
+// NOTE: the installed unstable_useSlashCommandAdapter already returns the
+// full `{ adapter, action }` bundle — delegate straight through instead of
+// re-wrapping (double-wrapping produced an invalid nested adapter whose
+// `onExecute` could never fire).
+export const useUnstableSlashCommandAdapter = (options: any) =>
+  RealAssistantUI.unstable_useSlashCommandAdapter(options);
 
 export type Unstable_SlashCommand = {
   id: string;

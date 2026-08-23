@@ -4,6 +4,7 @@ import {
   ComposerAttachments,
 } from "../../../ui/attachment";
 import { MicButton } from "../../../ui/MicButton";
+import { VoiceAmbienceLayer } from "../../../ui/VoiceAmbienceLayer";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ComposerTriggerPopover } from "../../../ui/composer-trigger-popover";
@@ -11,16 +12,19 @@ import { ComposerQuotePreview, SelectionToolbar } from "../../../ui/quote";
 
 import {
   ComposerPrimitive,
+  unstable_useComposerInput,
   useAuiState,
   useUnstableMentionAdapter,
+  useUnstableSlashCommandAdapter,
 } from "../../../shims/assistant-ui-compat-shim";
 import {
   ArrowUpIcon,
+  SparklesIcon,
   SquareIcon,
   WrenchIcon,
 } from "lucide-react";
 import { LexicalComposerInput } from "@assistant-ui/react-lexical";
-import { type FC, useEffect, useCallback } from "react";
+import { type FC, useEffect, useCallback, useMemo } from "react";
 import { DirectiveChip } from "./MessageComponents";
 import { useGuestMode } from "@/context/GuestModeContext";
 import { useNavigate } from "react-router-dom";
@@ -31,6 +35,7 @@ import {
   VoiceDebugOverlay,
   VOICE_DEBUG_PARAM,
 } from "../../../ui/VoiceDebugOverlay";
+import { PROMPT_TEMPLATES } from "../../../config/prompt-templates";
 
 /**
  * Discrete send-button state machine:
@@ -137,7 +142,53 @@ export const ThreadComposer: FC = () => {
   const { limitReached } = useGuestMode();
   const mention = useUnstableMentionAdapter({ fallbackIcon: WrenchIcon });
   const isThreadEmpty = useAuiState((s) => s.thread.isEmpty);
+  const input = unstable_useComposerInput();
   void VOICE_DEBUG_PARAM;
+
+  // ── "/" prompt templates (Claude-style) ────────────────────────────────
+  // Type "/" in the composer → pick a template → its prompt fills the box.
+  const insertTemplate = useCallback(
+    (prompt: string) => {
+      const current = input?.value ?? "";
+      let next: string;
+      if (!current.trim()) {
+        next = prompt;
+      } else if (/\/[\w-]*$/.test(current)) {
+        // Replace the trailing "/query" trigger text with the template.
+        next = current.replace(/\/[\w-]*$/, prompt);
+      } else {
+        next = `${current.replace(/\s+$/, "")}\n\n${prompt}`;
+      }
+      input?.setText(next);
+      window.setTimeout(() => {
+        document
+          .querySelector<HTMLElement>(
+            '[data-slot="aui_composer-shell"] [contenteditable="true"]',
+          )
+          ?.focus();
+      }, 60);
+    },
+    [input],
+  );
+
+  const { adapter: slashAdapter, action: slashAction } =
+    useUnstableSlashCommandAdapter({
+      commands: PROMPT_TEMPLATES.map((tpl) => ({
+        id: tpl.id,
+        label: tpl.label,
+        description: tpl.description,
+        icon: tpl.id,
+        execute: () => insertTemplate(tpl.prompt),
+      })),
+      removeOnExecute: true,
+      fallbackIcon: SparklesIcon,
+    });
+
+  const templateIcons = useMemo(() => {
+    const map: Record<string, FC<{ className?: string }>> = {};
+    for (const tpl of PROMPT_TEMPLATES) map[tpl.id] = tpl.icon;
+    return map;
+  }, []);
 
   const updateComposerForKeyboard = useCallback(() => {
     const viewport = window.visualViewport;
@@ -198,9 +249,11 @@ export const ThreadComposer: FC = () => {
         <ComposerPrimitive.AttachmentDropzone asChild>
           <div
             data-slot="aui_composer-shell"
-            className="flex w-full flex-col gap-2 rounded-3xl border border-[#EBE5DF] bg-white p-2.5 text-[#2C2825] shadow-sm transition-[shadow,background-color] hover:bg-[#F9F6F0] focus-within:bg-white focus-within:border-ring/75 focus-within:ring-2 focus-within:ring-ring/20 data-[dragging=true]:border-ring data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50"
+            className="relative flex w-full flex-col gap-2 rounded-3xl border border-[#EBE5DF] bg-white p-2.5 text-[#2C2825] shadow-sm transition-[shadow,background-color] hover:bg-[#F9F6F0] focus-within:bg-white focus-within:border-[#2C2825]/60 focus-within:ring-2 focus-within:ring-[#2C2825]/10 data-[dragging=true]:border-[#2C2825]/60 data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50"
             style={{ marginBottom: "var(--composer-keyboard-offset, 0px)" }}
           >
+            {/* Audio-reactive glow (live voice mode) — sits behind content */}
+            <VoiceAmbienceLayer />
             <ComposerQuotePreview />
             <ComposerAttachments />
             <div dir="auto" className="contents">
@@ -218,6 +271,13 @@ export const ThreadComposer: FC = () => {
               directive={mention.directive}
               iconMap={mention.iconMap}
               fallbackIcon={mention.fallbackIcon}
+            />
+            <ComposerTriggerPopover
+              char="/"
+              adapter={slashAdapter}
+              action={slashAction}
+              iconMap={templateIcons}
+              fallbackIcon={SparklesIcon}
             />
           </div>
         </ComposerPrimitive.AttachmentDropzone>
