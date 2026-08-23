@@ -280,5 +280,6 @@
   "voice.agent_error_busy": "في جلسة صوتية شغالة لسا. جرب بعد ثواني.",
   "voice.agent_error_stalled": "المحرك الصوتي وقف عن الاستجابة. ابدأ جلسة جديدة.",
   "voice.agent_notice_half_duplex": "لاحظنا صدى — الميكروفون بسكت لما سيجما بيحكي.",
-  "voice.tts_unavailable": "القراءة الصوتية غير متوفرة هلأ — رح تكمل الردود نصية فقط."
+  "voice.tts_unavailable": "القراءة الصوتية غير متوفرة هلأ — رح تكمل الردود نصية فقط.",
+  "voice.listening_ellipsis": "عم أسمعك…"
 }

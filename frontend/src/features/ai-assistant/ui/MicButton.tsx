@@ -274,6 +274,7 @@ export const MicButton: FC<MicButtonProps> = ({
             muted: s2c.muted,
             setMuted: s2c.setMuted,
             stop: s2c.stop,
+            interim: s2c.interimText,
           }}
         />
       )}

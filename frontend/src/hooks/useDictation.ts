@@ -70,12 +70,24 @@ export function useDictation(options: UseDictationOptions = {}) {
     interimRef.current = "";
   }, []);
 
-  // Capability probe once: hide mic when backend STT is disabled
+  // Capability probe with retries: a single failed/401 probe (expired token
+  // at mount, backend blip) used to permanently hide ALL voice controls —
+  // the "voice button does nothing" class of bug. Retry before giving up,
+  // and never disable on network errors (a real attempt surfaces a real
+  // error toast instead).
   useEffect(() => {
     let cancelled = false;
-    fetchSttStatus().then(({ enabled }) => {
-      if (!cancelled && !enabled) setStatus("disabled");
-    });
+    const attempt = async (triesLeft: number): Promise<void> => {
+      const { enabled } = await fetchSttStatus();
+      if (cancelled) return;
+      if (enabled) return; // stay "ready"
+      if (triesLeft > 0) {
+        await new Promise((r) => setTimeout(r, 2000));
+        return attempt(triesLeft - 1);
+      }
+      setStatus("disabled");
+    };
+    void attempt(3);
     return () => { cancelled = true; };
   }, []);
 

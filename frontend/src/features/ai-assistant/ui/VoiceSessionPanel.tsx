@@ -12,6 +12,8 @@ interface VoiceSessionCore {
   muted: boolean;
   setMuted: (next: boolean) => void;
   stop: () => void;
+  /** Live interim transcript while the user speaks (speak-to-chat). */
+  interim?: string;
   /** Present only in Deepgram-Agent live mode; speak-to-chat omits it. */
   transcripts?: Array<{ id: number; role: "user" | "assistant"; text: string }>;
   sessionRemainingMs?: number | null;
@@ -44,6 +46,7 @@ export const VoiceSessionPanel: FC<VoiceSessionPanelProps> = ({
   const { t } = useTranslation("chat");
   const logRef = useRef<HTMLDivElement | null>(null);
   const transcripts = session.transcripts;
+  const interim = session.interim?.trim() ?? "";
 
   // Stick to the newest line unless the user scrolled up to read history.
   useEffect(() => {
@@ -160,6 +163,21 @@ export const VoiceSessionPanel: FC<VoiceSessionPanelProps> = ({
                 {entry.text}
               </p>
             ))
+          )}
+        </div>
+      )}
+
+      {/* Speak-to-chat: no transcript log (the thread IS the transcript), but
+          the live interim still shows here — Claude's "Listening…" moment. */}
+      {!transcripts && session.state !== "off" && (
+        <div className="voice-panel__listening" aria-live="polite" data-testid="voice-interim">
+          {interim ? (
+            <span dir="auto" className="voice-panel__interim">{interim}</span>
+          ) : (
+            <>
+              <span className="voice-panel__dot" aria-hidden="true" />
+              {t("voice.listening_ellipsis")}
+            </>
           )}
         </div>
       )}

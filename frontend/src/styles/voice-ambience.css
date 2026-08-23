@@ -320,3 +320,20 @@
 
 .voice-panel__line--user .voice-panel__who { color: rgb(var(--voice-listen-rgb)); }
 .voice-panel__line--assistant .voice-panel__who { color: rgb(var(--voice-speak-rgb)); }
+
+/* Speak-to-chat "Listening…" strip inside the session panel */
+.voice-panel__listening {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem;
+  font-size: 0.8rem;
+  min-height: 2.4rem;
+  color: rgb(var(--voice-listen-rgb));
+  opacity: 0.9;
+}
+
+.voice-panel__interim {
+  unicode-bidi: plaintext;
+  line-height: 1.45;
+}

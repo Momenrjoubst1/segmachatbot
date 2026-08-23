@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuiState } from "@assistant-ui/react";
 
+import { voiceDebugBus } from "@/lib/stt/voice-debug-bus";
 import {
   DictationController,
   type DictationState,
@@ -75,6 +76,8 @@ function extractMessageText(content: readonly unknown[]): string {
 export function useSpeakToChat(opts: UseSpeakToChatOptions) {
   const [state, setState] = useState<SpeakToChatState>("off");
   const [muted, setMutedState] = useState(false);
+  /** Live interim transcript — shown in the session panel, Claude-style. */
+  const [interimText, setInterimText] = useState("");
 
   const optsRef = useRef(opts);
   optsRef.current = opts;
@@ -195,16 +198,26 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       detectorRef.current?.reset();
       echoStreakRef.current = 0; // a real user turn happened — echo suspicion clears
       turnTextRef.current = "";
-      // THE parity move: submission goes through the real composer form, so
-      // the message travels the exact send path a typed message would take.
-      optsRef.current.submitComposer();
-      setState("thinking");
+      setInterimText("");
+      voiceDebugBus.event("s2c_send", text.slice(0, 60));
+      // THE parity move: the transcript rides the real composer form, so the
+      // message travels the exact send path a typed message would take.
+      // The settle delay matters: Lexical applies setText asynchronously, and
+      // requestSubmit() in the same tick submits an EMPTY box (the message
+      // silently vanishes). One frame + a microtask is enough.
+      optsRef.current.writeToComposer(text);
+      window.setTimeout(() => {
+        if (stoppingRef.current) return;
+        optsRef.current.submitComposer();
+        setState((s) => (s === "sending" ? "thinking" : s));
+      }, 120);
       // Mic re-opens automatically below so the next turn can start while
       // the bot thinks/speaks.
       void reopenMicRef.current();
     } else {
       // Blip/noise or duplicate — discard and keep listening
       turnTextRef.current = "";
+      setInterimText("");
       detectorRef.current?.reset();
       optsRef.current.writeToComposer("");
       setState("listening");
@@ -246,11 +259,12 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       },
       onInterim: (t) => {
         turnTextRef.current = t;
-        optsRef.current.writeToComposer(t);
+        setInterimText(t);
+        voiceDebugBus.event("s2c_interim", t.slice(0, 60));
       },
       onFinalSegment: (seg) => {
         turnTextRef.current = (turnTextRef.current + " " + seg).trim();
-        optsRef.current.writeToComposer(turnTextRef.current);
+        setInterimText(turnTextRef.current);
       },
       onRms: (rms) => handleRmsRef.current(rms),
       onEvent: () => {},
@@ -351,6 +365,7 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     controllerRef.current?.stop().catch(() => undefined);
     playerRef.current?.stopAll();
     teardownRef.current();
+    setInterimText("");
     setState("off");
   }, []);
 
@@ -401,5 +416,11 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     [state],
   );
 
-  return { state, busy, muted, setMuted, start, stop, setPersona };
+  // Debug overlay (?voiceDebug=1) mirrors the state machine for diagnosis.
+  useEffect(() => {
+    voiceDebugBus.event("s2c_state", state);
+    voiceDebugBus.setState(state === "off" ? "idle" : `s2c:${state}`);
+  }, [state]);
+
+  return { state, busy, muted, setMuted, start, stop, setPersona, interimText };
 }
