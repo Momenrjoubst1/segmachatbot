@@ -23,6 +23,11 @@ export interface DictationCallbacks {
   onFinalSegment?: (text: string) => void;
   /** Low-level diagnostic events for debugging overlays. */
   onEvent?: (evt: { kind: string; detail?: string }) => void;
+  /**
+   * Per-frame loudness (Int16-domain RMS) — consumed by the live-voice
+   * endpointing detector and barge-in logic. Fires every worklet frame.
+   */
+  onRms?: (rms: number) => void;
 }
 
 interface RelayServerMessage {
@@ -146,9 +151,16 @@ export class DictationController {
         e: MessageEvent<{ type: string; buffer?: Int16Array }>,
       ) => {
         const msg = e.data;
-        if (msg.type === "frame" && msg.buffer && ws.readyState === WebSocket.OPEN) {
+        if (msg.type === "frame" && msg.buffer) {
           this.callbacks.onEvent?.({ kind: "frame" });
-          ws.send(msg.buffer);
+          if (this.callbacks.onRms && ws.readyState === WebSocket.OPEN) {
+            const buf = msg.buffer;
+            let sum = 0;
+            for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+            const rms = Math.sqrt(sum / Math.max(1, buf.length));
+            this.callbacks.onRms(rms);
+          }
+          if (ws.readyState === WebSocket.OPEN) ws.send(msg.buffer);
         }
       };
 
