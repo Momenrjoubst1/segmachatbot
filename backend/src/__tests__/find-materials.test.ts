@@ -3,6 +3,7 @@ import {
   normalizeMaterialText,
   rankMaterialMatches,
   dedupeMaterialMatches,
+  matchMaterialOpenRequest,
   type MaterialMatch,
 } from "../tools/education/find-materials/match-materials.js";
 import { buildMaterialCardMarkdown, MATERIAL_LINK_PREFIX } from "../tools/education/find-materials/material-card.js";
@@ -94,6 +95,51 @@ describe("dedupeMaterialMatches", () => {
     // only the physics pair collapses; chemistry didn't match the query
     expect(deduped).toHaveLength(1);
     expect(deduped[0].match.id).toBe("p2");
+  });
+});
+
+describe("matchMaterialOpenRequest", () => {
+  it("matches Arabic noun-first opens and strips articles", () => {
+    expect(matchMaterialOpenRequest("افتح مادة الفيزياء")).toEqual({ query: "فيزياء" });
+    expect(matchMaterialOpenRequest("وريني كتاب الكيمياء")).toEqual({ query: "كيمياء" });
+    expect(matchMaterialOpenRequest("بدي المادة الفيزياء.")).toEqual({ query: "فيزياء" });
+  });
+
+  it("matches the بدي/اريد verb family (the user's exact phrasing)", () => {
+    expect(matchMaterialOpenRequest("بدي مادة الفيزياء")).toEqual({ query: "فيزياء" });
+    expect(matchMaterialOpenRequest("أريد الكيمياء pdf")).toEqual({ query: "كيمياء" });
+  });
+
+  it("handles «افتح لي مادة X» with the standalone لي", () => {
+    expect(matchMaterialOpenRequest("افتح لي مادة الرياضيات")).toEqual({ query: "رياضيات" });
+  });
+
+  it("matches Arabic suffix form «افتح الفيزياء pdf»", () => {
+    expect(matchMaterialOpenRequest("افتح الفيزياء pdf")).toEqual({ query: "فيزياء" });
+  });
+
+  it("list requests return an empty query", () => {
+    expect(matchMaterialOpenRequest("شو موادي")).toEqual({ query: "" });
+    expect(matchMaterialOpenRequest("show my materials")).toEqual({ query: "" });
+  });
+
+  it("matches natural English suffix order", () => {
+    expect(matchMaterialOpenRequest("open the physics book")).toEqual({ query: "physics" });
+    expect(matchMaterialOpenRequest("show me my math textbook!")).toEqual({ query: "math" });
+  });
+
+  it("rejects non-imperative messages even when they mention materials", () => {
+    // study questions must reach the LLM, not open a file
+    expect(matchMaterialOpenRequest("شو هي المادة السوداء في الكيمياء العضوية؟")).toBeNull();
+    expect(matchMaterialOpenRequest("بدي مادة الكيمياء شرح درس الاحتراق بالتفصيل الممل")).toBeNull();
+    expect(matchMaterialOpenRequest("ممكن تساعدني بالواجب")).toBeNull();
+    // thread-summoner territory
+    expect(matchMaterialOpenRequest("افتح الشات السابق")).toBeNull();
+  });
+
+  it("long captured queries are safe — a no-match lookup falls through to the LLM", () => {
+    const r = matchMaterialOpenRequest("بدي مادة الكيمياء شرح درس الاحتراق");
+    expect(r === null || (r?.query.includes("كيمياء") ?? false)).toBe(true);
   });
 });
 

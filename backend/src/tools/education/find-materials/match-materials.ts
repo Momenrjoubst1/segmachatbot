@@ -111,3 +111,64 @@ export function dedupeMaterialMatches(ranked: RankedMatch[]): RankedMatch[] {
   }
   return out;
 }
+
+// ── Explicit material-open request matching ─────────────────────────────────
+// "افتح مادة الفيزياء" / "بدي الكيمياء pdf" / "open the physics book" —
+// deterministic detection so the fast-pass can serve cards without waiting
+// for the LLM. Deliberately NARROW: the WHOLE message must be a short
+// imperative containing a material noun (or a trailing book/pdf suffix),
+// otherwise it falls through to the normal pipeline so regular questions
+// mentioning the word "مادة" are never hijacked. A phrasing match that finds
+// no textbook also falls through, so over-broad captures stay harmless.
+
+export interface MaterialOpenRequest {
+  /** Search query; empty string = list recent materials. */
+  query: string;
+}
+
+const OPEN_AR =
+  "^(?:(?:افتحلي|افتح|اعرضلي|اعرض|وريني|ورني|هاات|هات|جيب(?:\\s+لي)?|بدي|بدّي|ابدّي|ابدي|أبغي|ابغي|أريد|اريد)(?:\\s+(?:لي|للي))?)";
+const NOUN_AR = "(?:\\s+(?:ال)?(?:مادة|المادة|كتاب|الكتاب|ملف|الملف))";
+const TITLE_AR = "([\\u0600-\\u06FF\\w][\\u0600-\\u06FF\\w\\s.-]{1,60})";
+
+/** Verb → noun → title: «افتح مادة الفيزياء», «بدي كتاب الكيمياء». */
+const MATERIAL_OPEN_AR = new RegExp(`${OPEN_AR}${NOUN_AR}\\s+(?:ال)?${TITLE_AR}$`);
+/** Verb → title → trailing pdf: «افتح الفيزياء pdf». */
+const MATERIAL_SUFFIX_AR = new RegExp(`${OPEN_AR}\\s+(?:ال)?([\\u0600-\\u06FF\\w][\\u0600-\\u06FF\\w\\s.-]{1,50}?)\\s+(?:pdf|PDF)$`);
+/** Bare list-my-library requests. */
+const MATERIAL_LIST_RE =
+  /^(?:شو\s+موادي|موادي|وين\s+موادي|وريني\s+موادي|اعرض\s+موادي|قائمتي\s+المواد|show\s+my\s+materials|my\s+materials|list\s+my\s+materials)$/i;
+
+const MATERIAL_OPEN_EN_NOUN_FIRST =
+  /^(?:open|show(?:\s+me)?|get|bring)\s+(?:the\s+|my\s+)?(?:material|book|file|textbook)\s+([\w][\w\s.-]{1,60})$/i;
+/** Natural English order: «open the physics book». */
+const MATERIAL_OPEN_EN_SUFFIX =
+  /^(?:open|show(?:\s+me)?|get|pull\s+up)\s+(?:the\s+|my\s+)?([\w][\w\s.'-]{1,48}?)\s+(?:book|textbook|material|pdf|file)$/i;
+
+const MAX_FASTPASS_WORDS = 6;
+
+/**
+ * Match an explicit material-open request. Returns null unless the WHOLE
+ * message is a short imperative — anything longer or more complex goes to
+ * the LLM path (which can also emit material cards via find_materials).
+ */
+export function matchMaterialOpenRequest(rawText: string): MaterialOpenRequest | null {
+  const text = rawText.trim().replace(/[.!؟?]+$/u, "").trim();
+  if (!text || text.split(/\s+/).length > MAX_FASTPASS_WORDS) return null;
+
+  if (MATERIAL_LIST_RE.test(text)) return { query: "" };
+
+  const arNounFirst = text.match(MATERIAL_OPEN_AR);
+  if (arNounFirst) return { query: arNounFirst[1].trim() };
+
+  const enSuffix = text.match(MATERIAL_OPEN_EN_SUFFIX);
+  if (enSuffix) return { query: enSuffix[1].trim() };
+
+  const enNounFirst = text.match(MATERIAL_OPEN_EN_NOUN_FIRST);
+  if (enNounFirst) return { query: enNounFirst[1].trim() };
+
+  const arSuffix = text.match(MATERIAL_SUFFIX_AR);
+  if (arSuffix) return { query: arSuffix[1].trim() };
+
+  return null;
+}

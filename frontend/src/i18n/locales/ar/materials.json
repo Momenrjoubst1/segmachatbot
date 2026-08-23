@@ -5,8 +5,12 @@
     "statusReady": "جاهزة",
     "statusProcessing": "قيد المعالجة…",
     "statusFailed": "فشلت المعالجة",
-    "pages_one": "{{count}} صفحة",
-    "pages_other": "{{count}} صفحات"
+    "pages_zero": "{{count}} صفحات",
+    "pages_one": "صفحة واحدة",
+    "pages_two": "صفحتين",
+    "pages_few": "{{count}} صفحات",
+    "pages_many": "{{count}} صفحة",
+    "pages_other": "{{count}} صفحة"
   },
   "viewer": {
     "title": "عارض المواد",

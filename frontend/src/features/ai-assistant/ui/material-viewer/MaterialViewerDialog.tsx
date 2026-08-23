@@ -70,6 +70,9 @@ const MaterialBody = ({ material }: { material: MaterialRef }) => {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [page, setPage] = useState(1);
   const [zoomed, setZoomed] = useState(false);
+  // Bumped by the retry button — the fetch effect keys on it so a failed
+  // load can actually re-run (material alone never changes on retry).
+  const [reloadNonce, setReloadNonce] = useState(0);
   const requestIdRef = useRef(0);
 
   useEffect(() => {
@@ -99,7 +102,7 @@ const MaterialBody = ({ material }: { material: MaterialRef }) => {
     return () => {
       cancelled = true;
     };
-  }, [material]);
+  }, [material, reloadNonce]);
 
   const totalPages = state.kind === "ready" ? state.details.totalPages || null : null;
   const isPdf =
@@ -118,6 +121,18 @@ const MaterialBody = ({ material }: { material: MaterialRef }) => {
     },
     [totalPages]
   );
+
+  // Keyboard page navigation while a PDF is open (viewer is forced LTR,
+  // so ArrowRight always means "next page" physically).
+  useEffect(() => {
+    if (state.kind !== "ready" || !isPdf || !totalPages || totalPages <= 1) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") goToPage(page + 1);
+      else if (e.key === "ArrowLeft") goToPage(page - 1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [state, isPdf, totalPages, page, goToPage]);
 
   const handleDownload = useCallback(async () => {
     try {
@@ -156,7 +171,7 @@ const MaterialBody = ({ material }: { material: MaterialRef }) => {
         <div className="mt-1 flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => {
             invalidateMaterialCache(material.id);
-            setState({ kind: "loading" });
+            setReloadNonce((n) => n + 1);
           }}>
             <RefreshCwIcon className="size-4" />
             {t("viewer.retry")}
@@ -329,6 +344,15 @@ export const MaterialViewerDialog = memo(function MaterialViewerDialog() {
   const prevItem = useMaterialViewer((s) => s.prevItem);
 
   const current = items[index];
+
+  // Warm the presigned-URL cache for neighbouring materials so flipping to
+  // the next card doesn't wait on a round-trip.
+  useEffect(() => {
+    if (!isOpen) return;
+    for (const neighbor of [items[index + 1], items[index - 1]]) {
+      if (neighbor) fetchMaterialDetails(neighbor).catch(() => {});
+    }
+  }, [isOpen, items, index]);
 
   const handleOpenChange = useCallback(
     (open: boolean) => {

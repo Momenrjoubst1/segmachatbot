@@ -24,6 +24,7 @@ import redis from "../../config/redis/client.js";
 import { createLogger } from "../../utils/logger.js";
 import { uploadR2Object, downloadR2ObjectToBuffer, deleteR2ObjectsByPrefix } from "../textbook/r2-client.js";
 import { enqueueTextbookJob } from "../textbook/textbook-queue.js";
+import { matchMaterialOpenRequest } from "../../tools/education/find-materials/match-materials.js";
 import type { Response } from "express";
 
 /** Minimal AI SDK message shape used by the chat pipeline. */
@@ -260,10 +261,14 @@ export async function handleChatFileFlow(args: {
   if (!pending) return false;
 
   // ── case 2: user answered — route by decision ──
+  // An explicit "open/show material X" phrasing contains «مادة» and would
+  // fool the yes-classifier into promoting the pending file. It is not an
+  // answer — fall through so the pipeline's material fast-pass serves it
+  // while the pending decision stays alive until TTL.
   const answer = classifyAnswer(userText);
-  if (answer === "ambiguous") {
-    // not a clear yes/no — let the normal pipeline handle the message;
-    // the pending decision stays alive until TTL
+  if (answer === "ambiguous" || matchMaterialOpenRequest(userText)) {
+    // not a clear yes/no (or an open-request) — let the normal pipeline
+    // handle the message; the pending decision stays alive until TTL
     return false;
   }
 

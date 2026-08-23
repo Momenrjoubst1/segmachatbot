@@ -28,7 +28,7 @@ interface TextbookRow {
 }
 
 /** How many recent textbooks to pull before in-memory ranking. */
-const RECENT_POOL_SIZE = 40;
+const RECENT_POOL_SIZE = 100;
 
 /**
  * Fetch the user's textbooks (+ course names via a second query — avoids

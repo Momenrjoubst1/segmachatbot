@@ -21,7 +21,10 @@ import {
 } from "../thread-lookup.service.js";
 import { searchUserMaterials } from "../../../tools/education/find-materials/search-textbooks.js";
 import { buildMaterialCardMarkdown } from "../../../tools/education/find-materials/material-card.js";
-import type { MaterialMatch } from "../../../tools/education/find-materials/match-materials.js";
+import {
+  matchMaterialOpenRequest,
+  type MaterialMatch,
+} from "../../../tools/education/find-materials/match-materials.js";
 import type { CoreMessage } from "./types.js";
 
 const CALENDAR_KEYWORDS = [
@@ -48,46 +51,10 @@ function extractUserText(coreMessages: CoreMessage[]): string {
 }
 
 // ── Material open fast-pass ─────────────────────────────────────────────────
-// "افتح مادة الفيزياء" / "show my materials" — deterministic open of a
-// library textbook without waiting for the LLM. Deliberately NARROW: the
-// message must be a short imperative (≤6 words) that starts with an
-// open/show verb, otherwise it falls through to the normal pipeline so
-// regular questions mentioning the word "مادة" are never hijacked.
-
-export interface MaterialOpenRequest {
-  /** Search query; empty string = list recent materials. */
-  query: string;
-}
-
-const MATERIAL_OPEN_AR =
-  /^(?:افتحلي|افتح|اعرضلي|اعرض|وريني|ورني|هاات|هات|جيب(?:\s+لي)?)\s+(?:ال)?(?:مادة|المادة|كتاب|الكتاب|ملف|الملف)\s+(?:ال)?([\u0600-\u06FF\w][\u0600-\u06FF\w\s.-]{1,60})$/;
-const MATERIAL_OPEN_EN =
-  /^(?:open|show(?:\s+me)?|get|bring)\s+(?:the\s+|my\s+)?(?:material|book|file|textbook)\s+([\w][\w\s.-]{1,60})$/i;
-/** Bare list-my-library requests. */
-const MATERIAL_LIST_RE =
-  /^(?:شو\s+موادي|موادي|وين\s+موادي|وريني\s+موادي|اعرض\s+موادي|قائمتي\s+المواد|show\s+my\s+materials|my\s+materials|list\s+my\s+materials)$/i;
-
-const MAX_FASTPASS_WORDS = 6;
-
-/**
- * Match an explicit material-open request. Returns null unless the WHOLE
- * message is a short imperative — anything longer or more complex goes to
- * the LLM path (which can also emit material cards via find_materials).
- */
-export function matchMaterialOpenRequest(rawText: string): MaterialOpenRequest | null {
-  const text = rawText.trim().replace(/[.!؟?]+$/u, "").trim();
-  if (!text || text.split(/\s+/).length > MAX_FASTPASS_WORDS) return null;
-
-  if (MATERIAL_LIST_RE.test(text)) return { query: "" };
-
-  const ar = text.match(MATERIAL_OPEN_AR);
-  if (ar) return { query: ar[1].trim() };
-
-  const en = text.match(MATERIAL_OPEN_EN);
-  if (en) return { query: en[1].trim() };
-
-  return null;
-}
+// "افتح مادة الفيزياء" / "بدي كتاب الكيمياء" / "show my materials" —
+// deterministic open of a library textbook without waiting for the LLM.
+// The phrasing matcher lives in the pure find-materials module (shared with
+// the chat-file-router guard) so it stays unit-testable in one place.
 
 /**
  * Stream a canned material-card reply using the same wire protocol as the
