@@ -52,10 +52,9 @@ export class StreamingSentenceSplitter {
 
       // Guard: don't split decimal numbers ("3.14") or known abbreviations.
       if (/(\d)\.$/.test(candidate) && /^\d/.test(rest)) {
-        this.buf = candidate + rest; // keep scanning past the dot next loop?
         // Advance deterministically: merge and continue search after the digit run
-        const merged = candidate + rest.match(/^\d+/)?.[0] ?? "";
-        this.buf = merged + rest.replace(/^\d+/, "");
+        const digits = rest.match(/^\d+/)?.[0] ?? "";
+        this.buf = candidate + digits + rest.slice(digits.length);
         continue;
       }
 

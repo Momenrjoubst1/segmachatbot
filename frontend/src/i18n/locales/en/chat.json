@@ -279,5 +279,6 @@
   "voice.session_ended_time": "Voice session ended — time limit reached. Your conversation was saved.",
   "voice.agent_error_busy": "Another voice session is still active. Try again in a few seconds.",
   "voice.agent_error_stalled": "Voice engine stopped responding. Please start a new session.",
-  "voice.agent_notice_half_duplex": "Echo detected — the mic now pauses while Sigma speaks."
+  "voice.agent_notice_half_duplex": "Echo detected — the mic now pauses while Sigma speaks.",
+  "voice.tts_unavailable": "Text-to-speech is unavailable right now — replies continue as text only."
 }

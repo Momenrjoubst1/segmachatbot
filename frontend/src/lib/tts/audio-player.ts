@@ -125,11 +125,34 @@ export class AudioQueuePlayer {
   /**
    * Stop everything immediately; all pending items resolve(false).
    * Re-armed automatically for the next turn.
+   *
+   * The playing source is cut through a ~6 ms gain fade first — stopping a
+   * buffer mid-waveform at full amplitude clicks audibly on every barge-in.
    */
   stopAll(): void {
     this.stopped = true;
-    try { this.currentSource?.stop(); } catch { /* already stopped */ }
+
+    const ctx = this.ctx;
+    const gain = this.gain;
+    const src = this.currentSource;
     this.currentSource = null;
+
+    if (src && ctx && gain) {
+      try {
+        gain.gain.cancelScheduledValues(ctx.currentTime);
+        gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.0001, ctx.currentTime + 0.006);
+      } catch { /* graph gone — fall back to hard stop */ }
+      setTimeout(() => {
+        try { src.stop(); } catch { /* already stopped */ }
+        if (gain && ctx) {
+          try {
+            gain.gain.cancelScheduledValues(ctx.currentTime);
+            gain.gain.setValueAtTime(1, ctx.currentTime);
+          } catch { /* noop */ }
+        }
+      }, 30);
+    }
 
     const pending = [...this.queue];
     this.queue = [];

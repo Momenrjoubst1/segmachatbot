@@ -28,6 +28,12 @@ export interface DictationCallbacks {
    * endpointing detector and barge-in logic. Fires every worklet frame.
    */
   onRms?: (rms: number) => void;
+  /**
+   * Optional gate consulted per frame BEFORE RMS/send work. True = drop the
+   * frame client-side (mute / half-duplex): nothing leaves the device and
+   * downstream detectors stay quiet for the gated period.
+   */
+  gateFrame?: () => boolean;
 }
 
 interface RelayServerMessage {
@@ -153,6 +159,7 @@ export class DictationController {
         const msg = e.data;
         if (msg.type === "frame" && msg.buffer) {
           this.callbacks.onEvent?.({ kind: "frame" });
+          if (this.callbacks.gateFrame?.()) return;
           if (this.callbacks.onRms && ws.readyState === WebSocket.OPEN) {
             const buf = msg.buffer;
             let sum = 0;
@@ -167,6 +174,10 @@ export class DictationController {
       const source = ctx.createMediaStreamSource(this.mediaStream);
       source.connect(worklet);
       // Worklet output intentionally not routed to speakers (avoid echo).
+
+      // The processor gates on an explicit start message (enabled=false in
+      // its constructor) — without this, NO frames are ever captured.
+      worklet.port.postMessage({ type: "start", targetRate: 16000 });
 
       this.sessionTimer = setTimeout(() => {
         void this.stop();
@@ -286,6 +297,7 @@ export class DictationController {
   private teardownAudio(): void {
     if (this.sessionTimer) clearTimeout(this.sessionTimer);
     this.sessionTimer = null;
+    try { this.worklet?.port.postMessage({ type: "stop" }); } catch { /* noop */ }
     try { this.worklet?.disconnect(); } catch { /* noop */ }
     try { void this.audioCtx?.close(); } catch { /* noop */ }
     this.worklet = null;
