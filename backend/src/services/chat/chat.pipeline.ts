@@ -46,6 +46,7 @@ import { getMediaRequirements, supportsMedia, getMediaFallbackModel, hasOversize
 import { runWithMediaRegistry } from "./media-registry.js";
 import { manageContextWindow } from "./pipeline/summarization.js";
 import { runUIFastPasses } from "./pipeline/ui-fastpass.js";
+import { injectUIActionToStream, panelOpenArtifacts } from "./ui-action-emitter.js";
 import type { CoreMessage } from "./moderation.service.js";
 
 function cleanSourceName(source?: string): string {
@@ -58,7 +59,12 @@ function cleanSourceName(source?: string): string {
 }
 
 /** Builds the `enabledTools` map for the response generator. Filtered by intent to prevent token overflows. */
-function buildEnabledTools(userId: string, intent?: string, hasTextbookChunks?: boolean): Record<string, ToolDefinition> {
+function buildEnabledTools(
+  userId: string,
+  intent?: string,
+  hasTextbookChunks?: boolean,
+  streamHooks?: { res?: Response; activeThreadId?: string | null },
+): Record<string, ToolDefinition> {
   // Resolved per call: tool modules register their metadata during initTools(),
   // which may run after this module is first imported.
   const TOOLS_NEEDING_USER_ID: ReadonlySet<string> = new Set(getToolsRequiringUserId());
@@ -75,19 +81,48 @@ function buildEnabledTools(userId: string, intent?: string, hasTextbookChunks?: 
     if (name === "web_search" && !isWebSearchAvailable()) continue;
     if (name === "send_email" && !isEmailAvailable()) continue;
 
+    // Artifact tools must survive the general-intent filter: a request like
+    // "اعمل لي صفحة ويب" classifies as general but still needs them.
+    const ARTIFACT_TOOLS = new Set(["create_artifact", "update_artifact"]);
+
     // For general queries, only send essential tools to reduce token usage
     if (!isSpecificIntent) {
       const ESSENTIAL_TOOLS = new Set(["get_time", "get_weather", "calculator", "web_search"]);
       // Education tools always pass when textbook chunks are present
       const EDUCATION_TOOLS = new Set(["record_quiz_result", "generate_flashcards"]);
-      if (!ESSENTIAL_TOOLS.has(name) && !(hasTextbookChunks && EDUCATION_TOOLS.has(name))) continue;
+      if (!ESSENTIAL_TOOLS.has(name) && !ARTIFACT_TOOLS.has(name) && !(hasTextbookChunks && EDUCATION_TOOLS.has(name))) continue;
     }
 
     if (TOOLS_NEEDING_USER_ID.has(name)) {
+      // Per-request dedupe for the auto-open action below.
+      const openedArtifactIds = new Set<string>();
       enabled[name] = {
         ...def,
-        execute: (args: Record<string, unknown>) =>
-          def.execute({ ...args, __userId: userId }),
+        execute: async (args: Record<string, unknown>) => {
+          const result = await def.execute({
+            ...args,
+            __userId: userId,
+            __threadId: streamHooks?.activeThreadId ?? null,
+          });
+          // When a tool produces an artifact mid-stream, pop the artifact panel
+          // open and focus it — mirrors Claude's creation flow.
+          if (streamHooks?.res && typeof result === "string") {
+            try {
+              const parsed = JSON.parse(result) as { status?: string; artifact_id?: string };
+              if (
+                parsed?.status === "success" &&
+                parsed.artifact_id &&
+                !openedArtifactIds.has(parsed.artifact_id)
+              ) {
+                openedArtifactIds.add(parsed.artifact_id);
+                injectUIActionToStream(streamHooks.res, panelOpenArtifacts(parsed.artifact_id));
+              }
+            } catch {
+              // non-JSON tool results have no artifacts to focus
+            }
+          }
+          return result;
+        },
       };
     } else {
       enabled[name] = def;
@@ -470,7 +505,10 @@ async function executeChatPipelineInner(
     metrics.uiActionInjected = fastPass.injected;
 
     // ---- Step 10: Stream final response ----
-    const enabledTools = buildEnabledTools(userId, intentResult.intent, ragResult.hasTextbookChunks);
+    const enabledTools = buildEnabledTools(userId, intentResult.intent, ragResult.hasTextbookChunks, {
+      res,
+      activeThreadId,
+    });
     
     // Include model fallback information in the response
     const responseMetadata = validation.modelFallback 

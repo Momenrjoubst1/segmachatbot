@@ -7,7 +7,7 @@
  */
 
 /** All known tool group identifiers */
-export type ToolGroup = 'email' | 'calendar' | 'tasks' | 'web_search' | 'code_executor' | 'fonts' | 'materials' | 'general';
+export type ToolGroup = 'email' | 'calendar' | 'tasks' | 'web_search' | 'code_executor' | 'fonts' | 'materials' | 'artifact' | 'general';
 
 /** Map of tool names (from TOOL_DEFINITIONS keys) to their group */
 const TOOL_GROUP_MAP: Record<string, ToolGroup> = {
@@ -57,7 +57,8 @@ const TOOL_GROUP_MAP: Record<string, ToolGroup> = {
   generate_flashcards: 'general',
   record_quiz_result: 'general',
   generate_image: 'general',
-  create_artifact: 'general',
+  create_artifact: 'artifact',
+  update_artifact: 'artifact',
 };
 
 /** Resolve a list of enabled tool names into unique groups */
@@ -164,6 +165,34 @@ function buildFontsToolInstructions(): string {
 - لا تُحقن الخطوط في artifacts من نوع code/markdown/mermaid/chart/quiz (تأثيرها معدوم أو يفسد الكود).`;
 }
 
+/** Artifacts-specific tool instructions */
+function buildArtifactToolInstructions(): string {
+  return `
+## Artifact Tool Instructions — تعليمات الأرتفاكتس
+
+الأرتفاكتس محتوى تفاعلي يظهر في لوحة جانبية ويُحفظ **دائمًا** في مكتبة المستخدم مع سجل إصدارات كامل.
+
+### متى تنشئ أرتفاكت (create_artifact):
+- صفحات ويب/HTML تفاعلية أو React (استخدم type='html' — كود HTML كامل مع CDN scripts عند الحاجة؛ يعمل JS داخليًا).
+- مخططات بيانية (type='chart'، JSON بصيغة {type: 'bar'|'line'|'area'|'pie'|'donut', title, data: [...], xKey, yKeys}).
+- رسومات SVG أو خرائط Mermaid ذهنية/تسلسلية.
+- اختبارات تفاعلية (type='quiz'، JSON: {title, questions: [{question, options, answer, explanation?, multiple?}]} حيث answer رقم أو نص أو مصفوفة).
+- مستند Markdown منسق طويل (>20 سطرًا) يستحق لوحة منفصلة.
+- كود برمجي طويل (>20 سطرًا) كمرجع قابل للتنزيل (type='code' + language).
+
+### متى تعدّل بدل إعادة الإنشاء:
+- استخدم update_artifact لأي تعديل لاحق على أرتفاكت موجود (المستخدم قال "عدّل/غيّر/أضف").
+- مرر content للاستبدال الكامل، أو find_replace لتعديلات موضعية دقيقة في الملفات الطويلة (كل find يجب أن يطابق نصًا موجودًا حرفيًا).
+- كل تعديل يسجل كإصدار جديد والمستخدم يستطيع الرجوع لأي إصدار.
+
+### قواعد عامة:
+- لا تكرر إنشاء نفس الأرتفاكت — عدّله.
+- بعد نجاح الإنشاء اذكر للمستخدم ما أنشأته بإيجاز؛ اللوحة تفتح تلقائيًا.
+- HTML/React: صمم بأسلوب حديث (dark mode افتراضيًا يناسب الثيم)، وأدرج كل CSS/JS داخل الملف نفسه.
+- المحتوى حتى ~500KB مسموح؛ قسّم الأكبر.`;
+}
+
+
 /** IDE-specific tool instructions */
 function buildIDEToolInstructions(): string {
   return `
@@ -212,6 +241,10 @@ export function buildToolInstructions(enabledTools: string[]): string {
 
   if (groups.includes('tasks')) {
     parts.push(buildTaskToolInstructions());
+  }
+
+  if (groups.includes('artifact')) {
+    parts.push(buildArtifactToolInstructions());
   }
 
   if (groups.includes('fonts')) {

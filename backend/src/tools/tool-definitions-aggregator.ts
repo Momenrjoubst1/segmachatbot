@@ -19,6 +19,7 @@ const TOOL_IMPORTS: Array<{ name: string; importFn: () => Promise<unknown> }> = 
   { name: "generate_image", importFn: () => import("./media/generate-image/index.js") },
   { name: "code_executor", importFn: () => import("./code/executor/index.js") },
   { name: "create_artifact", importFn: () => import("./files/create-artifact/index.js") },
+  { name: "update_artifact", importFn: () => import("./files/update-artifact/index.js") },
   { name: "fonts", importFn: () => import("./utils/fonts/index.js") },
   { name: "ide_manager", importFn: () => import("./code/ide-manager/index.js") },
   { name: "calendar_query", importFn: () => import("./calendar/query/index.js") },
