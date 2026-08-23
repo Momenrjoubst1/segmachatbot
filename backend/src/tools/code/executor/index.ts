@@ -16,7 +16,7 @@ registerTool("code_executor", {
       return JSON.stringify(result);
     }
     try {
-      const { createArtifact } = await import("../../files/create-artifact/in-memory-artifact-store.js");
+      const { createArtifact } = await import("../../files/create-artifact/artifact-store.js");
       const outputHtml = `<div class="code-execution" dir="ltr">
 <style>
   .ce-header { display:flex; justify-content:space-between; align-items:center; padding:8px 16px; background:#1a1a2e; border-bottom:1px solid #333; border-radius:8px 8px 0 0; font-family:monospace; font-size:12px; color:#888; }
@@ -37,7 +37,9 @@ registerTool("code_executor", {
   ${result.output ? `<div><div class="ce-label">Output</div><div class="ce-output">${result.output.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div></div>` : ""}
   ${result.error ? `<div style="margin-top:${result.output ? 16 : 0}px"><div class="ce-label">Error</div><div class="ce-error">${result.error.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div></div>` : ""}
 </div></div>`;
-      createArtifact("html", `Code Output (${language})`, outputHtml, undefined, __userId);
+      if (__userId) {
+        await createArtifact({ ownerId: __userId, type: "html", title: `Code Output (${language})`, content: outputHtml, language: "html", author: "assistant" });
+      }
     } catch { /* artifact creation is optional */ }
     return JSON.stringify(result);
   },

@@ -1,14 +1,18 @@
 import { z } from "zod";
 import { registerTool } from "../../tool-registry.js";
-import { createArtifact } from "./in-memory-artifact-store.js";
+import { createToolMetadata } from "../../tool-metadata.js";
+import { createArtifact } from "./artifact-store.js";
 import { injectFontsIntoHtml, resolveFontLinks } from "../../utils/fonts/library.js";
 
+// Both registries are required: tool-registry powers the LLM schema,
+// tool-metadata drives userId injection and startup validation.
 registerTool("create_artifact", {
   description:
-    "أنشيء محتوى تفاعلي في اللوحة الجانبية (Artifact). استخدم لإنشاء رسومات بيانية، أكواد تفاعلية، جداول، " +
+    "أنشيء محتوى تفاعلي في اللوحة الجانبية (Artifact). استخدم لإنشاء صفحات ويب، رسومات بيانية، أكواد تفاعلية، جداول، " +
     "خرائط ذهنية، اختبارات، ومحتوى تعليمي، أو بيئة تطوير متكاملة (IDE). المحتوى يظهر في لوحة منفصلة بجانب الشات. " +
     "يدعم تمرير `fonts` لحقن خطوط Google Fonts (عربي/لاتيني/مونو/ديكور/يدوي) في HTML و React. " +
-    "عند استخدام type='ide'، يتم إنشاء بيئة تطوير كاملة مع محرر أكواد، شجرة ملفات، وتيرمينال.",
+    "عند استخدام type='ide'، يتم إنشاء بيئة تطوير كاملة مع محرر أكواد، شجرة ملفات، وتيرمينال. " +
+    "للتعديل على أرتفاكت موجود استخدم update_artifact بدلاً من إعادة إنشائه.",
   inputSchema: z.object({
     type: z.enum(["html", "svg", "mermaid", "markdown", "code", "chart", "quiz", "react", "ide"]).describe("نوع المحتوى: html, svg, mermaid, markdown, code, chart, quiz, react, ide"),
     title: z.string().describe("عنوان الـ Artifact"),
@@ -37,9 +41,14 @@ registerTool("create_artifact", {
     bodyFontFamily?: string;
     projectFiles?: Array<{ name: string; path: string; content?: string } | Record<string, unknown>>;
     __userId?: string;
+    __threadId?: string | null;
   }) => {
-    const { type, title, content, language, fonts, bodyFontFamily, projectFiles, __userId } = args;
+    const { type, title, content, language, fonts, bodyFontFamily, projectFiles, __userId, __threadId } = args;
     try {
+      if (!__userId) {
+        return JSON.stringify({ status: "error", message: "لا يمكن إنشاء Artifact بدون مستخدم مسجّل." });
+      }
+
       let finalContent = content;
       let appliedFonts: string[] = [];
       let missingFonts: string[] = [];
@@ -64,11 +73,20 @@ registerTool("create_artifact", {
         }
       }
 
-      const artifact = createArtifact(type, title, finalContent, language, __userId);
+      const artifact = await createArtifact({
+        ownerId: __userId,
+        threadId: __threadId ?? null,
+        type,
+        title,
+        content: finalContent,
+        language,
+        author: "assistant",
+      });
 
       return JSON.stringify({
         status: "success",
         artifact_id: artifact.id,
+        version: artifact.version,
         type: artifact.type,
         title: artifact.title,
         applied_fonts: appliedFonts,
@@ -76,13 +94,23 @@ registerTool("create_artifact", {
         fonts_link: linkHref || undefined,
         message:
           missingFonts.length > 0
-            ? `تم إنشاء "${title}" بنجاح. تحذير: خطوط غير معروفة: ${missingFonts.join(", ")}.`
+            ? `تم إنشاء "${title}" بنجاح وحفظه دائمًا. تحذير: خطوط غير معروفة: ${missingFonts.join(", ")}.`
             : appliedFonts.length > 0
               ? `تم إنشاء "${title}" مع الخطوط: ${appliedFonts.join(", ")}.`
-              : `تم إنشاء "${title}" بنجاح.`,
+              : `تم إنشاء "${title}" بنجاح وحفظه دائمًا.`,
       });
     } catch (err: unknown) {
-      return JSON.stringify({ status: "error", message: "فشل في إنشاء الـ Artifact", error: err instanceof Error ? err.message : String(err) });
+      const message = err instanceof Error ? err.message : String(err);
+      if (/exceeds/i.test(message)) {
+        return JSON.stringify({ status: "error", message: `فشل إنشاء الـ Artifact: ${message}. قسّم المحتوى أو اختصره.` });
+      }
+      return JSON.stringify({ status: "error", message: "فشل في إنشاء الـ Artifact", error: message });
     }
   },
 });
+
+createToolMetadata(
+  "create_artifact",
+  "Create interactive side-panel content (web pages, charts, diagrams, quizzes, IDEs) persisted to the user's library",
+  { requiresUserId: true, category: "files", enabledByDefault: true },
+);

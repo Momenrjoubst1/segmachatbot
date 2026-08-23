@@ -23,7 +23,7 @@ import chatRoutes from "./routes/chat.routes.js";
 import guestRoutes from "./routes/guest.routes.js";
 import feedbackRoutes from "./routes/feedback.routes.js";
 import memoryRoutes from "./routes/memory.routes.js";
-import artifactsRoutes from "./routes/artifacts.routes.js";
+import artifactsRoutes, { publicArtifactsRouter } from "./routes/artifacts.routes.js";
 import analyticsRoutes from "./routes/analytics.routes.js";
 import proxyRoutes from "./routes/proxy.routes.js";
 import moderationRoutes from "./routes/moderation.routes.js";
@@ -132,6 +132,7 @@ app.use("/api/moderation", authMiddleware, moderationRoutes);
 app.use("/api/proxy", authMiddleware, proxyLimiter, proxyRoutes);
 app.use("/api/memory", authMiddleware, memoryRoutes);
 app.use("/api/artifacts", authMiddleware, artifactsRoutes);
+app.use("/api/public/artifacts", publicArtifactsRouter); // No auth — public share links
 app.use("/api/analytics", authMiddleware, analyticsRoutes);
 app.use("/api/textbooks", authMiddleware, textbookRoutes);
 app.use("/api/stt", authMiddleware, sttRoutes);

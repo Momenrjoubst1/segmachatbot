@@ -38,8 +38,11 @@ export async function executeCode(
   const normalizedLanguage = language.toLowerCase();
 
   if (HTML_LANGUAGES.has(normalizedLanguage)) {
-    const { createArtifact } = await import("../../files/create-artifact/in-memory-artifact-store.js");
-    const artifact = createArtifact("html", "HTML Preview", code, "html", ownerId);
+    const { createArtifact } = await import("../../files/create-artifact/artifact-store.js");
+    if (!ownerId) {
+      return { status: "error", error: "لا يمكن إنشاء معاينة HTML بدون مستخدم مسجّل.", language };
+    }
+    const artifact = await createArtifact({ ownerId, type: "html", title: "HTML Preview", content: code, language: "html", author: "assistant" });
     return { status: "success", output: "تم إنشاء معاينة HTML تفاعلية.", language: "html", artifact_id: artifact.id, artifact_type: artifact.type, title: artifact.title };
   }
 
