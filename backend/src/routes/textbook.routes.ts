@@ -3,6 +3,7 @@ import crypto from "crypto";
 import multer from "multer";
 import fs from "fs/promises";
 import { createReadStream } from "fs";
+import { Readable } from "stream";
 import os from "os";
 import { supabase } from "../config/supabase.config.js";
 import { enqueueTextbookJob, getTextbookProgress, getRedisClient } from "../services/textbook/textbook-queue.js";
@@ -46,6 +47,22 @@ async function hashFileStreaming(filePath: string): Promise<string> {
     hash.update(chunk);
   }
   return hash.digest("hex");
+}
+
+/** Best-effort MIME type from a file extension (materials are PDFs today). */
+function guessMimeType(fileName: string): string {
+  const ext = fileName.toLowerCase().split(".").pop() || "";
+  const map: Record<string, string> = {
+    pdf: "application/pdf",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    txt: "text/plain",
+    md: "text/markdown",
+  };
+  return map[ext] || "application/octet-stream";
 }
 
 // ─── Direct file upload (bypasses Supabase Storage) ─────────────────────

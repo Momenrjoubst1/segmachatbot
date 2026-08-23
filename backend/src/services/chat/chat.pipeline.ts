@@ -459,7 +459,7 @@ async function executeChatPipelineInner(
 
     // ---- Step 10: UI fast-passes ----
     const fastPass = await withTimeout(
-      runUIFastPasses({ res, coreMessages, userId }),
+      runUIFastPasses({ res, coreMessages, userId, threadId: activeThreadId }),
       {
         timeoutMs: TIMEOUTS.PIPELINE_STEP,
         operationName: 'ui_fastpass',

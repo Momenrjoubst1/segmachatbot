@@ -28,6 +28,8 @@ import { CursorBlinker } from "./CursorBlinker";
 import { useBotStatus } from "./useBotStatus";
 import { useAuiState } from "@assistant-ui/react";
 import { NotebookPaper } from "./NotebookPaper";
+import { parseMaterialHref } from "./material-viewer/material-link";
+import { MaterialChipCard } from "./material-viewer/MaterialChipCard";
 
 // @ts-expect-error - react-syntax-highlighter module interop
 import { Prism } from "react-syntax-highlighter";
@@ -516,17 +518,28 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  a: ({ className, ...props }) => (
-    <a
-      className={cn(
-        "aui-md-a text-primary underline underline-offset-2 hover:text-primary/80",
-        className,
-      )}
-      target="_blank"
-      rel="noopener noreferrer"
-      {...props}
-    />
-  ),
+  a: ({ className, children, href, ...props }) => {
+    // material:// links render as interactive study-material cards that
+    // open the in-app viewer (see material-viewer/)
+    const material = parseMaterialHref(typeof href === "string" ? href : null);
+    if (material) {
+      return <MaterialChipCard material={material} />;
+    }
+    return (
+      <a
+        className={cn(
+          "aui-md-a text-primary underline underline-offset-2 hover:text-primary/80",
+          className,
+        )}
+        target="_blank"
+        rel="noopener noreferrer"
+        href={href}
+        {...props}
+      >
+        {children}
+      </a>
+    );
+  },
   img: (props) => <MarkdownImage {...props} />,
   blockquote: ({ className, ...props }) => (
     <blockquote

@@ -1,0 +1,35 @@
+{
+  "card": {
+    "unnamed": "Study material",
+    "openAria": "Open material {{name}}",
+    "statusReady": "Ready",
+    "statusProcessing": "Processing…",
+    "statusFailed": "Failed",
+    "pages_one": "{{count}} page",
+    "pages_other": "{{count}} pages"
+  },
+  "viewer": {
+    "title": "Material viewer",
+    "description": "View and browse the original study-material file",
+    "loading": "Opening the material…",
+    "retry": "Retry",
+    "download": "Download",
+    "close": "Close",
+    "prevPage": "Previous page",
+    "nextPage": "Next page",
+    "pageOf": "Page {{page}} of {{total}}",
+    "prevMaterial": "Previous material",
+    "nextMaterial": "Next material",
+    "openExternal": "Open in a new tab",
+    "noInlinePreview": "This file type can't be previewed here — you can download it instead.",
+    "errorNotFound": "This material no longer exists in your library.",
+    "errorStorage": "File storage is temporarily unavailable. Please try again shortly.",
+    "errorNotReady": "The source file isn't available yet.",
+    "errorGeneric": "Couldn't load the material file."
+  },
+  "download": {
+    "started": "Preparing the download…",
+    "done": "Downloaded!",
+    "failed": "Download failed. Please try again."
+  }
+}

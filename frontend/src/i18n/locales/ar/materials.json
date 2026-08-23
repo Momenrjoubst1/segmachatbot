@@ -1,0 +1,35 @@
+{
+  "card": {
+    "unnamed": "مادة دراسية",
+    "openAria": "افتح المادة {{name}}",
+    "statusReady": "جاهزة",
+    "statusProcessing": "قيد المعالجة…",
+    "statusFailed": "فشلت المعالجة",
+    "pages_one": "{{count}} صفحة",
+    "pages_other": "{{count}} صفحات"
+  },
+  "viewer": {
+    "title": "عارض المواد",
+    "description": "عرض وتصفح ملف المادة الأصلي",
+    "loading": "عم افتح المادة…",
+    "retry": "إعادة المحاولة",
+    "download": "تحميل",
+    "close": "إغلاق",
+    "prevPage": "الصفحة السابقة",
+    "nextPage": "الصفحة التالية",
+    "pageOf": "صفحة {{page}} من {{total}}",
+    "prevMaterial": "المادة السابقة",
+    "nextMaterial": "المادة التالية",
+    "openExternal": "فتح بتبويب جديد",
+    "noInlinePreview": "ما في معاينة لهذا النوع من الملفات — تقدر تحمّله بدلها.",
+    "errorNotFound": "هاي المادة ما عادت موجودة بمكتبتك.",
+    "errorStorage": "خدمة الملفات مو متوفرة هلق. جرّب بعد شوي.",
+    "errorNotReady": "الملف الأصلي ما صار متاح بعد.",
+    "errorGeneric": "ما قدرت أفتح ملف المادة."
+  },
+  "download": {
+    "started": "عم جهز التحميل…",
+    "done": "انحمّل!",
+    "failed": "فشل التحميل. جرّب مرة تانية."
+  }
+}

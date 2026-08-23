@@ -27,6 +27,7 @@ import { SendStateProvider } from "@/context/SendStateContext";
 import { BotActivityReporter } from "./ui/bot-activity/BotActivityReporter";
 import { AssistantLayoutProvider } from "./context/AssistantLayoutContext";
 import { AssistantSettingsProvider } from "./context/AssistantSettingsContext";
+import { MaterialViewerDialog } from "./ui/material-viewer/MaterialViewerDialog";
 
 
 const WELCOME_SUGGESTIONS = [
@@ -402,6 +403,8 @@ const AssistantAppContent = () => {
         </div>
       </TooltipProvider>
       <SearchDialog />
+      {/* Global study-material viewer — opened from material cards in replies */}
+      <MaterialViewerDialog />
     </div>
   );
 };

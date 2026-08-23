@@ -13,7 +13,7 @@
  * caching and persistence to chat_messages with zero extra plumbing.
  */
 
-import type { MaterialMatch } from "./search-textbooks.js";
+import type { MaterialMatch } from "./match-materials.js";
 
 export const MATERIAL_LINK_PREFIX = "material://textbook/";
 
