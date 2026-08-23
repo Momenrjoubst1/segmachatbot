@@ -130,17 +130,28 @@ export class StepEventEmitter {
    * meaningful for the live stream.
    */
   toStreamChunks(): string {
-    if (this.events.length === 0) return "";
-    const lines: string[] = [];
-    for (const ev of this.events) {
-      lines.push(
-        `data: ${JSON.stringify({
-          type: "data-step",
-          data: ev,
-          transient: true,
-        })}\n\n`,
-      );
-    }
-    return lines.join("");
+    return this.toUIMessageChunks()
+      .map((chunk) => `data: ${JSON.stringify({ ...chunk, transient: true })}\n\n`)
+      .join("");
+  }
+
+  /**
+   * Buffered events as UIMessage-chunk objects ready for
+   * `createUIMessageStream`'s `writer.write()`.
+   *
+   * NOT transient: transient data parts are only delivered to an `onData`
+   * callback and never land in `message.parts`, but the bot-activity
+   * derivation reads parts directly. Non-transient parts are safe here —
+   * history reloads rebuild messages from DB text rows, so the step parts
+   * never outlive the live session.
+   */
+  toUIMessageChunks(): Array<{ type: "data-step"; id: string; data: StepEvent }> {
+    return this.events.map((ev) => ({
+      type: "data-step",
+      // Same id across begin/complete → the runtime updates the part
+      // in place instead of appending duplicates.
+      id: ev.id,
+      data: ev,
+    }));
   }
 }

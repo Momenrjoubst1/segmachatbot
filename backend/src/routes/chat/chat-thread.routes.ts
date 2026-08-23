@@ -67,7 +67,7 @@ router.get("/threads/:id", asyncHandler(async (req, res) => {
 
   const { data: messages, error } = await supabase
     .from('chat_messages')
-    .select('id, role, content, is_pinned, parent_message_id, feedback, created_at')
+    .select('id, role, content, is_pinned, parent_message_id, feedback, sources, created_at')
     .eq('session_id', id)
     .order('created_at', { ascending: false })
     .limit(limit);

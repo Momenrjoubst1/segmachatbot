@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   content TEXT NOT NULL,
   is_pinned BOOLEAN DEFAULT FALSE,
   feedback SMALLINT CHECK (feedback IN (-1, 1)),
+  sources JSONB,
   model TEXT,
   parent_message_id UUID REFERENCES chat_messages(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()

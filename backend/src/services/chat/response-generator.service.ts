@@ -9,7 +9,9 @@
  */
 
 import { Response } from "express";
-import { stepCountIs, streamText, generateText } from "ai";
+import { stepCountIs, streamText, generateText, createUIMessageStream, pipeUIMessageStreamToResponse } from "ai";
+import type { StepEvent } from "./step-event-emitter.js";
+import type { StructuredRagSource } from "./chat.pipeline.js";
 import { triggerChatTitlingAsync } from "../chat-title-generator.service.js";
 import { tryExtractAndStore } from "../memory/memory-context-builder.js";
 import { MemoryConfig } from "../../config/memory.config.js";
@@ -55,6 +57,60 @@ export interface StreamOptions {
   cacheMetadata?: CacheMetadata;
   retrievedDocsForGrounding?: Array<{ content: string; metadata?: Record<string, unknown> }>;
   metadata?: Record<string, unknown>;
+  /** Buffered pipeline step events, replayed as data-step parts at stream start. */
+  stepEvents?: readonly StepEvent[];
+  /** Deduplicated RAG sources for the sources panel + persistence. */
+  structuredSources?: StructuredRagSource[];
+}
+
+// ---------------------------------------------------------------------------
+// Stream augmentation
+// ---------------------------------------------------------------------------
+
+/**
+ * Wrap the model's UI message stream so the client receives:
+ *  1. `data-step` parts replaying buffered pipeline events (searching
+ *     knowledge base / loading memory / …) — rendered as the Claude-style
+ *     activity timeline by the frontend bot-activity system.
+ *  2. a `data-sources` part carrying structured RAG sources for the
+ *     per-message sources panel.
+ *
+ * Data parts are emitted before the model's own `start` chunk — the AI SDK
+ * runtime accepts data parts at any position and appends them to
+ * `message.parts`.
+ */
+function augmentUIMessageStream(
+  modelStream: ReadableStream<unknown>,
+  options: Pick<StreamOptions, "stepEvents" | "structuredSources">,
+): ReturnType<typeof createUIMessageStream> {
+  const { stepEvents, structuredSources } = options;
+  return createUIMessageStream({
+    execute: ({ writer }) => {
+      for (const ev of stepEvents ?? []) {
+        writer.write({ type: "data-step", id: ev.id, data: ev });
+      }
+      if (structuredSources && structuredSources.length > 0) {
+        writer.write({
+          type: "data-sources",
+          id: "rag-sources",
+          data: { sources: structuredSources },
+        });
+      }
+      writer.merge(modelStream as ReadableStream<never>);
+    },
+    onError: (error) => {
+      log.error("UI message stream error", { error: (error as Error)?.message });
+      return "Streaming failed. Please try again.";
+    },
+  });
+}
+
+/** True when there is anything worth prepending to the raw model stream. */
+function hasStreamExtras(options: Pick<StreamOptions, "stepEvents" | "structuredSources">): boolean {
+  return (
+    (options.stepEvents?.length ?? 0) > 0 ||
+    (options.structuredSources?.length ?? 0) > 0
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -168,18 +224,26 @@ export async function generateAndStreamResponse(
           activeThreadId,
         );
 
-        // Save assistant response
+        // Save assistant response — structured sources ride along when the
+        // migration added the column; retry bare if the column is missing so
+        // unmigrated environments keep working.
         const { supabase } = await import("../rag/rag-supabase-client.js");
-        const { error: astErr } = await supabase
+        const insertPayload = {
+          session_id: activeThreadId,
+          role: "assistant",
+          content: safeResponseText,
+          model: currentModelName,
+          ...(options.structuredSources && options.structuredSources.length > 0
+            ? { sources: options.structuredSources }
+            : {}),
+        };
+        let { error: astErr } = await supabase
           .from("chat_messages")
-          .insert([
-            {
-              session_id: activeThreadId,
-              role: "assistant",
-              content: safeResponseText,
-              model: currentModelName,
-            },
-          ]);
+          .insert([insertPayload]);
+        if (astErr && "sources" in insertPayload) {
+          const { sources: _drop, ...bare } = insertPayload;
+          ({ error: astErr } = await supabase.from("chat_messages").insert([bare]));
+        }
         if (astErr)
           log.error("Error saving assistant message", {
             error: astErr.message,
@@ -330,14 +394,30 @@ export async function generateAndStreamResponse(
           onFinish: streamOptions.onFinish,
         });
 
-        // Use pipeUIMessageStreamToResponse for Express response streaming in AI SDK v6
-        result.pipeUIMessageStreamToResponse(res);
+        // Stream through critic agent for final polish — augmented with the
+        // same step/sources preamble as the single-model path.
+        const criticUiStream = hasStreamExtras(options)
+          ? augmentUIMessageStream(result.toUIMessageStream(), options)
+          : undefined;
+        if (criticUiStream) {
+          pipeUIMessageStreamToResponse({ response: res, status: 200, stream: criticUiStream });
+        } else {
+          result.pipeUIMessageStreamToResponse(res);
+        }
       } else {
         // Single-model mode: stream directly (fastest path)
         const result = streamText(streamOptions);
 
-        // Use pipeUIMessageStreamToResponse for Express response streaming in AI SDK v6
-        result.pipeUIMessageStreamToResponse(res);
+        if (hasStreamExtras(options)) {
+          pipeUIMessageStreamToResponse({
+            response: res,
+            status: 200,
+            stream: augmentUIMessageStream(result.toUIMessageStream(), options),
+          });
+        } else {
+          // Use pipeUIMessageStreamToResponse for Express response streaming in AI SDK v6
+          result.pipeUIMessageStreamToResponse(res);
+        }
       }
 
       // Stream started successfully, break out of retry loop

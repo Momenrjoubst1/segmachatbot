@@ -3,6 +3,7 @@ import crypto from "crypto";
 import multer from "multer";
 import fs from "fs/promises";
 import { createReadStream } from "fs";
+import { Readable } from "stream";
 import os from "os";
 import { supabase } from "../config/supabase.config.js";
 import { enqueueTextbookJob, getTextbookProgress, getRedisClient } from "../services/textbook/textbook-queue.js";
@@ -13,6 +14,26 @@ import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("textbook-routes");
 const router = Router();
+
+const MIME_BY_EXTENSION: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".epub": "application/epub+zip",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".doc": "application/msword",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".txt": "text/plain",
+  ".md": "text/markdown",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+};
+
+function guessMimeType(fileName: string): string {
+  const dot = fileName.lastIndexOf(".");
+  const ext = dot >= 0 ? fileName.slice(dot).toLowerCase() : "";
+  return MIME_BY_EXTENSION[ext] ?? "application/octet-stream";
+}
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 

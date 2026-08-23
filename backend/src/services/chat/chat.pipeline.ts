@@ -57,6 +57,14 @@ function cleanSourceName(source?: string): string {
     .trim() || "Knowledge Base";
 }
 
+/** Structured RAG source surfaced to the frontend (sources panel + persistence). */
+export interface StructuredRagSource {
+  source: string;
+  page: number | undefined;
+  textbookId: string | undefined;
+  similarity: number;
+}
+
 /** Builds the `enabledTools` map for the response generator. Filtered by intent to prevent token overflows. */
 function buildEnabledTools(userId: string, intent?: string, hasTextbookChunks?: boolean): Record<string, ToolDefinition> {
   // Resolved per call: tool modules register their metadata during initTools(),
@@ -186,6 +194,7 @@ async function executeChatPipelineInner(
     }
 
     // ---- Step 2+3: Process & moderate ----
+    steps.begin("moderation", "moderation");
     const processed = await withTimeout(
       processAndModerate(messages, modelName, metrics, userId),
       {
@@ -195,12 +204,15 @@ async function executeChatPipelineInner(
       }
     );
     if (processed.blocked) {
+      steps.fail("moderation", processed.blockError ?? "blocked");
       res.status(400).json({ error: processed.blockError });
       return;
     }
+    steps.complete("moderation");
     const { coreMessages, hasImages } = processed;
 
     // ---- Step 4: User courses + study progress ----
+    steps.begin("courses", "fetch_user_courses");
     const userCoursesContext = await withTimeout(
       fetchCombinedUserContext(userId),
       {
@@ -209,6 +221,7 @@ async function executeChatPipelineInner(
         errorMessage: 'User courses fetch timed out',
       }
     );
+    steps.complete("courses");
 
     // ---- Step 4c: thread-scoped regular-file context (chat attachments
     // the user declined to promote to materials) ----
@@ -221,6 +234,7 @@ async function executeChatPipelineInner(
     // ---- Step 4b: Intent ----
     const lastUserMsg = [...coreMessages].reverse().find((m) => m.role === "user");
     const lastUserText = lastUserMsg ? extractText(lastUserMsg.content) : "";
+    steps.begin("intent", "intent_detection");
     const intentResult = await withTimeout(
       detectUserIntent(coreMessages, userId),
       {
@@ -229,10 +243,12 @@ async function executeChatPipelineInner(
         errorMessage: 'Intent detection timed out',
       }
     );
+    steps.complete("intent");
     metrics.intent = intentResult.intent;
     metrics.intentConfidence = intentResult.confidence;
 
     // ---- Step 5: RAG ----
+    steps.begin("rag", "rag_pipeline");
     const ragResult = await withTimeout(
       runRagPipeline({
         coreMessages,
@@ -262,14 +278,9 @@ async function executeChatPipelineInner(
     metrics.ragSources = ragResult.ragSources;
 
     // ---- Build structured RAG sources for the frontend ----
+    let structuredSources: StructuredRagSource[] = [];
     if (ragResult.rankedDocs.length > 0) {
       const seen = new Set<string>();
-      const structuredSources: Array<{
-        source: string;
-        page: number | undefined;
-        textbookId: string | undefined;
-        similarity: number;
-      }> = [];
 
       for (const doc of ragResult.rankedDocs) {
         if (structuredSources.length >= 8) break;
@@ -295,6 +306,11 @@ async function executeChatPipelineInner(
         res.setHeader("X-RAG-Sources", headerJson);
       }
     }
+
+    // Step event result carries only counts — labels are localized client-side.
+    steps.complete("rag", structuredSources.length > 0
+      ? { result: { type: "docs", count: structuredSources.length } }
+      : {});
 
     // ---- Step 5b: Textbook QA model override ----
     // When textbook chunks are present, use a stronger model for better answers.
@@ -335,6 +351,7 @@ async function executeChatPipelineInner(
     }
 
     // ---- Step 6: Memory context ----
+    steps.begin("memory", "memory_context");
     const memResult = await withTimeout(
       buildMemoryContext({ userId, lastUserText, threadId }),
       {
@@ -343,10 +360,10 @@ async function executeChatPipelineInner(
         errorMessage: 'Memory context building timed out',
       }
     );
+    steps.complete("memory");
     const memoryPrompt = memResult.prompt;
 
     // ---- Step 6b: System prompt (with A/B + metrics) ----
-    steps.begin("system_prompt" as never, "system_prompt" as never);
     const { systemPrompt: augmentedSystemPrompt, basePersona, promptVariant, promptLength, promptTokensEstimate, buildTimeMs } = assembleSystemPrompt({
       ragContext: ragResult.ragContext,
       userCoursesContext: userCoursesContext + threadFileContext,
@@ -358,10 +375,6 @@ async function executeChatPipelineInner(
     metrics.promptLength = promptLength;
     metrics.promptTokensEstimate = promptTokensEstimate;
     metrics.promptBuildTimeMs = buildTimeMs;
-    steps.complete("system_prompt" as never, {
-      label: `Prompt: ${promptVariant} (${promptTokensEstimate} tok)`,
-      detail: `${promptLength} chars in ${buildTimeMs}ms`,
-    } as never);
 
     // ---- Step 6c: Image grounding instruction ----
     // When the student photographs a problem AND has textbook material
@@ -375,6 +388,7 @@ async function executeChatPipelineInner(
         : augmentedSystemPrompt;
 
     // ---- Step 7: Thread management ----
+    steps.begin("thread", "thread_resolution");
     const threadResult = await withTimeout(
       resolveThread({
         req,
@@ -393,6 +407,7 @@ async function executeChatPipelineInner(
       res.status(threadResult.status).json({ error: threadResult.error });
       return;
     }
+    steps.complete("thread");
     const { activeThreadId, reused } = threadResult;
     metrics.threadReused = reused;
 
@@ -433,6 +448,7 @@ async function executeChatPipelineInner(
         .find((m) => m?.role === "user");
       return lastUser?.parts;
     })();
+    steps.begin("persist", "persist_message");
     await withTimeout(
       persistLastUserMessage({ activeThreadId, userId, coreMessages, rawParts: lastUserRawParts }),
       {
@@ -441,8 +457,10 @@ async function executeChatPipelineInner(
         errorMessage: 'Message persistence timed out',
       }
     );
+    steps.complete("persist");
 
     // ---- Step 9: Manage context window ----
+    steps.begin("context", "context_window");
     const { finalMessages, conversationSummary } = await withTimeout(
       manageContextWindow({
         coreMessages,
@@ -456,8 +474,10 @@ async function executeChatPipelineInner(
         errorMessage: 'Context window management timed out',
       }
     );
+    steps.complete("context");
 
     // ---- Step 10: UI fast-passes ----
+    steps.begin("fastpass", "ui_fastpass");
     const fastPass = await withTimeout(
       runUIFastPasses({ res, coreMessages, userId }),
       {
@@ -467,6 +487,7 @@ async function executeChatPipelineInner(
       }
     );
     if (fastPass.terminal) return;
+    steps.complete("fastpass");
     metrics.uiActionInjected = fastPass.injected;
 
     // ---- Step 10: Stream final response ----
@@ -494,6 +515,8 @@ async function executeChatPipelineInner(
       cacheMetadata: ragResult.cacheMetadata,
       retrievedDocsForGrounding: ragResult.rankedDocs,
       metadata: responseMetadata,
+      stepEvents: steps.getEvents(),
+      structuredSources,
     });
   } catch (error) {
     const err = error as Error;
