@@ -29,6 +29,7 @@ import proxyRoutes from "./routes/proxy.routes.js";
 import moderationRoutes from "./routes/moderation.routes.js";
 import textbookRoutes from "./routes/textbook.routes.js";
 import sttRoutes from "./routes/stt.routes.js";
+import ttsRoutes from "./routes/tts.routes.js";
 import toolsRoutes from "./routes/tools.routes.js";
 import { studyRoutes } from "./routes/study.routes.js";
 import { initializeBM25FromDB } from "./services/rag/bm25-search.js";
@@ -134,6 +135,7 @@ app.use("/api/artifacts", authMiddleware, artifactsRoutes);
 app.use("/api/analytics", authMiddleware, analyticsRoutes);
 app.use("/api/textbooks", authMiddleware, textbookRoutes);
 app.use("/api/stt", authMiddleware, sttRoutes);
+app.use("/api/tts", authMiddleware, ttsRoutes);
 app.use("/api/tools", authMiddleware, toolsRoutes);
 app.use("/api/study", authMiddleware, studyRoutes);
 
