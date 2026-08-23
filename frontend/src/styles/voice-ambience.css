@@ -1,0 +1,322 @@
+/*
+ * voice-ambience.css — audio-reactive glow for live voice mode.
+ *
+ * Contract with ambience-controller.ts:
+ *   [data-voice-state]  idle | listening | thinking | speaking
+ *   [data-amp-live]     "true" when a real analyser feeds --voice-amp
+ *   --voice-amp         smoothed loudness 0..1 (rAF-written)
+ *   --voice-amp-fast    snappier loudness channel 0..1
+ *
+ * Identity colors reuse the existing voice-mode palette already present on
+ * the LIVE mic button (sky = user/listening, violet = agent/speaking) and
+ * expose them as tokens here so both places stay in sync:
+ *   --voice-listen-rgb: 14 165 233;   (sky-500)
+ *   --voice-speak-rgb: 139 92 246;    (violet-500)
+ *   --voice-think-rgb: 148 163 184;   (slate-400, desaturated)
+ *
+ * Performance: only transform / opacity / box-shadow animate; the amplitude
+ * custom properties are read into calc() for those three properties only —
+ * no layout-triggering properties anywhere.
+ */
+
+.voice-ambience {
+  /* state identity (overridden per data-voice-state below) */
+  --va-rgb: var(--voice-listen-rgb, 14 165 233);
+  --va-rest-blur: 18px;
+  --va-max-blur: 46px;
+  --va-rest-alpha: 0.10;
+  --va-max-alpha: 0.42;
+
+  pointer-events: none;
+}
+
+/* ---- per-state color identity ------------------------------------------ */
+
+.voice-ambience[data-voice-state="listening"] {
+  --va-rgb: var(--voice-listen-rgb, 14 165 233);
+}
+
+.voice-ambience[data-voice-state="speaking"] {
+  --va-rgb: var(--voice-speak-rgb, 139 92 246);
+}
+
+.voice-ambience[data-voice-state="thinking"],
+.voice-ambience[data-voice-state="idle"] {
+  --va-rgb: var(--voice-think-rgb, 148 163 184);
+}
+
+/* ---- layers -------------------------------------------------------------- */
+
+.va-glow-gradient {
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  opacity: 0;
+  transform: scale(1);
+  transition: opacity 240ms ease;
+  will-change: opacity, transform;
+}
+
+.va-glow-ring {
+  position: absolute;
+  inset: -2px;
+  border-radius: 22px; /* composer shell is rounded-3xl (24px) − inset */
+  box-shadow:
+    0 0 var(--va-rest-blur) rgb(var(--va-rgb) / var(--va-rest-alpha)),
+    inset 0 0 12px rgb(var(--va-rgb) / calc(var(--va-rest-alpha) * 0.5));
+  transition: box-shadow 240ms ease;
+  will-change: box-shadow;
+}
+
+/* ---- idle: at rest ------------------------------------------------------- */
+
+.voice-ambience[data-voice-state="idle"] .va-glow-gradient,
+.voice-ambience[data-voice-state="idle"] .va-glow-ring {
+  opacity: 0;
+}
+
+.voice-ambience[data-voice-state="off"] .va-glow-gradient {
+  opacity: 0;
+}
+
+/* ---- listening / speaking: amplitude-driven ------------------------------- */
+
+.voice-ambience[data-voice-state="listening"] .va-glow-gradient,
+.voice-ambience[data-voice-state="speaking"] .va-glow-gradient,
+.voice-ambience[data-voice-state="thinking"] .va-glow-gradient {
+  background:
+    radial-gradient(120% 90% at 50% 100%, rgb(var(--va-rgb) / 0.16), transparent 62%),
+    linear-gradient(to top, rgb(var(--va-rgb) / 0.07), transparent 55%);
+}
+
+.voice-ambience[data-amp-live="true"][data-voice-state="listening"] .va-glow-gradient,
+.voice-ambience[data-amp-live="true"][data-voice-state="speaking"] .va-glow-gradient {
+  /* amplitude channels drive glow size/strength — compositor-friendly only */
+  opacity: calc(0.35 + var(--voice-amp, 0) * 0.65);
+  transform: scale(calc(1 + var(--voice-amp-fast, 0) * 0.03));
+  transition: none; /* rAF owns these two while live */
+}
+
+.voice-ambience[data-amp-live="true"][data-voice-state="listening"] .va-glow-ring,
+.voice-ambience[data-amp-live="true"][data-voice-state="speaking"] .va-glow-ring {
+  box-shadow:
+    0 0 calc(var(--va-rest-blur) + var(--voice-amp, 0) * (var(--va-max-blur) - var(--va-rest-blur)))
+      rgb(var(--va-rgb) / calc(var(--va-rest-alpha) + var(--voice-amp, 0) * (var(--va-max-alpha) - var(--va-rest-alpha)))),
+    inset 0 0 calc(8px + var(--voice-amp-fast, 0) * 14px)
+      rgb(var(--va-rgb) / calc((var(--va-rest-alpha) + var(--voice-amp, 0) * 0.25) * 0.6));
+  transition: none;
+}
+
+/* Fallback: no analyser available → fixed gentle pulse instead of dead UI */
+.voice-ambience[data-amp-live="false"][data-voice-state="listening"] .va-glow-gradient,
+.voice-ambience[data-amp-live="false"][data-voice-state="speaking"] .va-glow-gradient {
+  animation: va-breathe 2s ease-in-out infinite;
+}
+
+/* ---- thinking: desaturated processing breath (not amplitude-driven) ------- */
+
+.voice-ambience[data-voice-state="thinking"] .va-glow-gradient {
+  animation: va-breathe 1.7s ease-in-out infinite;
+  opacity: 0.28;
+}
+
+.voice-ambience[data-voice-state="thinking"] .va-glow-ring {
+  box-shadow:
+    0 0 22px rgb(var(--va-rgb) / 0.16),
+    inset 0 0 10px rgb(var(--va-rgb) / 0.08);
+}
+
+@keyframes va-breathe {
+  0%, 100% { opacity: 0.18; transform: scale(1); }
+  50% { opacity: 0.38; transform: scale(1.012); }
+}
+
+/* ---- reduced motion: static tinted indicator, zero animation -------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-ambience .va-glow-gradient,
+  .voice-ambience .va-glow-ring {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+
+  /* Amplitude-driven styles are irrelevant now; keep a calm static wash so the
+     state is still visible without motion. */
+  .voice-ambience[data-voice-state="listening"] .va-glow-gradient,
+  .voice-ambience[data-voice-state="speaking"] .va-glow-gradient,
+  .voice-ambience[data-voice-state="thinking"] .va-glow-gradient {
+    opacity: 0.3;
+  }
+
+  .voice-ambience[data-voice-state="listening"] { --va-rgb: var(--voice-listen-rgb, 14 165 233); }
+  .voice-ambience[data-voice-state="speaking"]  { --va-rgb: var(--voice-speak-rgb, 139 92 246); }
+
+  /* LIVE button ring pulse (defined below) also goes static. */
+  .va-live-ring {
+    display: none !important;
+  }
+}
+
+/* ---- LIVE mic button pulsing ring (Effect 3) -------------------------------
+   Expanding fading circle behind the icon while listening. Fixed gentle loop
+   (amplitude-coupled rings on a tiny button jitter); sits behind the icon via
+   negative z-index and never affects layout. */
+
+.va-live-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  pointer-events: none;
+  border: 2px solid rgb(var(--voice-listen-rgb, 14 165 233) / 0.55);
+  animation: va-ring 1.6s ease-out infinite;
+}
+
+@keyframes va-ring {
+  0% { transform: scale(0.82); opacity: 0.85; }
+  70% { transform: scale(1.28); opacity: 0; }
+  100% { transform: scale(1.28); opacity: 0; }
+}
+
+/* ---- caption fade-in (Effect 4) -------------------------------------------
+   Keyed by transcript text in React — each new chunk remounts the pill and
+   replays this entrance. Opacity + tiny rise, no layout thrash. */
+
+@keyframes vaCaptionIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Captions appear instantly instead of animating. */
+  [data-testid="voice-caption"] {
+    animation: none !important;
+  }
+}
+
+/* ==========================================================================
+   VoiceSessionPanel — live-session card above the composer
+   Functional parity layer: persistent transcript (screen-reader friendly),
+   mute, countdown, hangup. Colors reuse the shared voice tokens above.
+   ========================================================================== */
+
+.voice-panel {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 60;
+  width: min(30rem, calc(100vw - 3rem));
+  border-radius: 1rem;
+  border: 1px solid rgb(var(--va-border, 148 163 184) / 0.25);
+  background: color-mix(in srgb, canvas 92%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.16);
+  overflow: hidden;
+}
+
+.voice-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border-bottom: 1px solid rgb(var(--va-border, 148 163 184) / 0.15);
+}
+
+.voice-panel__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.voice-panel__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: rgb(var(--va-rgb));
+  flex-shrink: 0;
+}
+
+.voice-panel:not([data-motion="off"]) .voice-panel__dot {
+  animation: vaPanelPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes vaPanelPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-panel .voice-panel__dot { animation: none; }
+}
+
+.voice-panel__time {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.7rem;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+.voice-panel__time[data-low="true"] {
+  color: rgb(244 63 94); /* rose-500 */
+  font-weight: 700;
+  opacity: 1;
+}
+
+.voice-panel__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  height: 1.9rem;
+  min-width: 1.9rem;
+  padding: 0 0.45rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid rgb(var(--va-border, 148 163 184) / 0.25);
+  transition: background-color 160ms ease, color 160ms ease;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.voice-panel__btn:hover {
+  background: rgb(var(--va-rgb) / 0.14);
+}
+
+.voice-panel__btn--end:hover {
+  background: rgb(244 63 94 / 0.16);
+  color: rgb(225 29 72);
+}
+
+.voice-panel__log {
+  max-height: 11rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.5rem 0.625rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  scrollbar-width: thin;
+}
+
+.voice-panel__line {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  unicode-bidi: plaintext;
+}
+
+.voice-panel__who {
+  font-weight: 700;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  margin-inline-end: 0.35rem;
+  opacity: 0.65;
+  text-transform: uppercase;
+}
+
+.voice-panel__line--user .voice-panel__who { color: rgb(var(--voice-listen-rgb)); }
+.voice-panel__line--assistant .voice-panel__who { color: rgb(var(--voice-speak-rgb)); }

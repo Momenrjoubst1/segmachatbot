@@ -4,49 +4,52 @@ import {
   Loader2Icon,
   SquareIcon,
   AudioLinesIcon,
-  ChevronDownIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-} from "@/components/ui/dropdown-menu";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 import { useGuestMode } from "@/context/GuestModeContext";
 import { unstable_useComposerInput } from "../shims/assistant-ui-compat-shim";
 import { useDictation } from "@/hooks/useDictation";
-import { useLiveVoice, type LiveVoiceState } from "@/hooks/useLiveVoice";
-import { voiceDebugBus } from "@/lib/stt/voice-debug-bus";
 import {
-  fetchVoicePersonas,
-  type VoicePersonaInfo,
-} from "@/lib/tts/tts-client";
+  useAgentVoice,
+  fetchAgentVoiceStatus,
+  type AgentErrorKind,
+} from "@/hooks/useAgentVoice";
+import { voiceDebugBus } from "@/lib/stt/voice-debug-bus";
+import { VoiceSessionPanel } from "./VoiceSessionPanel";
 
 interface MicButtonProps {
   className?: string;
+  /**
+   * Claude-style behaviour: when the composer has text, the LIVE voice-mode
+   * button makes room for the send button. The toggle stays visible if a
+   * live session is already running so the user can still stop it.
+   */
+  hideLiveWhenText?: boolean;
 }
-
-const PERSONA_STORAGE_KEY = "sigma_voice_persona";
 
 /**
  * Voice controls for the composer:
  *  - 🎤 dictation: speech -> text in the box, manual send.
- *  - ~ live: full conversation — auto-send on silence, spoken replies,
- *    selectable voice persona (Grok-style), barge-in supported.
+ *  - ~ LIVE: Deepgram Voice Agent conversation — one WebSocket handles STT,
+ *    our chatbot brain, and spoken replies with native barge-in.
  */
-export const MicButton: FC<MicButtonProps> = ({ className }) => {
-  const { t, i18n } = useTranslation("chat");
+export const MicButton: FC<MicButtonProps> = ({
+  className,
+  hideLiveWhenText = false,
+}) => {
+  const { t } = useTranslation("chat");
   const { isGuestMode, limitReached } = useGuestMode();
   const input = unstable_useComposerInput();
 
-  const [personas, setPersonas] = useState<VoicePersonaInfo[]>([]);
-  const [personaId, setPersonaId] = useState<string>(
-    () => localStorage.getItem(PERSONA_STORAGE_KEY) || "sana",
+  const [agentEnabled, setAgentEnabled] = useState(true);
+  const [agentVoices, setAgentVoices] = useState<Array<{ key: string; label: string }>>([]);
+  const [selectedVoice, setSelectedVoice] = useState<string>(
+    () => localStorage.getItem("sigma_agent_voice") || "primary",
   );
-  const [ttsDownNoted, setTtsDownNoted] = useState(false);
-  const [liveState, setLiveState] = useState<LiveVoiceState>("off");
+  const [liveState, setLiveState] = useState<ReturnType<typeof useAgentVoice>["state"]>("off");
 
   const baseRef = useRef<string>("");
 
@@ -100,53 +103,71 @@ export const MicButton: FC<MicButtonProps> = ({ className }) => {
   }, [dictStatus]);
   useEffect(() => {
     voiceDebugBus.event("live_state", liveState);
-    voiceDebugBus.setState(liveState === "off" ? "idle" : `live:${liveState}`);
+    voiceDebugBus.setState(liveState === "off" ? "idle" : `agent:${liveState}`);
   }, [liveState]);
 
   useEffect(() => {
     if (dictRecording) baseRef.current = input?.value ?? "";
   }, [dictRecording, input]);
 
-  // ---- Live mode --------------------------------------------------------------
-  const submitComposer = useCallback(() => {
-    window.setTimeout(() => {
-      document
-        .querySelector<HTMLFormElement>('form[data-slot="aui_composer-shell"]')
-        ?.requestSubmit();
-    }, 80); // let the final setText settle first
-  }, []);
-
-  const live = useLiveVoice({
-    personaId,
-    writeToComposer: applyText,
-    submitComposer,
-    onTtsUnavailable: () => {
-      if (!ttsDownNoted) {
-        setTtsDownNoted(true);
+  // ---- Live mode (Deepgram Voice Agent) --------------------------------------
+  /** One toast per distinct failure kind — the hook fires onError once per
+   *  fatal event, so a simple mapping here can't spam. */
+  const handleAgentError = useCallback(
+    (kind: AgentErrorKind) => {
+      voiceDebugBus.event("agent_error", kind);
+      switch (kind) {
+        case "think":
+          toast.error(t("voice.agent_error_think"));
+          break;
+        case "auth":
+          toast.error(t("voice.agent_error_auth"));
+          break;
+        case "busy":
+          toast.error(t("voice.agent_error_busy"));
+          break;
+        case "stalled":
+          toast.error(t("voice.agent_error_stalled"));
+          break;
+        case "session_end":
+          toast.info(t("voice.session_ended_time"));
+          break;
+        default:
+          toast.error(t("voice.agent_error_connection"));
+          break;
       }
     },
-  });
+    [t],
+  );
 
-  // Keep a mirrored state so this component can render it
+  const handleAgentNotice = useCallback(
+    (notice: "half_duplex") => {
+      if (notice === "half_duplex") toast.info(t("voice.agent_notice_half_duplex"));
+    },
+    [t],
+  );
+
+  const live = useAgentVoice({
+    onError: handleAgentError,
+    onNotice: handleAgentNotice,
+  });
+  const liveActive =
+    live.state !== "off" && live.state !== "error";
+
+  // Claude-style swap: voice-mode yields its slot to the send button once
+  // the user types — unless a live session is already running.
+  const hideLive = hideLiveWhenText && !liveActive;
+
   useEffect(() => setLiveState(live.state), [live.state]);
 
-  const submitComposerStableRef = useRef(submitComposer);
-  submitComposerStableRef.current = submitComposer;
-
   useEffect(() => {
-    fetchVoicePersonas()
-      .then(setPersonas)
-      .catch(() => setPersonas([]));
+    fetchAgentVoiceStatus().then(({ enabled, voices }) => {
+      setAgentEnabled(enabled);
+      setAgentVoices(voices ?? []);
+    });
   }, []);
 
-  const selectPersona = (id: string) => {
-    setPersonaId(id);
-    localStorage.setItem(PERSONA_STORAGE_KEY, id);
-  };
-
   if (isGuestMode || limitReached || dictStatus === "disabled") return null;
-
-  const liveActive = liveState !== "off";
 
   const handleMicClick = async () => {
     if (liveActive) return; // mic button is inert while live owns the floor
@@ -159,126 +180,40 @@ export const MicButton: FC<MicButtonProps> = ({ className }) => {
     await startDict();
   };
 
-  const handleLiveClick = async () => {
+  const handleLiveClick = () => {
     if (liveActive) {
       live.stop();
       return;
     }
-    if (dictRecording) await stopDict();
-    await live.start();
+    if (dictRecording) void stopDict().then(() => void live.start());
+    else void live.start();
   };
 
-  const stateLabelKey: Record<LiveVoiceState, string> = {
+  const stateLabelKey: Record<string, string> = {
+    connecting: t("voice.agent_connecting"),
+    listening: t("voice.agent_listening"),
+    thinking: t("voice.agent_thinking"),
+    speaking: t("voice.agent_speaking"),
+    error: "",
     off: "",
-    listening: t("voice.live_listening"),
-    sending: t("voice.live_sending"),
-    thinking: t("voice.live_thinking"),
-    speaking: t("voice.live_speaking"),
   };
-
-  const activePersona =
-    personas.find((p) => p.id === personaId) ??
-    ({ id: "sana", nameAr: "سيجما", nameEn: "Sigma" } as VoicePersonaInfo);
 
   return (
     <>
-      {/* Persona picker — visible only during live session */}
+      {/* Live session card: transcript + mute + countdown + hangup */}
       {liveActive && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              data-testid="persona-picker"
-              className={cn(
-                "state-layer inline-flex h-10 items-center gap-1 rounded-full px-3 text-xs font-medium",
-                "bg-violet-500/15 text-violet-600 hover:text-violet-700 dark:text-violet-300",
-              )}
-              aria-label={t("voice.choose_persona")}
-            >
-              <span>{i18n.language.startsWith("ar") ? activePersona.nameAr : activePersona.nameEn}</span>
-              <ChevronDownIcon className="size-3.5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="top" align="end" className="w-72 p-2">
-            <p className="px-2 pb-1.5 pt-0.5 text-xs font-semibold text-muted-foreground">
-              {t("voice.choose_persona")}
-            </p>
-            <div className="flex flex-col gap-0.5">
-              {(personas.length ? personas : [activePersona]).map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => selectPersona(p.id)}
-                  className={cn(
-                    "state-layer flex items-start gap-2.5 rounded-lg px-2.5 py-2 text-start transition-colors",
-                    p.id === personaId
-                      ? "bg-violet-500/12"
-                      : "hover:bg-muted/60",
-                  )}
-                >
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "mt-1 size-2 shrink-0 rounded-full",
-                      p.gender === "female" ? "bg-pink-400" : "bg-sky-400",
-                    )}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium leading-tight">
-                      {i18n.language.startsWith("ar") ? p.nameAr : p.nameEn}
-                    </span>
-                    <span className="mt-0.5 block truncate text-xs text-muted-foreground" title={i18n.language.startsWith("ar") ? p.descAr : p.descEn}>
-                      {i18n.language.startsWith("ar") ? p.descAr : p.descEn}
-                    </span>
-                  </span>
-                  {p.id === personaId && (
-                    <span className="mt-1 size-2 shrink-0 rounded-full bg-violet-500" />
-                  )}
-                </button>
-              ))}
-            </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <VoiceSessionPanel
+          live={live}
+          voices={agentVoices}
+          selectedVoice={selectedVoice}
+          onSelectVoice={(key) => {
+            setSelectedVoice(key);
+            live.setVoice(key);
+          }}
+        />
       )}
 
-      {/* LIVE toggle */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={handleLiveClick}
-            disabled={dictStatus === "starting" || dictStatus === "stopping"}
-            aria-label={liveActive ? t("voice.live_stop") : t("voice.live_start")}
-            aria-pressed={liveActive}
-            data-testid="live-voice-button"
-            data-live-state={liveState}
-            className={cn(
-              "state-layer relative inline-flex size-10 items-center justify-center rounded-full p-1 transition-colors",
-              "text-muted-foreground hover:text-foreground",
-              liveActive &&
-                (liveState === "speaking"
-                  ? "animate-pulse bg-violet-500/20 text-violet-600 hover:text-violet-600 dark:text-violet-300"
-                  : liveState === "listening"
-                    ? "bg-sky-500/15 text-sky-600 hover:text-sky-600 dark:text-sky-300"
-                    : "animate-pulse bg-amber-500/15 text-amber-600 hover:text-amber-600 dark:text-amber-300"),
-              (dictStatus === "starting" || dictStatus === "stopping") &&
-                "cursor-wait opacity-60",
-              className,
-            )}
-          >
-            {liveState === "thinking" || liveState === "sending" ? (
-              <Loader2Icon className="size-5 animate-spin stroke-[1.5px]" />
-            ) : (
-              <AudioLinesIcon className="size-5 stroke-[1.5px]" />
-            )}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="top">
-          {liveActive ? stateLabelKey[liveState] || t("voice.live_stop") : t("voice.live_start")}
-        </TooltipContent>
-      </Tooltip>
-
-      {/* Dictation mic */}
+      {/* Dictation mic — first, like Claude; voice-mode toggle follows */}
       <Tooltip>
         <TooltipTrigger asChild>
           <button
@@ -322,6 +257,65 @@ export const MicButton: FC<MicButtonProps> = ({ className }) => {
               : t("voice.start")}
         </TooltipContent>
       </Tooltip>
+
+      {/* Voice-mode (LIVE) toggle — hidden while the composer has text so the
+          send button can take its slot, Claude-style */}
+      {!hideLive && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={handleLiveClick}
+              disabled={!agentEnabled || dictStatus === "starting" || dictStatus === "stopping"}
+              aria-label={liveActive ? t("voice.agent_stop") : t("voice.agent_start")}
+              aria-pressed={liveActive}
+              data-testid="live-voice-button"
+              data-live-state={live.state}
+              className={cn(
+                "state-layer relative inline-flex size-10 items-center justify-center rounded-full p-1 transition-colors duration-300",
+                "text-muted-foreground hover:text-foreground",
+                !agentEnabled && "hidden",
+                live.state === "error" &&
+                  "bg-rose-500/20 text-rose-600 hover:text-rose-600 dark:text-rose-300",
+                liveActive &&
+                  (live.state === "speaking"
+                    ? "bg-violet-500/20 text-violet-600 hover:text-violet-600 dark:text-violet-300"
+                    : live.state === "listening"
+                      ? "bg-sky-500/15 text-sky-600 hover:text-sky-600 dark:text-sky-300"
+                      : "bg-amber-500/15 text-amber-600 hover:text-amber-600 dark:text-amber-300"),
+                (live.state === "connecting" || dictStatus === "starting" || dictStatus === "stopping") &&
+                  "cursor-wait opacity-60",
+                className,
+              )}
+            >
+              {live.state === "connecting" || live.state === "thinking" || dictStatus === "starting" ? (
+                <Loader2Icon className="size-5 animate-spin stroke-[1.5px]" />
+              ) : (
+                <AudioLinesIcon className="size-5 stroke-[1.5px]" />
+              )}
+              {/* Pulsing ring while the user has the floor (Effect 3) */}
+              {live.state === "listening" && (
+                <span className="va-live-ring" aria-hidden="true" />
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            {live.state === "error"
+              ? live.errorKind === "think"
+                ? t("voice.agent_error_think")
+                : live.errorKind === "auth"
+                  ? t("voice.agent_error_auth")
+                  : live.errorKind === "busy"
+                    ? t("voice.agent_error_busy")
+                    : live.errorKind === "stalled"
+                      ? t("voice.agent_error_stalled")
+                      : t("voice.agent_error_connection")
+              : liveActive
+                ? stateLabelKey[live.state] || t("voice.agent_stop")
+                : t("voice.agent_start")}
+          </TooltipContent>
+        </Tooltip>
+      )}
     </>
   );
 };
