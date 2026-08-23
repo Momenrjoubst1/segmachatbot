@@ -272,5 +272,39 @@
   "feedback.commentPlaceholder": "أخبرنا بالمزيد (اختياري)",
   "feedback.submit": "إرسال",
   "feedback.cancel": "إلغاء",
-  "feedback.saveFailed": "تعذّر حفظ الملاحظات. حاول مرة أخرى."
+  "feedback.saveFailed": "تعذّر حفظ الملاحظات. حاول مرة أخرى.",
+  "sources": {
+    "title_one": "المصدر ({{count}})",
+    "title_other": "المصادر ({{count}})",
+    "documents": "المستندات",
+    "pageReferences": "مراجع الصفحات",
+    "page": "ص.",
+    "confidence": "{{pct}}%",
+    "openPage": "افتح صفحة {{page}} من {{name}}",
+    "tooltipSource": "المصدر: {{name}}",
+    "tooltipPage": "صفحة {{num}}",
+    "noFormattedSources": "تظهر الاستشهادات داخل النص أعلاه.",
+    "webTitle_one": "مصدر ويب ({{count}})",
+    "webTitle_other": "مصادر الويب ({{count}})",
+    "showMore": "عرض {{count}} أخرى"
+  },
+  "assistantMedia": {
+    "videoLabel": "فيديو",
+    "audioLabel": "صوت",
+    "downloadAudio": "تنزيل الصوت",
+    "downloadStarted": "بدأ التنزيل",
+    "downloadImage": "تنزيل الصورة",
+    "loadFailed": "تعذّر تحميل الصورة",
+    "openPreview": "معاينة الصورة",
+    "openInNewTab": "فتح في تبويب جديد",
+    "watchOnYouTube": "مشاهدة على يوتيوب",
+    "embedPlayer": "مشغّل الفيديو",
+    "fileAttachment": "ملف مرفق"
+  },
+  "mermaid": {
+    "label": "مخطط",
+    "showSource": "عرض الكود",
+    "showDiagram": "عرض المخطط",
+    "renderFailed": "تعذّر رسم هذا المخطط"
+  }
 }

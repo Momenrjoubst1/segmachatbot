@@ -1,8 +1,10 @@
 /**
  * End-to-end integration test: proves the wire format emitted by the
- * backend's `StepEventEmitter.toStreamChunks()` survives being parsed
- * by the frontend's `useBotActivity` (via `extractStepEvents`) and
- * produces the expected `BotActivity` snapshot.
+ * backend's `StepEventEmitter` survives the full frontend pipeline —
+ * SSE parsing → AI SDK UIMessage chunks → the AISDKMessageConverter's
+ * normalization (`data-step` → `{type:"data", name:"step"}`) →
+ * `useBotActivity.extractStepEvents` — and produces the expected
+ * `BotActivity` snapshot.
  *
  * This is the contract test between the two layers — if the wire format
  * changes, this test fails.
@@ -10,7 +12,7 @@
 
 import { describe, expect, it } from "vitest";
 import { deriveBotActivity } from "@/features/ai-assistant/ui/bot-activity/deriveBotActivity";
-import type { StepStreamEvent } from "@/features/ai-assistant/ui/bot-activity/types";
+import type { StepStreamEvent, AuiPart } from "@/features/ai-assistant/ui/bot-activity/types";
 
 // Mirror of the backend's StepEventEmitter (no imports across the stack).
 class FakeBackendEmitter {
@@ -21,38 +23,41 @@ class FakeBackendEmitter {
   complete(id: string, label?: string) {
     this.events.push({ id, kind: this.events.find((e) => e.id === id)?.kind ?? "error", status: "complete", ts: Date.now(), ...(label ? { label } : {}) });
   }
-  toStreamChunks() {
-    return this.events
-      .map((ev) => `data: ${JSON.stringify({ type: "data-step", data: ev, transient: true })}\n\n`)
-      .join("");
+  /** Matches the real emitter's toUIMessageChunks() output. */
+  toUIMessageChunks() {
+    return this.events.map((ev) => ({ type: "data-step", id: ev.id, data: ev }));
   }
 }
 
-/** Mimics the AI SDK's behavior: parses `data: <json>\n\n` chunks and
- *  turns each one into a UIMessage part of shape `{ type: "data-...", data, transient }`. */
-function parseDataChunks(sseText: string) {
-  const parts: Array<{ type: string; data: unknown; transient?: boolean }> = [];
-  for (const block of sseText.split("\n\n").filter(Boolean)) {
-    const m = block.match(/^data: (\{.*\})$/);
-    if (!m) continue;
-    try {
-      parts.push(JSON.parse(m[1]));
-    } catch {
-      // ignore malformed
+/** Mimics `useBotActivity`'s `extractStepEvents`: accept both the raw
+ *  `data-*` part shape and the converter-normalized `{type:"data",name}` shape,
+ *  and cast payloads carrying {kind,status,id} to `StepStreamEvent`. */
+function extractStepEvents(parts: AuiPart[]): StepStreamEvent[] {
+  const out: StepStreamEvent[] = [];
+  for (const p of parts) {
+    if (!p || typeof p !== "object" || typeof p.type !== "string") continue;
+    const matches =
+      p.type.startsWith("data-") ||
+      (p.type === "data" && (p as { name?: string }).name === "step");
+    if (!matches) continue;
+    const data = (p as { data?: unknown }).data;
+    if (data && typeof data === "object" && "kind" in data && "status" in data && "id" in data) {
+      out.push(data as StepStreamEvent);
     }
   }
-  return parts;
+  return out;
 }
 
-/** Mimics `useBotActivity`'s `extractStepEvents`: pull out data parts and
- *  cast them to `StepStreamEvent`. */
-function extractStepEvents(parts: Array<{ type: string; data: unknown }>): StepStreamEvent[] {
-  return parts
-    .filter((p) => p.type.startsWith("data-"))
-    .map((p) => p.data as StepStreamEvent)
-    .filter((d): d is StepStreamEvent =>
-      !!d && typeof d === "object" && "kind" in d && "status" in d && "id" in d,
-    );
+/** Mimics the AISDKMessageConverter: wire `data-step` parts become
+ *  `{type: "data", name: "step", data}` in aui message parts. */
+function convertWireChunksToAuiParts(
+  chunks: Array<{ type: string; id: string; data: unknown }>,
+): AuiPart[] {
+  return chunks.map((c) => ({
+    type: "data",
+    name: c.type.substring(5),
+    data: c.data,
+  }) as unknown as AuiPart);
 }
 
 describe("backend ↔ frontend step-event wire format (integration)", () => {
@@ -65,15 +70,14 @@ describe("backend ↔ frontend step-event wire format (integration)", () => {
     emitter.complete("rag_pipeline", "Read 5 sources");
     emitter.begin("memory_context", "memory_context");
     emitter.complete("memory_context", "Loaded 3 memories");
-    const wireFormat = emitter.toStreamChunks();
+    const chunks = emitter.toUIMessageChunks();
 
-    // 2. AI SDK on the frontend parses it.
-    const parts = parseDataChunks(wireFormat);
+    // 2. The runtime converts wire parts into aui message parts.
+    const parts = convertWireChunksToAuiParts(chunks);
     expect(parts).toHaveLength(6);
-    expect(parts[0].type).toBe("data-step");
-    expect(parts[0].transient).toBe(true);
 
-    // 3. `useBotActivity` extracts the events.
+    // 3. `useBotActivity` extracts the events (begin+complete pairs share an
+    //    id; both arrive because non-transient data parts are upserted by id).
     const events = extractStepEvents(parts);
     expect(events).toHaveLength(6);
 
@@ -106,8 +110,7 @@ describe("backend ↔ frontend step-event wire format (integration)", () => {
     emitter.complete("b");
     emitter.begin("a", "moderation");
     emitter.complete("a");
-    const wireFormat = emitter.toStreamChunks();
-    const events = extractStepEvents(parseDataChunks(wireFormat));
+    const events = extractStepEvents(convertWireChunksToAuiParts(emitter.toUIMessageChunks()));
 
     const activity = deriveBotActivity({
       parts: [],
@@ -121,14 +124,24 @@ describe("backend ↔ frontend step-event wire format (integration)", () => {
     expect(activity.steps.map((s) => s.id)).toEqual(["b", "a"]);
   });
 
-  it("preserves transient flag (not persisted by the AI SDK)", () => {
+  it("carries structured results so labels stay localized client-side", () => {
     const emitter = new FakeBackendEmitter();
-    emitter.begin("x", "moderation");
-    emitter.complete("x");
-    const wireFormat = emitter.toStreamChunks();
-    const parts = parseDataChunks(wireFormat);
-    for (const p of parts) {
-      expect(p.transient).toBe(true);
-    }
+    emitter.begin("rag", "rag_pipeline");
+    emitter.complete("rag");
+    // The real pipeline attaches {type:'docs', count} on completion.
+    const chunks = emitter.toUIMessageChunks();
+    const ragComplete = chunks.find((c) => c.id === "rag" && c.data.status === "complete");
+    (ragComplete!.data as Record<string, unknown>).result = { type: "docs", count: 4 };
+
+    const activity = deriveBotActivity({
+      parts: [],
+      status: { type: "running" },
+      streamEvents: extractStepEvents(convertWireChunksToAuiParts(chunks)),
+    });
+
+    expect(activity.steps.find((s) => s.id === "rag")?.result).toEqual({
+      type: "docs",
+      count: 4,
+    });
   });
 });

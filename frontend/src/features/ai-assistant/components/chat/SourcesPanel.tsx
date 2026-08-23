@@ -156,7 +156,8 @@ function StructuredSourcesList({
 }
 
 function FallbackSourcesList({ data }: { data: ParsedSources }) {
-  const { t } = useTranslation("study");
+  // Same namespace as the structured list — all sources.* keys live in chat.json.
+  const { t } = useTranslation("chat");
 
   return (
     <>

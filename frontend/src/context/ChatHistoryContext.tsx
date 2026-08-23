@@ -14,6 +14,14 @@ export interface ChatAttachmentMeta {
   sizeBytes?: number;
 }
 
+/** Structured RAG source persisted on assistant messages (see migration 033). */
+export interface ChatMessageSource {
+  source: string;
+  page?: number;
+  textbookId?: string;
+  similarity: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system" | "data";
@@ -22,6 +30,8 @@ export interface ChatMessage {
   created_at: string;
   /** Thumbs rating restored from the DB (1 = like, -1 = dislike, null/absent = none). */
   feedback?: number | null;
+  /** Structured RAG sources restored from the DB (assistant messages only). */
+  sources?: ChatMessageSource[];
   /** Set by markStreamInterrupted when the assistant stream is cancelled. */
   interrupted?: boolean;
   /** Present when the assistant requests tool approval. */

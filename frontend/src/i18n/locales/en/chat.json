@@ -272,5 +272,39 @@
   "feedback.commentPlaceholder": "Tell us more (optional)",
   "feedback.submit": "Submit",
   "feedback.cancel": "Cancel",
-  "feedback.saveFailed": "Failed to save feedback. Please try again."
+  "feedback.saveFailed": "Failed to save feedback. Please try again.",
+  "sources": {
+    "title_one": "Source ({{count}})",
+    "title_other": "Sources ({{count}})",
+    "documents": "Documents",
+    "pageReferences": "Page references",
+    "page": "p.",
+    "confidence": "{{pct}}%",
+    "openPage": "Open page {{page}} of {{name}}",
+    "tooltipSource": "Source: {{name}}",
+    "tooltipPage": "Page {{num}}",
+    "noFormattedSources": "Citations appear inline in the text above.",
+    "webTitle_one": "Web source ({{count}})",
+    "webTitle_other": "Web sources ({{count}})",
+    "showMore": "Show {{count}} more"
+  },
+  "assistantMedia": {
+    "videoLabel": "Video",
+    "audioLabel": "Audio",
+    "downloadAudio": "Download audio",
+    "downloadStarted": "Download started",
+    "downloadImage": "Download image",
+    "loadFailed": "Couldn't load the image",
+    "openPreview": "Image preview",
+    "openInNewTab": "Open in new tab",
+    "watchOnYouTube": "Watch on YouTube",
+    "embedPlayer": "Video player",
+    "fileAttachment": "Attachment"
+  },
+  "mermaid": {
+    "label": "Diagram",
+    "showSource": "Show source",
+    "showDiagram": "Show diagram",
+    "renderFailed": "Couldn't render this diagram"
+  }
 }

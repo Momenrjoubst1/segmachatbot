@@ -19,15 +19,24 @@ import type {
 
 const TICK_MS = 250;
 
-/** Extract step events from the data-* parts in an AUI message. */
+/**
+ * Extract step events from the data-* parts in an AUI message.
+ *
+ * The AISDKMessageConverter normalizes wire-level `data-step` parts into
+ * `{type: "data", name: "step", data: …}`, so that shape is accepted here
+ * alongside the raw `data-*` shape.
+ */
 function extractStepEvents(parts: AuiPart[]): StepStreamEvent[] {
   const out: StepStreamEvent[] = [];
   for (const p of parts) {
-    if (p && typeof p === "object" && typeof p.type === "string" && p.type.startsWith("data-")) {
-      const data = (p as { data?: unknown }).data;
-      if (data && typeof data === "object" && "kind" in data && "status" in data && "id" in data) {
-        out.push(data as unknown as StepStreamEvent);
-      }
+    if (!p || typeof p !== "object" || typeof p.type !== "string") continue;
+    const matches =
+      p.type.startsWith("data-") ||
+      (p.type === "data" && (p as { name?: string }).name === "step");
+    if (!matches) continue;
+    const data = (p as { data?: unknown }).data;
+    if (data && typeof data === "object" && "kind" in data && "status" in data && "id" in data) {
+      out.push(data as unknown as StepStreamEvent);
     }
   }
   return out;

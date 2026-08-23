@@ -236,3 +236,43 @@ a {
 .animate-cursor-blink {
   animation: cursor-blink 1s step-end infinite;
 }
+
+/* ─── Markdown task lists (GFM "- [ ]") ─────────────────────────────────── */
+.aui-md li.task-list-item,
+.aui-md li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.1rem;
+}
+
+.aui-md input[type="checkbox"] {
+  appearance: none;
+  display: inline-block;
+  vertical-align: middle;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.45em;
+  margin-top: -0.2em;
+  border-radius: 0.3em;
+  border: 1.5px solid var(--muted-foreground, #8b8b8b);
+  background: transparent;
+  position: relative;
+  cursor: default;
+}
+
+.aui-md input[type="checkbox"]:checked {
+  background: var(--primary, #2563eb);
+  border-color: var(--primary, #2563eb);
+}
+
+.aui-md input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: no-repeat center / 78% url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+}
+
+/* Checked items read as done without shouting */
+.aui-md li:has(> input[type="checkbox"]:checked) > span,
+.aui-md li:has(> input[type="checkbox"]:checked) {
+  color: var(--muted-foreground, #71717a);
+}

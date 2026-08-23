@@ -56,6 +56,33 @@ import { WrenchIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAssistantSettings } from "../../../context/AssistantSettingsContext";
 import { cn } from "@/lib/cn";
+import { SourcesPanel } from "../../../components/chat/SourcesPanel";
+import {
+  AssistantFilePart,
+} from "../../../ui/media-cards";
+import {
+  extractWebSources,
+  WebSearchSources,
+  type WebSourceItem,
+} from "../../../ui/web-search-sources";
+import type { RagSource } from "@/context/ragSourcesBridge";
+
+/** Narrow an AUI part into web-search results when it carries them. */
+function webSourcesFromToolPart(part: Record<string, unknown>): WebSourceItem[] | null {
+  if (part.type !== "tool-call") return null;
+  const toolName = (part as { toolName?: string }).toolName;
+  if (toolName !== "web_search") return null;
+  const result = (part as { result?: unknown }).result;
+  return extractWebSources(result);
+}
+
+/** Narrow an AUI data part carrying structured RAG sources. */
+function ragSourcesFromDataPart(part: Record<string, unknown>): RagSource[] | null {
+  if (part.type !== "data" || (part as { name?: string }).name !== "sources") return null;
+  const data = (part as { data?: { sources?: unknown } }).data;
+  const sources = data?.sources;
+  return Array.isArray(sources) && sources.length > 0 ? (sources as RagSource[]) : null;
+}
 
 // ─── Directive Chip (shared between Composer and EditComposer) ────────────────────
 
@@ -515,7 +542,10 @@ export const AssistantMessage: FC = () => {
   const { disable3D } = useAssistantSettings();
   const messageId = useAuiState((s) => s.message.id);
   const { activeThreadMessages } = useChatHistory();
-  const chatMessage = activeThreadMessages?.find((m) => m.id === messageId) as { interrupted?: boolean } | undefined;
+  const chatMessage = activeThreadMessages?.find((m) => m.id === messageId) as
+    | { interrupted?: boolean; sources?: RagSource[] }
+    | undefined;
+  const chatMessageSources = chatMessage?.sources;
 
   const aui = useAui();
 
@@ -574,7 +604,9 @@ export const AssistantMessage: FC = () => {
           <AssistantStatusLine onStop={handleStopFromStatus} onRetry={handleRetryFromStatus} />
           <MessagePrimitive.Parts>
             {({ part }) => {
-              if (part.type === "text") {
+              const p = part as unknown as Record<string, unknown>;
+
+              if (p.type === "text") {
                 if (disable3D) {
                   return <MarkdownText />;
                 }
@@ -591,9 +623,40 @@ export const AssistantMessage: FC = () => {
                   </div>
                 );
               }
+
+              // Generated media / returned documents arriving as file parts.
+              if (p.type === "file") {
+                return (
+                  <ErrorBoundary fallback={<div className="text-destructive text-sm p-2">Failed to render attachment</div>}>
+                    <AssistantFilePart
+                      part={p as unknown as { data: string; mimeType?: string; filename?: string }}
+                    />
+                  </ErrorBoundary>
+                );
+              }
+
+              // Structured RAG sources streamed with the answer.
+              const ragSources = ragSourcesFromDataPart(p);
+              if (ragSources) {
+                return <SourcesPanel messageContent="" structuredSources={ragSources} />;
+              }
+
+              // Web-search results returned by the web_search tool.
+              const webSources = webSourcesFromToolPart(p);
+              if (webSources && webSources.length > 0) {
+                return <WebSearchSources sources={webSources} />;
+              }
+
               return null;
             }}
           </MessagePrimitive.Parts>
+
+          {/* Reloaded messages carry sources on the cached DB row instead of
+              live parts — the two paths never coexist (live messages have
+              runtime-generated ids not present in the cache). */}
+          {chatMessageSources && chatMessageSources.length > 0 && (
+            <SourcesPanel messageContent="" structuredSources={chatMessageSources} />
+          )}
           {/* Empty-state skeleton — shows two placeholder lines while the
               bot is working but hasn't produced any text yet. Renders null
               once text arrives, so it auto-disappears on first token. */}

@@ -28,6 +28,9 @@ import { CursorBlinker } from "./CursorBlinker";
 import { useBotStatus } from "./useBotStatus";
 import { useAuiState } from "@assistant-ui/react";
 import { NotebookPaper } from "./NotebookPaper";
+import { MermaidDiagram } from "./mermaid-block";
+import { AudioPlayerCard, EmbedLinkCard, VideoPlayerCard } from "./media-cards";
+import { classifyMediaUrl, isBareLink } from "./media-url";
 
 // @ts-expect-error - react-syntax-highlighter module interop
 import { Prism } from "react-syntax-highlighter";
@@ -342,7 +345,7 @@ const CustomSyntaxHighlighter: FC<{ language: string; code: string }> = memo(({ 
 
 // ─── Markdown Image (AI-generated / embedded images) ────────────────────────
 
-const MarkdownImage: FC<{ src?: string; alt?: string }> = ({ src, alt }) => {
+export const MarkdownImage: FC<{ src?: string; alt?: string }> = ({ src, alt }) => {
   const { t } = useTranslation("chat");
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
   const [zoomed, setZoomed] = useState(false);
@@ -364,7 +367,7 @@ const MarkdownImage: FC<{ src?: string; alt?: string }> = ({ src, alt }) => {
       a.click();
       a.remove();
       URL.revokeObjectURL(objectUrl);
-      toast.success(t("photo.downloadStarted"));
+      toast.success(t("assistantMedia.downloadStarted"));
     } catch {
       window.open(src, "_blank", "noopener,noreferrer");
     }
@@ -401,7 +404,7 @@ const MarkdownImage: FC<{ src?: string; alt?: string }> = ({ src, alt }) => {
         {status === "error" && (
           <span className="flex min-h-[140px] w-full flex-col items-center justify-center gap-2 p-4 text-muted-foreground">
             <ImageOffIcon className="size-7" />
-            <span className="text-xs">{t("photo.loadFailed")}</span>
+            <span className="text-xs">{t("assistantMedia.loadFailed")}</span>
           </span>
         )}
         {status === "loaded" && (
@@ -413,10 +416,10 @@ const MarkdownImage: FC<{ src?: string; alt?: string }> = ({ src, alt }) => {
                 handleDownload();
               }}
               className="state-layer flex items-center gap-1.5 rounded-lg bg-background/85 px-2.5 py-1.5 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm hover:bg-background"
-              aria-label={t("photo.downloadImage")}
+              aria-label={t("assistantMedia.downloadImage")}
             >
               <DownloadIcon className="size-3.5" />
-              {t("photo.downloadImage")}
+              {t("assistantMedia.downloadImage")}
             </button>
             <span className="ml-auto rounded-lg bg-background/85 p-1.5 text-foreground shadow-sm backdrop-blur-sm">
               <ZoomInIcon className="size-3.5" />
@@ -427,7 +430,7 @@ const MarkdownImage: FC<{ src?: string; alt?: string }> = ({ src, alt }) => {
 
       <Dialog open={zoomed} onOpenChange={setZoomed}>
         <DialogContent className="max-h-[92dvh] border-border/50 p-2 sm:max-w-4xl [&>button]:rounded-full [&>button]:bg-foreground/60">
-          <DialogTitle className="sr-only">{alt || t("photo.openPreview")}</DialogTitle>
+          <DialogTitle className="sr-only">{alt || t("assistantMedia.openPreview")}</DialogTitle>
           {status === "loaded" && (
             <div className="flex max-h-[85dvh] flex-col items-center gap-3 overflow-hidden">
               <img
@@ -442,7 +445,7 @@ const MarkdownImage: FC<{ src?: string; alt?: string }> = ({ src, alt }) => {
                 className="gap-1.5"
               >
                 <DownloadIcon className="size-4" />
-                {t("photo.downloadImage")}
+                {t("assistantMedia.downloadImage")}
               </Button>
             </div>
           )}
@@ -516,17 +519,30 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  a: ({ className, ...props }) => (
-    <a
-      className={cn(
-        "aui-md-a text-primary underline underline-offset-2 hover:text-primary/80",
-        className,
-      )}
-      target="_blank"
-      rel="noopener noreferrer"
-      {...props}
-    />
-  ),
+  a: ({ className, children, href, ...props }) => {
+    // Bare media links (video/audio URLs, YouTube/Vimeo) become inline
+    // players; named links keep the normal anchor styling.
+    const media = classifyMediaUrl(href);
+    if (media && isBareLink(children, href)) {
+      if (media.kind === "video") return <VideoPlayerCard src={href ?? ""} />;
+      if (media.kind === "audio") return <AudioPlayerCard src={href ?? ""} />;
+      if (media.kind === "youtube") return <EmbedLinkCard kind="youtube" videoId={media.embedId!} />;
+      if (media.kind === "vimeo") return <EmbedLinkCard kind="vimeo" videoId={media.embedId!} />;
+    }
+    return (
+      <a
+        className={cn(
+          "aui-md-a text-primary underline underline-offset-2 hover:text-primary/80",
+          className,
+        )}
+        target="_blank"
+        rel="noopener noreferrer"
+        {...props}
+      >
+        {children}
+      </a>
+    );
+  },
   img: (props) => <MarkdownImage {...props} />,
   blockquote: ({ className, ...props }) => (
     <blockquote
@@ -561,14 +577,19 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  table: ({ className, ...props }) => (
-    <table
-      className={cn(
-        "aui-md-table my-2 w-full border-separate border-spacing-0 overflow-y-auto",
-        className,
-      )}
-      {...props}
-    />
+  table: ({ className, children, ...props }) => (
+    // Scroll wrapper keeps wide tables inside the message bubble on mobile.
+    <div className="aui-md-table-wrap my-2 max-w-full overflow-x-auto">
+      <table
+        className={cn(
+          "aui-md-table w-full border-separate border-spacing-0",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </table>
+    </div>
   ),
   th: ({ className, ...props }) => (
     <th
@@ -617,12 +638,21 @@ const defaultComponents = memoizeMarkdownComponents({
     />
   ),
   pre: ({ className, children, ...props }: any) => {
+    const childArray = React.Children.toArray(children) as any[];
     // Check if children contain a code block with language-solution
-    const isSolution = React.Children.toArray(children).some(
-      (child: any) => child?.props?.className?.includes("language-solution")
+    const isSolution = childArray.some(
+      (child: any) => child?.props?.className?.includes("language-solution"),
     );
     if (isSolution) {
       return <div className="aui-md-notebook-wrapper">{children}</div>;
+    }
+    // Mermaid blocks are handled entirely by the code renderer below —
+    // strip the surrounding <pre> so the diagram card stands alone.
+    const isMermaid = childArray.some(
+      (child: any) => child?.props?.className?.includes("language-mermaid"),
+    );
+    if (isMermaid) {
+      return <div className="aui-md-mermaid-wrapper">{children}</div>;
     }
     return (
       <pre
@@ -639,6 +669,9 @@ const defaultComponents = memoizeMarkdownComponents({
     const isCodeBlock = useIsMarkdownCodeBlock();
     if (isCodeBlock && className?.includes("language-solution")) {
       return <NotebookPaper content={String(children)} />;
+    }
+    if (isCodeBlock && className?.includes("language-mermaid")) {
+      return <MermaidDiagram code={String(children).replace(/\n$/, "")} />;
     }
     return (
       <code
