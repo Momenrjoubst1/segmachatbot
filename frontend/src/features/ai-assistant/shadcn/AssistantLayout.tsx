@@ -431,6 +431,7 @@ export const Shadcn: FC<{
                     open={artifactPanelOpen}
                     onClose={() => setArtifactPanelOpen(false)}
                     activeArtifactId={activeArtifactId}
+                    onRequestOpen={() => setArtifactPanelOpen(true)}
                   />
                 </ErrorBoundary>
               </Suspense>

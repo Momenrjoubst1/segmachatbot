@@ -1,89 +1,128 @@
-import { useEffect, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
-import { authFetch } from "@/lib/auth";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { ArrowLeftIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
 import { useAuthContext } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabaseClient";
+import type { Artifact } from "@/lib/artifacts-api";
+import { getArtifact, getPublicArtifact } from "@/lib/artifacts-api";
 import { ArtifactViewer } from "./ArtifactViewer";
 
-interface Artifact {
-  id: string;
-  type: string;
-  title: string;
-  content: string;
-  language?: string;
-  created_at: string;
-}
-
-const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3004";
-
 /**
- * Full-page artifact view for shared links (`/artifacts/:id`).
- * The chat app keeps artifact state in memory only, so this page fetches
- * the artifact by id from the backend. Guests get a sign-in prompt
- * because the API requires authentication.
+ * Full-page artifact view for `/artifacts/:id`.
+ *
+ * Resolution order:
+ *   1. Authenticated + owner → full API artifact (mutation controls on).
+ *   2. Publicly shared → public endpoint (read-only), no sign-in required.
+ *   3. Otherwise → sign-in / not-found prompt.
  */
 export function ArtifactPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const { t } = useTranslation("artifacts");
   const { isAuthenticated, isAuthLoading } = useAuthContext();
   const [artifact, setArtifact] = useState<Artifact | null>(null);
-  const [status, setStatus] = useState<"loading" | "error" | "ready">("loading");
+  const [isOwner, setIsOwner] = useState(false);
+  const [status, setStatus] = useState<"loading" | "notfound" | "unauthorized" | "ready">("loading");
 
   useEffect(() => {
     if (isAuthLoading) return;
-    if (!isAuthenticated || !id) {
-      setStatus("error");
+    if (!id) {
+      setStatus("notfound");
       return;
     }
     let cancelled = false;
+
     (async () => {
+      // Try the owner path first when signed in.
+      if (isAuthenticated) {
+        try {
+          const owned = await getArtifact(id);
+          if (!cancelled && owned) {
+            setArtifact(owned);
+            try {
+              const { data } = await supabase.auth.getUser();
+              setIsOwner(data?.user?.id === owned.owner_id);
+            } catch {
+              setIsOwner(false);
+            }
+            setStatus("ready");
+            return;
+          }
+        } catch {
+          // fall through to the public path
+        }
+      }
+      // Public share link — works for guests too.
       try {
-        const res = await authFetch(`${backendUrl}/api/artifacts/${id}`);
-        if (cancelled) return;
-        if (res.ok) {
-          setArtifact(await res.json());
+        const shared = await getPublicArtifact(id);
+        if (!cancelled && shared) {
+          setArtifact(shared);
+          setIsOwner(false);
           setStatus("ready");
-        } else {
-          setStatus("error");
+          return;
         }
       } catch {
-        if (!cancelled) setStatus("error");
+        // not public
+      }
+      if (!cancelled) {
+        setStatus(isAuthenticated ? "notfound" : "unauthorized");
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [id, isAuthenticated, isAuthLoading, backendUrl]);
+  }, [id, isAuthenticated, isAuthLoading]);
+
+  const handleChange = useMemo(
+    () => (updated: Artifact) => setArtifact(updated),
+    [],
+  );
 
   return (
     <div className="h-screen h-[100dvh] w-full overflow-hidden bg-background text-foreground">
       {status === "ready" && artifact ? (
-        <ArtifactViewer artifact={artifact} />
-      ) : status === "loading" ? (
+        <div className="flex h-full flex-col p-4 pt-3 md:p-6 md:pt-4">
+          <div className="mb-2 flex shrink-0 items-center justify-between">
+            <Link
+              to="/artifacts"
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowLeftIcon className="size-4" />
+              {t("library.backToLibrary")}
+            </Link>
+            {!isOwner && (
+              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400">
+                {t("page.publicView")}
+              </span>
+            )}
+          </div>
+          <div className="min-h-0 flex-1">
+            <ArtifactViewer
+              key={`${artifact.id}-${artifact.version}`}
+              artifact={artifact}
+              onChanged={handleChange}
+              readOnly={!isOwner}
+            />
+          </div>
+        </div>
+      ) : status === "loading" || isAuthLoading ? (
         <div className="flex h-full items-center justify-center">
           <div className="size-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
         </div>
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-4 px-4 text-center">
           <p className="text-sm text-muted-foreground">
-            {!isAuthenticated
-              ? "This artifact is private. Sign in to view it."
-              : "Artifact not found or no longer available."}
+            {status === "unauthorized" ? t("page.privatePrompt") : t("page.notFound")}
           </p>
-          {!isAuthenticated ? (
-            <button
-              type="button"
-              onClick={() =>
-                navigate("/login", {
-                  state: { from: `${window.location.pathname}${window.location.search}` },
-                })
-              }
-              className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground"
-            >
-              Sign in
-            </button>
+          {status === "unauthorized" ? (
+            <Link to="/login" className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground">
+              {t("page.signIn")}
+            </Link>
           ) : (
             <Link to="/" className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground">
-              Back to chat
+              {t("page.backToChat")}
             </Link>
           )}
         </div>

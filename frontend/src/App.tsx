@@ -12,6 +12,7 @@ import { LoginPage } from "@/components/LoginPage";
 
 const AssistantApp = lazy(() => import("@/features/ai-assistant/AssistantApp").then(m => ({ default: m.AssistantApp })));
 const ArtifactPage = lazy(() => import("@/features/artifacts/ArtifactPage").then(m => ({ default: m.ArtifactPage })));
+const ArtifactLibraryPage = lazy(() => import("@/features/artifacts/ArtifactLibraryPage").then(m => ({ default: m.ArtifactLibraryPage })));
 
 function RouteFallback() {
   return (
@@ -63,6 +64,16 @@ function AppContent() {
             <ErrorBoundary componentName="AssistantApp">
               <Suspense fallback={<RouteFallback />}>
                 <AssistantApp />
+              </Suspense>
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="/artifacts"
+          element={
+            <ErrorBoundary componentName="ArtifactLibraryPage">
+              <Suspense fallback={<RouteFallback />}>
+                <ArtifactLibraryPage />
               </Suspense>
             </ErrorBoundary>
           }

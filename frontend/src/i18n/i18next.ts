@@ -32,6 +32,7 @@ import enStudy from "@/i18n/locales/en/study.json";
 import enTasks from "@/i18n/locales/en/tasks.json";
 import enCalendar from "@/i18n/locales/en/calendar.json";
 import enMaterials from "@/i18n/locales/en/materials.json";
+import enArtifacts from "@/i18n/locales/en/artifacts.json";
 
 // ── Arabic namespaces ───────────────────────────────────────────────
 import arCommon from "@/i18n/locales/ar/common.json";
@@ -50,6 +51,7 @@ import arStudy from "@/i18n/locales/ar/study.json";
 import arTasks from "@/i18n/locales/ar/tasks.json";
 import arCalendar from "@/i18n/locales/ar/calendar.json";
 import arMaterials from "@/i18n/locales/ar/materials.json";
+import arArtifacts from "@/i18n/locales/ar/artifacts.json";
 
 // ── Legacy flat dictionaries (kept for backward-compat wrapper) ─────
 import { en as enLegacy } from "@/i18n/locales/en";
@@ -71,6 +73,7 @@ export const NAMESPACES = [
   "calendar",
   "study",
   "materials",
+  "artifacts",
   "legacy",
 ] as const;
 
@@ -94,6 +97,7 @@ const resources = {
     study: enStudy,
     tasks: enTasks,
     materials: enMaterials,
+    artifacts: enArtifacts,
     legacy: enLegacy,
   },
   ar: {
@@ -113,6 +117,7 @@ const resources = {
     study: arStudy,
     tasks: arTasks,
     materials: arMaterials,
+    artifacts: arArtifacts,
     legacy: arLegacy,
   },
 } as const;
