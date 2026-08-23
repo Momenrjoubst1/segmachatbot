@@ -1,6 +1,26 @@
 # Live Voice Chat — Sigma AI (Claude/Grok-style)
 
-Status: IN PROGRESS · Branch: `feature/live-voice-chat` · Author: ox-alpha autonomous session
+Status: v1 IMPLEMENTED & PUSHED (`feature/live-voice-chat`) · Author: ox-alpha autonomous session
+
+## 0. Outcome (autonomous session)
+
+- Backend: `/api/tts/voices` + `POST /api/tts` live; all 4 personas synthesize
+  real Arabic MP3s (52–58 KB, warm-cache ~0.7 s). faris voice swapped to
+  ar-SY-LaithNeural after Edge rejected ar-SA-ShakirNeural.
+- Frontend: useLiveVoice orchestrator + LIVE toggle + persona dropdown shipped;
+  detector/splitter/player/client libs with 19 dedicated vitest scenarios;
+  full suite 524/524 green; tsc clean project-wide.
+- Verified: backend boots on branch, routes auth-gated (401 not 404),
+  STT relay e2e PIPE VERIFIED post-edits, branch pushed.
+
+### Known v1 limitations
+- Persona behavioral primers NOT yet injected into system prompt (voice-only
+  personas) — requires threading `personaId` through chat pipeline
+  (assembleSystemPrompt arg), left as milestone-2 to avoid shared-file surgery
+  while other agents work.
+- Each turn reopens mic/WS (~600 ms); a persistent live socket is the next
+  latency win.
+- Barge-in uses energy gate above speech threshold; no neural VAD yet.
 
 ## 1. What we are building
 
