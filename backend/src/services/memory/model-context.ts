@@ -50,6 +50,9 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, ModelContextInfo> = {
   // Baichat (B.AI platform) — base model, full Claude-class output
   'deepseek-v4-flash': { value: 'deepseek-v4-flash', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'baichat' },
 
+  // OpenRouter — primary chat model, full Claude-class output
+  'stealth/ox-alpha': { value: 'stealth/ox-alpha', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter' },
+
   // BigModel (ZhipuAI)
   'glm-4-flash': { value: 'glm-4-flash', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'bigmodel', maxOutputTokens: 4_096 },
   'glm-5.2': { value: 'glm-5.2', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'bigmodel', maxOutputTokens: 16_384 },

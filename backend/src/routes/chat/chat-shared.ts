@@ -1,4 +1,4 @@
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+﻿import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request } from "express";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
@@ -7,20 +7,20 @@ import { mediaAwareFetch } from "../../services/chat/media-wire.js";
 
 /**
  * Every OpenAI-compatible client routes its outbound request through the
- * media wire patch, which rewrites ⟦MEDIA:…⟧ sentinels into provider-native
+ * media wire patch, which rewrites âŸ¦MEDIA:â€¦âŸ§ sentinels into provider-native
  * video_url / input_audio blocks. Bodies without media pass through untouched.
  */
 const MEDIA_AWARE_FETCH = mediaAwareFetch();
 
 // Note: `Request.user` is declared globally by `middleware/auth.middleware.ts`
-// — no need to redeclare it here.
+// â€” no need to redeclare it here.
 
 // Re-export modelRouter for access from route files
-// إعادة تصدير موجه النماذج للوصول من ملفات المسار
+// Ø¥Ø¹Ø§Ø¯Ø© ØªØµØ¯ÙŠØ± Ù…ÙˆØ¬Ù‡ Ø§Ù„Ù†Ù…Ø§Ø°Ø¬ Ù„Ù„ÙˆØµÙˆÙ„ Ù…Ù† Ù…Ù„ÙØ§Øª Ø§Ù„Ù…Ø³Ø§Ø±
 export { modelRouter, CircuitBreakerState, getGracefulDegradationMessage } from "../../services/chat/model-router.js";
 
 // Re-export multi-agent prompts from their canonical location.
-// (Previously duplicated here — kept as a re-export to avoid breaking imports
+// (Previously duplicated here â€” kept as a re-export to avoid breaking imports
 //  in code that still pulls them from chat-shared.)
 export {
   MAIN_AGENT_SYSTEM_PROMPT,
@@ -31,6 +31,129 @@ export const log = createLogger("chat-api");
 export const ragLog = createLogger("rag");
 export const memLog = createLogger("memory");
 export const trLog = createLogger("translate");
+
+// â”€â”€â”€ Reasoning tap (DeepSeek-style `reasoning_content`) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/**
+ * The AI SDK's OpenAI-compatible chat provider only maps `delta.content`,
+ * `delta.tool_calls`, and `delta.annotations` â€” reasoning deltas
+ * (`delta.reasoning_content` / `delta.reasoning`) are silently dropped.
+ *
+ * `reasoningTapFetch` sits under the SDK's fetch, parses the SSE stream,
+ * moves any reasoning delta into the beginning of `delta.content` wrapped in
+ * <think>â€¦</think> tags, and re-serializes the chunk. The frontend splits the
+ * tags back out into a collapsible "Thinking" block; the backend strips them
+ * before moderation/persistence via `stripThinkTags`.
+ *
+ * Opt-in per client via `createProviderClient(provider, { reasoningTap: true })`
+ * so non-chat consumers (voice/TTS) never receive tagged content.
+ */
+
+/** Providers whose models commonly stream DeepSeek-style reasoning deltas. */
+const REASONING_TAP_DEFAULT_PROVIDERS = new Set<ProviderName>([
+  "baichat",
+  "nvidia",
+  "openrouter",
+  "bigmodel",
+  "novita",
+]);
+
+/** Extract the reasoning text from an OpenAI-compatible chat delta, if any. */
+function extractDeltaReasoning(delta: Record<string, unknown> | undefined | null): string | null {
+  if (!delta || typeof delta !== "object") return null;
+  const rc = (delta as { reasoning_content?: unknown }).reasoning_content;
+  if (typeof rc === "string" && rc.length > 0) return rc;
+  const r = (delta as { reasoning?: unknown }).reasoning;
+  if (typeof r === "string" && r.length > 0) return r;
+  return null;
+}
+
+/** Transform one parsed SSE data payload; returns null when nothing changed. */
+function tapChatChunk(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const obj = payload as { choices?: Array<{ delta?: Record<string, unknown>; message?: Record<string, unknown> }> };
+  const choice = obj.choices?.[0];
+  if (!choice) return null;
+
+  // Streaming: move delta.reasoning(_content) into delta.content inside <think>.
+  if (choice.delta && typeof choice.delta === "object") {
+    const reasoning = extractDeltaReasoning(choice.delta);
+    if (reasoning == null) return null;
+    delete choice.delta.reasoning_content;
+    delete choice.delta.reasoning;
+    const existing = typeof choice.delta.content === "string" ? choice.delta.content : "";
+    choice.delta.content = `<think>${reasoning}</think>${existing}`;
+    return JSON.stringify(obj);
+  }
+
+  // Non-streaming JSON responses: same treatment for message.reasoning_content.
+  if (choice.message && typeof choice.message === "object") {
+    const reasoning = extractDeltaReasoning(choice.message);
+    if (reasoning == null) return null;
+    delete choice.message.reasoning_content;
+    delete choice.message.reasoning;
+    const existing = typeof choice.message.content === "string" ? choice.message.content : "";
+    choice.message.content = `<think>${reasoning}</think>${existing}`;
+    return JSON.stringify(obj);
+  }
+  return null;
+}
+
+/**
+ * Wrap a fetch implementation so chat-completions SSE bodies get their
+ * reasoning deltas folded into content as <think>â€¦</think>. All other
+ * responses pass through untouched.
+ */
+export function createReasoningTapFetch(inner: typeof fetch): typeof fetch {
+  return async function reasoningTapFetch(input, init) {
+    const res = await inner(input, init);
+    const contentType = res.headers?.get?.("content-type") ?? "";
+    if (!res.body || !contentType.includes("text/event-stream")) return res;
+
+    const decoder = new TextDecoder();
+    const encoder = new TextEncoder();
+    let buffered = "";
+
+    const processLine = (rawLine: string): string => {
+      const line = rawLine.replace(/\r$/, "");
+      if (!line.startsWith("data:")) return line;
+      const payloadText = line.slice(5).trim();
+      if (!payloadText || payloadText === "[DONE]") return line;
+      try {
+        const parsed: unknown = JSON.parse(payloadText);
+        const tapped = tapChatChunk(parsed);
+        return tapped != null ? `data: ${tapped}` : line;
+      } catch {
+        return line;
+      }
+    };
+
+    const transform = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        buffered += decoder.decode(chunk, { stream: true });
+        const lines = buffered.split("\n");
+        buffered = lines.pop() ?? "";
+        controller.enqueue(encoder.encode(lines.map(processLine).join("\n")));
+      },
+      flush(controller) {
+        buffered += decoder.decode();
+        if (buffered.length > 0) controller.enqueue(encoder.encode(processLine(buffered)));
+      },
+    });
+
+    return new Response(res.body.pipeThrough(transform), {
+      status: res.status,
+      statusText: res.statusText,
+      headers: res.headers,
+    });
+  };
+}
+
+/** Remove <think>â€¦</think> blocks (streamed model reasoning) from text. */
+export function stripThinkTags(text: string): string {
+  if (!text || !text.includes("<think>")) return text;
+  return text.replace(/<think>[\s\S]*?<\/think>/g, "").trimStart();
+}
+
 
 /** Minimal message shape used for log summaries (keeps logs light). */
 interface LogMessage {
@@ -58,7 +181,7 @@ export function summarizeMessageForLog(m: LogMessage | null | undefined): Record
 export const chatLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
-  message: { error: "لقد تجاوزت الحد المسموح به من الرسائل. يرجى الانتظار قليلاً." },
+  message: { error: "Ù„Ù‚Ø¯ ØªØ¬Ø§ÙˆØ²Øª Ø§Ù„Ø­Ø¯ Ø§Ù„Ù…Ø³Ù…ÙˆØ­ Ø¨Ù‡ Ù…Ù† Ø§Ù„Ø±Ø³Ø§Ø¦Ù„. ÙŠØ±Ø¬Ù‰ Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø± Ù‚Ù„ÙŠÙ„Ø§Ù‹." },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
@@ -72,7 +195,7 @@ export const chatLimiter = rateLimit({
 export const newChatLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10, // Only 10 new conversations per minute
-  message: { error: "لقد تجاوزت حد إنشاء المحادثات. يرجى الانتظار." },
+  message: { error: "Ù„Ù‚Ø¯ ØªØ¬Ø§ÙˆØ²Øª Ø­Ø¯ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø§Øª. ÙŠØ±Ø¬Ù‰ Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø±." },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
@@ -90,6 +213,8 @@ export const DEFAULT_MODEL =
 export const ALLOWED_MODELS = [
   // Baichat
   "deepseek-v4-flash",
+  // OpenRouter (primary chat model)
+  "stealth/ox-alpha",
   // Google Gemini (direct) - gemini-3.7-flash is alias for gemini-2.5-flash
   "gemini-3.7-flash",
   "gemini-2.5-flash",
@@ -243,12 +368,23 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
   return { provider: "openrouter", modelName: modelId };
 }
 
-export function createProviderClient(provider: ProviderName) {
+export function createProviderClient(
+  provider: ProviderName,
+  opts?: { reasoningTap?: boolean },
+) {
+  const baseFetch = MEDIA_AWARE_FETCH;
+  // Opt-in SSE tap that folds reasoning deltas into <think>â€¦</think> content.
+  // Enabled by chat pipelines; voice/translate consumers stay untouched.
+  const fetchImpl =
+    opts?.reasoningTap && REASONING_TAP_DEFAULT_PROVIDERS.has(provider)
+      ? createReasoningTapFetch(baseFetch)
+      : baseFetch;
+
   if (provider === "baichat") {
     const baichatKey = process.env.BAICHAT_API_KEY;
     if (!baichatKey) throw new Error("Missing BAICHAT_API_KEY in environment");
     return createOpenAI({
-      fetch: MEDIA_AWARE_FETCH,
+      fetch: fetchImpl,
       baseURL: "https://api.chat.b.ai/v1",
       apiKey: baichatKey,
     });
@@ -258,7 +394,7 @@ export function createProviderClient(provider: ProviderName) {
     const bigmodelKey = process.env.BIGMODEL_API_KEY;
     if (!bigmodelKey) throw new Error("Missing BIGMODEL_API_KEY in environment");
     return createOpenAI({
-      fetch: MEDIA_AWARE_FETCH,
+      fetch: fetchImpl,
       baseURL: "https://open.bigmodel.cn/api/paas/v4",
       apiKey: bigmodelKey,
     });
@@ -272,7 +408,7 @@ export function createProviderClient(provider: ProviderName) {
     
     const cleanEndpoint = azureEndpoint.replace(/\/$/, '');
     return createOpenAI({
-      fetch: MEDIA_AWARE_FETCH,
+      fetch: fetchImpl,
       baseURL: `${cleanEndpoint}/openai/v1`,
       apiKey: azureKey,
       headers: {
@@ -284,7 +420,7 @@ export function createProviderClient(provider: ProviderName) {
   if (provider === "github") {
     if (!process.env.GITHUB_TOKEN) throw new Error("Missing GITHUB_TOKEN in environment");
     return createOpenAI({
-      fetch: MEDIA_AWARE_FETCH,
+      fetch: fetchImpl,
       baseURL: "https://models.github.ai/inference",
       apiKey: process.env.GITHUB_TOKEN,
     });
@@ -294,7 +430,7 @@ export function createProviderClient(provider: ProviderName) {
     const groqKey = process.env.GROQ_API_KEY;
     if (!groqKey) throw new Error("Missing GROQ_API_KEY in environment");
     return createOpenAI({
-      fetch: MEDIA_AWARE_FETCH,
+      fetch: fetchImpl,
       baseURL: "https://api.groq.com/openai/v1",
       apiKey: groqKey,
     });
@@ -303,7 +439,7 @@ export function createProviderClient(provider: ProviderName) {
   if (provider === "fireworks") {
     if (!process.env.FIREWORKS_API_KEY) throw new Error("Missing FIREWORKS_API_KEY in environment");
     return createOpenAI({
-      fetch: MEDIA_AWARE_FETCH,
+      fetch: fetchImpl,
       baseURL: "https://api.fireworks.ai/inference/v1",
       apiKey: process.env.FIREWORKS_API_KEY,
     });
@@ -312,7 +448,7 @@ export function createProviderClient(provider: ProviderName) {
   if (provider === "novita") {
     if (!process.env.NOVITA_API_KEY) throw new Error("Missing NOVITA_API_KEY in environment");
     return createOpenAI({
-      fetch: MEDIA_AWARE_FETCH,
+      fetch: fetchImpl,
       baseURL: "https://api.novita.ai/openai",
       apiKey: process.env.NOVITA_API_KEY,
     });
@@ -322,7 +458,7 @@ export function createProviderClient(provider: ProviderName) {
     const nvidiaKey = process.env.NVIDIA_API_KEY;
     if (!nvidiaKey) throw new Error("Missing NVIDIA_API_KEY in environment");
     return createOpenAI({
-      fetch: MEDIA_AWARE_FETCH,
+      fetch: fetchImpl,
       baseURL: "https://integrate.api.nvidia.com/v1",
       apiKey: nvidiaKey,
     });
@@ -332,7 +468,7 @@ export function createProviderClient(provider: ProviderName) {
     const cerebrasKey = process.env.CEREBRAS_API_KEY;
     if (!cerebrasKey) throw new Error("Missing CEREBRAS_API_KEY in environment");
     return createOpenAI({
-      fetch: MEDIA_AWARE_FETCH,
+      fetch: fetchImpl,
       baseURL: "https://api.cerebras.ai/v1",
       apiKey: cerebrasKey,
     });
@@ -348,6 +484,7 @@ export function createProviderClient(provider: ProviderName) {
 
   if (!process.env.OPENROUTER_API_KEY) throw new Error("Missing OPENROUTER_API_KEY in environment");
   return createOpenAI({
+    fetch: fetchImpl,
     baseURL: "https://openrouter.ai/api/v1",
     apiKey: process.env.OPENROUTER_API_KEY,
     headers: {

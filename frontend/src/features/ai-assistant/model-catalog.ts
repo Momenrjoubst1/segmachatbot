@@ -34,6 +34,18 @@ export const MODELS = [
   },
 
   // ==========================================
+  // 0c. OpenRouter (primary)
+  // ==========================================
+  {
+    name: "Ox-Alpha (OpenRouter - Primary)",
+    value: "stealth/ox-alpha",
+    icon: "/icons/openrouter.svg",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "openrouter" as const,
+  },
+
+  // ==========================================
   // 1. Google Gemini (Direct API - Free Tier)
   // ==========================================
   {
