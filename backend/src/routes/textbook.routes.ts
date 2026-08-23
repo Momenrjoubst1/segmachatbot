@@ -7,7 +7,7 @@ import os from "os";
 import { supabase } from "../config/supabase.config.js";
 import { enqueueTextbookJob, getTextbookProgress, getRedisClient } from "../services/textbook/textbook-queue.js";
 import { invalidateStructureCache } from "../services/textbook/textbook-search.js";
-import { deleteR2ObjectsByPrefix, isR2Configured, uploadR2ObjectFromFile } from "../services/textbook/r2-client.js";
+import { deleteR2ObjectsByPrefix, isR2Configured, uploadR2ObjectFromFile, presignR2Get, getR2ObjectWebStream } from "../services/textbook/r2-client.js";
 import { invalidateUserTextbookSignal } from "../services/chat/pipeline/rag-retrieval.js";
 import { createLogger } from "../utils/logger.js";
 
@@ -297,6 +297,141 @@ router.post("/upload", async (req: Request, res: Response) => {
   } catch (err) {
     log.error("Upload route error", { error: (err as Error).message });
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Material viewer: resolve a browser-displayable URL for the source file
+// (ownership-checked). `r2://` keys become short-lived presigned GET URLs so
+// the in-app viewer can load the original PDF without exposing public links.
+router.get("/:id/file-url", async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const { id } = req.params;
+
+    const { data: textbook } = await supabase
+      .from("textbooks")
+      .select("id, file_name, file_url, status, total_pages, file_size_bytes, course_id")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!textbook) {
+      res.status(404).json({ error: "Textbook not found" });
+      return;
+    }
+
+    const fileUrl = textbook.file_url || "";
+    const base = {
+      textbookId: textbook.id,
+      fileName: textbook.file_name,
+      mimeType: guessMimeType(textbook.file_name),
+      sizeBytes: textbook.file_size_bytes,
+      totalPages: textbook.total_pages,
+      status: textbook.status,
+      courseId: textbook.course_id,
+    };
+
+    if (fileUrl.startsWith("r2://")) {
+      const key = fileUrl.slice("r2://".length);
+      const url = await presignR2Get(key, 3600);
+      if (!url) {
+        res.status(503).json({ error: "storage_unavailable" });
+        return;
+      }
+      res.json({ ...base, source: "r2", url, expiresInSeconds: 3600 });
+      return;
+    }
+
+    if (/^https?:\/\//i.test(fileUrl)) {
+      // Legacy external-URL uploads — served from origin directly
+      res.json({ ...base, source: "external", url: fileUrl });
+      return;
+    }
+
+    // local:// (dev without R2) and pending:// have no browser-displayable URL
+    res.json({
+      ...base,
+      source: fileUrl.startsWith("local://") ? "local" : "unavailable",
+      url: null,
+    });
+  } catch (err) {
+    log.error("File-url route error", { error: (err as Error).message });
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Material download proxy (ownership-checked stream). Used for the
+// viewer's download button — authenticated fetch → blob, so it works for
+// r2/local/external sources alike regardless of bucket CORS settings.
+router.get("/:id/file", async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const { id } = req.params;
+
+    const { data: textbook } = await supabase
+      .from("textbooks")
+      .select("id, file_name, file_url")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!textbook) {
+      res.status(404).json({ error: "Textbook not found" });
+      return;
+    }
+
+    const fileUrl = textbook.file_url || "";
+    const disposition = `attachment; filename*=UTF-8''${encodeURIComponent(textbook.file_name)}`;
+
+    if (fileUrl.startsWith("r2://")) {
+      const key = fileUrl.slice("r2://".length);
+      const stream = await getR2ObjectWebStream(key);
+      if (!stream) {
+        res.status(503).json({ error: "storage_unavailable" });
+        return;
+      }
+      res.setHeader("Content-Type", guessMimeType(textbook.file_name));
+      res.setHeader("Content-Disposition", disposition);
+      const nodeStream = Readable.fromWeb(stream as import("stream/web").ReadableStream);
+      nodeStream.pipe(res);
+      return;
+    }
+
+    if (fileUrl.startsWith("local://")) {
+      const filePath = fileUrl.slice("local://".length);
+      try {
+        await fs.access(filePath);
+      } catch {
+        res.status(410).json({ error: "source_file_missing" });
+        return;
+      }
+      res.setHeader("Content-Type", guessMimeType(textbook.file_name));
+      res.setHeader("Content-Disposition", disposition);
+      createReadStream(filePath).pipe(res);
+      return;
+    }
+
+    if (/^https?:\/\//i.test(fileUrl)) {
+      res.redirect(fileUrl);
+      return;
+    }
+
+    res.status(409).json({ error: "not_ready" });
+  } catch (err) {
+    log.error("File proxy route error", { error: (err as Error).message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Internal server error" });
+    }
   }
 });
 

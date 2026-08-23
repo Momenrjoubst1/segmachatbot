@@ -7,7 +7,7 @@
  */
 
 /** All known tool group identifiers */
-export type ToolGroup = 'email' | 'calendar' | 'tasks' | 'web_search' | 'code_executor' | 'fonts' | 'general';
+export type ToolGroup = 'email' | 'calendar' | 'tasks' | 'web_search' | 'code_executor' | 'fonts' | 'materials' | 'general';
 
 /** Map of tool names (from TOOL_DEFINITIONS keys) to their group */
 const TOOL_GROUP_MAP: Record<string, ToolGroup> = {
@@ -49,6 +49,7 @@ const TOOL_GROUP_MAP: Record<string, ToolGroup> = {
   ide_manage_files: 'code_executor',
   ide_install_packages: 'code_executor',
   apply_fonts: 'fonts',
+  find_materials: 'materials',
   calculator: 'general',
   get_time: 'general',
   get_weather: 'general',
@@ -177,6 +178,19 @@ Rules:
 - Add explanatory comments in code`;
 }
 
+/** Materials-library specific tool instructions */
+function buildMaterialsToolInstructions(): string {
+  return `
+## Materials Card Instructions — تعليمات بطاقات المواد
+
+- After \`find_materials\` returns, include EVERY line from \`result.cards\` EXACTLY as provided, each on its own line, in your reply. The app renders them as clickable material cards that open the file in an in-app viewer.
+- NEVER modify, shorten, or reformat a material:// URL — the id and query params are required for the card to work.
+- Wrap the cards with one short natural sentence (e.g. "هيك هي المادة، اضغط عليها لتفتح 📚").
+- If several materials matched, show all the cards — the user picks.
+- If count is 0, say briefly you didn't find that material, and suggest uploading it from the sidebar or attaching the PDF in the chat (then answering «مادة»).
+- Never invent a material:// link yourself. Cards come ONLY from find_materials results.`;
+}
+
 /**
  * Builds the complete tool instructions layer.
  * Only includes instructions for tool groups that are actually enabled.
@@ -202,6 +216,10 @@ export function buildToolInstructions(enabledTools: string[]): string {
 
   if (groups.includes('fonts')) {
     parts.push(buildFontsToolInstructions());
+  }
+
+  if (groups.includes('materials')) {
+    parts.push(buildMaterialsToolInstructions());
   }
 
   if (groups.includes('code_executor')) {

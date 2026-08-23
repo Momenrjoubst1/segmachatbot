@@ -10,6 +10,11 @@
  *   3. "No" answer → the PDF text is extracted once and kept as thread-scoped
  *      context (Redis, 24h) — usable only in this chat, like other bots.
  *
+ * Modern clients upload the PDF first via POST /api/chat/attachments and send
+ * an `r2://chat-attachments/{userId}/…` reference instead of inline base64 —
+ * the reference is resolved here (ownership re-checked against the caller).
+ * Legacy clients still send inline base64, which is staged to R2 as before.
+ *
  * All three intercept the pipeline and stream a canned bot reply directly
  * (same plain-text protocol as the response-cache-hit path).
  */
@@ -69,10 +74,15 @@ function classifyAnswer(text: string): "yes" | "no" | "ambiguous" {
 
 interface PdfAttachment {
   fileName: string;
+  /** Decoded PDF bytes (inline-base64 flow, or fetched from R2 for references). */
   bytes: Buffer;
+  /** Set when the file was pre-uploaded by the client — no re-staging needed. */
+  r2Key?: string;
 }
 
-function extractPdfAttachment(messages: ChatMsg[]): PdfAttachment | null {
+const R2_REF_PREFIX = (userId: string) => `r2://chat-attachments/${userId}/`;
+
+async function extractPdfAttachment(messages: ChatMsg[], userId: string): Promise<PdfAttachment | null> {
   const lastUser = [...messages].reverse().find((m) => m?.role === "user");
   if (!lastUser) return null;
 
@@ -95,6 +105,24 @@ function extractPdfAttachment(messages: ChatMsg[]): PdfAttachment | null {
       part.data || part.url || part.base64 || part.file?.data || part.file?.url || part.file?.base64 || "";
     if (!rawData || typeof rawData !== "string") continue;
 
+    // ── modern flow: client-uploaded R2 reference ──
+    if (rawData.startsWith("r2://")) {
+      if (!rawData.startsWith(R2_REF_PREFIX(userId))) {
+        log.warn("Rejected cross-user chat attachment reference", { userId });
+        continue;
+      }
+      try {
+        const key = rawData.slice("r2://".length);
+        const bytes = await downloadR2ObjectToBuffer(key);
+        if (bytes.length === 0 || bytes.length > MAX_PDF_BYTES) continue;
+        if (bytes.subarray(0, 4).toString("latin1") !== "%PDF") continue; // sniff magic
+        return { fileName: fileName || "file.pdf", bytes, r2Key: key };
+      } catch {
+        continue;
+      }
+    }
+
+    // ── legacy flow: inline base64 data URL ──
     const b64 = rawData.includes(",") ? rawData.split(",")[1] : rawData;
     try {
       const bytes = Buffer.from(b64, "base64");
@@ -187,23 +215,29 @@ export async function handleChatFileFlow(args: {
 }): Promise<boolean> {
   const { userId, threadId, messages, res } = args;
 
-  const attachment = extractPdfAttachment(messages);
+  const attachment = await extractPdfAttachment(messages, userId);
   const pendingRaw = await redis.get(PENDING_KEY(userId));
   const pending: PendingFile | null = pendingRaw ? JSON.parse(pendingRaw) : null;
   const userText = lastUserText(messages);
 
   // ── case 1: new PDF attached — supersedes any stale pending decision ──
   if (attachment) {
-    // a fresh upload supersedes any stale pending file
-    if (pending) {
-      await deleteR2ObjectsByPrefix(`pending/${userId}/`).catch(() => {});
-    }
+    let r2Key: string;
+    if (attachment.r2Key) {
+      // Modern flow — the client already staged it under chat-attachments/.
+      r2Key = attachment.r2Key;
+    } else {
+      // Legacy inline-base64 flow — stage it now.
+      if (pending) {
+        await deleteR2ObjectsByPrefix(`pending/${userId}/`).catch(() => {});
+      }
 
-    const r2Key = `pending/${userId}/${crypto.randomUUID()}.pdf`;
-    const uploaded = await uploadR2Object(r2Key, attachment.bytes, "application/pdf");
-    if (!uploaded) {
-      log.warn("Failed to stage chat PDF", { userId });
-      return false; // fall through to normal chat (bot can't decide flow)
+      r2Key = `pending/${userId}/${crypto.randomUUID()}.pdf`;
+      const uploaded = await uploadR2Object(r2Key, attachment.bytes, "application/pdf");
+      if (!uploaded) {
+        log.warn("Failed to stage chat PDF", { userId });
+        return false; // fall through to normal chat (bot can't decide flow)
+      }
     }
 
     const next: PendingFile = { r2Key, fileName: attachment.fileName, createdAt: Date.now() };

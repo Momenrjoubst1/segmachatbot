@@ -177,6 +177,7 @@ export async function generateAndStreamResponse(
               session_id: activeThreadId,
               role: "assistant",
               content: safeResponseText,
+              model: currentModelName,
             },
           ]);
         if (astErr)

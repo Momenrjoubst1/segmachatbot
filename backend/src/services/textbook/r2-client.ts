@@ -120,6 +120,26 @@ export async function uploadR2ObjectFromFile(
 }
 
 /**
+ * Signed GET of an R2 object as a web stream — pipe large files (source
+ * PDFs) straight to the HTTP response without buffering them in memory.
+ * Returns null when R2 is unconfigured or the object is missing.
+ */
+export async function getR2ObjectWebStream(
+  key: string
+): Promise<ReadableStream<Uint8Array> | null> {
+  const client = r2Client();
+  if (!client || !_bucket) return null;
+
+  try {
+    const response = await client.send(new GetObjectCommand({ Bucket: _bucket, Key: key }));
+    if (!response.Body) return null;
+    return response.Body.transformToWebStream() as unknown as ReadableStream<Uint8Array>;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Streaming download of an R2 object to a local file.
  * Returns the number of bytes written; throws on failure.
  */

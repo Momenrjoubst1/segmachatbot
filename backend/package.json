@@ -32,6 +32,7 @@
     "ioredis": "^5.10.1",
     "js-tiktoken": "^1.0.21",
     "mathjs": "^15.2.0",
+    "msedge-tts": "^2.0.7",
     "multer": "^2.2.0",
     "nodemailer": "^9.0.5",
     "pdf-parse": "^2.4.5",

@@ -4,6 +4,7 @@ import { chatLimiter, newChatLimiter, isThreadOwnedByUser } from "./chat/chat-sh
 import { executeChatPipeline } from "../services/chat/chat.pipeline.js";
 import chatThreadRoutes from "./chat/chat-thread.routes.js";
 import chatTranslateRoutes from "./chat/chat-translate.routes.js";
+import chatAttachmentRoutes from "./chat/chat-attachment.routes.js";
 
 const router = Router();
 
@@ -33,5 +34,6 @@ router.post(
 
 router.use(chatThreadRoutes);
 router.use(chatTranslateRoutes);
+router.use(chatAttachmentRoutes);
 
 export default router;

@@ -9,3 +9,22 @@ export const feedbackSchema = z.object({
 });
 
 export type FeedbackInput = z.infer<typeof feedbackSchema>;
+
+// ── Message-level feedback (thumbs up/down on assistant messages) ─────────
+// reasonCategory/comment only accompany dislikes; stripped server-side for likes.
+export const FEEDBACK_REASON_CATEGORIES = [
+  'inaccurate',
+  'harmful',
+  'not_helpful',
+  'off_topic',
+  'other',
+] as const;
+
+export const messageFeedbackSchema = z.object({
+  messageId: z.string().uuid(),
+  isPositive: z.boolean(),
+  reasonCategory: z.enum(FEEDBACK_REASON_CATEGORIES).optional(),
+  comment: z.string().trim().max(2000).optional(),
+});
+
+export type MessageFeedbackInput = z.infer<typeof messageFeedbackSchema>;

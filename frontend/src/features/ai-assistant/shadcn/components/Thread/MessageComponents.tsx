@@ -44,6 +44,13 @@ import {
 import { LexicalComposerInput } from "@assistant-ui/react-lexical";
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChatHistory } from "@/hooks/useChatHistory";
+import {
+  useMessageFeedback,
+  type DislikeMeta,
+  type FeedbackValue,
+} from "../../../ui/feedback-store";
+import { DislikeFeedbackDialog } from "../../../ui/feedback-dislike-dialog";
+import { useGuestMode } from "@/context/GuestModeContext";
 import { type DirectiveChipProps } from "@assistant-ui/react-lexical";
 import { WrenchIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -241,11 +248,63 @@ const ActionBarButton: FC<{ tooltip: string; className?: string; onClick?: () =>
 const AssistantActionBar: FC = () => {
   const { disable3D, toggle3D } = useAssistantSettings();
   const { t } = useTranslation();
+  const { isGuestMode } = useGuestMode();
   const isCopied = useAuiState((s) => s.message.isCopied);
-  const isPositive = useAuiState((s) => Boolean((s.message as { feedback?: { isPositive?: boolean } }).feedback?.isPositive));
-  const isNegative = useAuiState((s) => Boolean((s.message as { feedback?: { isNegative?: boolean } }).feedback?.isNegative));
+  const messageId = useAuiState((s) => s.message.id);
+  const { activeThreadMessages, upsertMessage } = useChatHistory();
+  const overrides = useMessageFeedback((s) => s.overrides);
+  const submitFeedback = useMessageFeedback((s) => s.submitFeedback);
+  const [dislikeOpen, setDislikeOpen] = useState(false);
+
+  // Displayed value = optimistic override (if any), else the DB rating that
+  // arrived with the loaded messages. `none` in the map means explicitly removed.
+  const chatMessage = activeThreadMessages?.find((m) => m.id === messageId);
+  const dbValue: FeedbackValue =
+    chatMessage?.feedback === 1 ? "like" : chatMessage?.feedback === -1 ? "dislike" : "none";
+  const current: FeedbackValue = (messageId && overrides[messageId]) || dbValue;
+  const isPositive = current === "like";
+  const isNegative = current === "dislike";
+
+  // Mirror confirmed ratings into the messages cache so thread switches
+  // and reloads keep the icons consistent.
+  const syncToCache = useCallback(
+    (value: number | null) => {
+      if (!messageId || !activeThreadMessages?.some((m) => m.id === messageId)) return;
+      upsertMessage(messageId, (m) => ({ ...m, feedback: value }));
+    },
+    [activeThreadMessages, messageId, upsertMessage],
+  );
+
+  const handlePositive = useCallback(() => {
+    if (!messageId) return;
+    void submitFeedback({
+      messageId,
+      current,
+      next: isPositive ? "none" : "like",
+      onSynced: syncToCache,
+    });
+  }, [submitFeedback, messageId, current, isPositive, syncToCache]);
+
+  const handleNegative = useCallback(() => {
+    if (!messageId) return;
+    // Already disliked → same-type click toggles it off; otherwise ask why.
+    if (isNegative) {
+      void submitFeedback({ messageId, current, next: "none", onSynced: syncToCache });
+      return;
+    }
+    setDislikeOpen(true);
+  }, [submitFeedback, messageId, current, isNegative, syncToCache]);
+
+  const handleDislikeConfirm = useCallback(
+    (meta: DislikeMeta) => {
+      setDislikeOpen(false);
+      void submitFeedback({ messageId, current, next: "dislike", meta, onSynced: syncToCache });
+    },
+    [submitFeedback, messageId, current, syncToCache],
+  );
 
   return (
+    <>
     <ActionBarPrimitive.Root
       hideWhenRunning
       className="message-action-bar aui-assistant-action-bar-root col-start-3 row-start-2 -ml-1 flex gap-1 text-muted-foreground"
@@ -278,26 +337,34 @@ const AssistantActionBar: FC = () => {
           <TooltipContent side="bottom">Retry</TooltipContent>
         </Tooltip>
       </ActionBarPrimitive.Reload>
-      <ActionBarPrimitive.FeedbackPositive asChild>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors">
-              <ThumbsUpIcon className={cn("size-4", isPositive && "fill-current")} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">Helpful</TooltipContent>
-        </Tooltip>
-      </ActionBarPrimitive.FeedbackPositive>
-      <ActionBarPrimitive.FeedbackNegative asChild>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors">
-              <ThumbsDownIcon className={cn("size-4", isNegative && "fill-current")} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">Not helpful</TooltipContent>
-        </Tooltip>
-      </ActionBarPrimitive.FeedbackNegative>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={handlePositive}
+            disabled={isGuestMode || !messageId}
+            aria-pressed={isPositive}
+            className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+          >
+            <ThumbsUpIcon className={cn("size-4", isPositive && "fill-current")} />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">{t("chat:feedback.helpful")}</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={handleNegative}
+            disabled={isGuestMode || !messageId}
+            aria-pressed={isNegative}
+            className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+          >
+            <ThumbsDownIcon className={cn("size-4", isNegative && "fill-current")} />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">{t("chat:feedback.notHelpful")}</TooltipContent>
+      </Tooltip>
       <ActionBarMorePrimitive.Root>
         <ActionBarMorePrimitive.Trigger asChild>
           <ActionBarButton tooltip="More" className="data-[state=open]:bg-accent">
@@ -319,6 +386,15 @@ const AssistantActionBar: FC = () => {
       </ActionBarMorePrimitive.Root>
       <MessageTiming />
     </ActionBarPrimitive.Root>
+      {/* Rendered outside ActionBarPrimitive.Root — the bar unmounts while a
+          run is active, and the dialog must not. */}
+      <DislikeFeedbackDialog
+        open={dislikeOpen}
+        messageId={messageId}
+        onConfirm={handleDislikeConfirm}
+        onOpenChange={setDislikeOpen}
+      />
+    </>
   );
 };
 

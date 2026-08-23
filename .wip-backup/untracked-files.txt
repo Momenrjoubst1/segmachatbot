@@ -1,0 +1,10 @@
+.wip-backup/
+backend/scripts/deepgram-probe.mts
+backend/scripts/r2-purge.mts
+backend/scripts/stt-dump.mts
+backend/src/__tests__/feedback-routes.test.ts
+docs/plans/voice-dictation-feature.md
+frontend/src/__tests__/task-types.test.ts
+frontend/src/features/ai-assistant/ui/feedback-dislike-dialog.tsx
+frontend/src/features/ai-assistant/ui/feedback-store.ts
+migrations/028_message_feedback.sql

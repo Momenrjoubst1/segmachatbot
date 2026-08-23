@@ -2,7 +2,8 @@ import express from 'express';
 import { z } from 'zod';
 import { supabase } from '../services/supabase.service.js';
 import { asyncHandler } from '../utils/express-async-wrapper.js';
-import { feedbackSchema } from '../validators/feedback-validation.js';
+import { feedbackSchema, messageFeedbackSchema } from '../validators/feedback-validation.js';
+import { feedbackLimiter } from '../middleware/rate-limiters.js';
 import { log } from '../utils/logger.js';
 
 const router = express.Router();
@@ -38,16 +39,22 @@ router.post('/', asyncHandler(async (req, res) => {
 }));
 
 // ── Message-level feedback (thumbs up/down on assistant messages) ──────────
-// Writes to chat_messages.feedback (SMALLINT: 1 = positive, -1 = negative).
-// Ownership is enforced by joining through chat_sessions.user_id — a user
-// can only rate messages inside their own threads.
-const messageFeedbackSchema = z.object({
-  messageId: z.string().uuid(),
-  isPositive: z.boolean(),
-});
+// Source of truth is the message_feedback table (migration 028); the legacy
+// chat_messages.feedback SMALLINT column is kept in sync for compatibility.
+//
+// Semantics:
+//   - First rating           → INSERT   { action: 'created' }
+//   - Rating switched        → UPDATE   { action: 'updated' }
+//   - Same type re-submitted → DELETE   { action: 'removed' }  (toggle off)
+//
+// Ownership is enforced by joining through chat_sessions.user_id — a user can
+// only rate messages inside their own threads. Snapshots of the rated exchange
+// are captured server-side at rating time; clients never supply them.
+const SNAPSHOT_MAX_LENGTH = 8000;
 
 router.post(
   '/message',
+  feedbackLimiter,
   asyncHandler(async (req, res) => {
     const userId = req.user?.id;
     if (!userId) {
@@ -61,13 +68,20 @@ router.post(
       return;
     }
 
-    const { messageId, isPositive } = parsed.data;
+    const { messageId, isPositive, reasonCategory, comment } = parsed.data;
+    const feedbackType = isPositive ? 'like' : 'dislike';
+    // Reason/comment only apply to dislikes — strip them when switching to a like.
+    const dislikeMeta = isPositive
+      ? { reason_category: null, comment: null }
+      : { reason_category: reasonCategory ?? null, comment: comment ?? null };
 
-    // Update only if the message belongs to a session owned by this user.
-    const { data: owned, error: ownershipError } = await supabase
+    // Ownership + snapshot source: fetch the rated message directly with its
+    // session owner. Non-assistant messages are not rateable.
+    const { data: messageRow, error: ownershipError } = await supabase
       .from('chat_messages')
-      .select('id, chat_sessions!inner(user_id)')
+      .select('id, session_id, content, model, created_at, chat_sessions!inner(user_id)')
       .eq('id', messageId)
+      .eq('role', 'assistant')
       .eq('chat_sessions.user_id', userId)
       .maybeSingle();
 
@@ -76,62 +90,124 @@ router.post(
       res.status(500).json({ error: 'Internal error' });
       return;
     }
-    if (!owned) {
+    if (!messageRow) {
       res.status(404).json({ error: 'Message not found' });
       return;
     }
 
-    const { error: updateError } = await supabase
-      .from('chat_messages')
-      .update({ feedback: isPositive ? 1 : -1 })
-      .eq('id', messageId);
+    const responseSnapshot = messageRow.content.slice(0, SNAPSHOT_MAX_LENGTH);
+    const modelVersion = messageRow.model || 'unknown';
 
-    if (updateError) {
-      log.error('Message feedback update failed', { error: updateError.message });
+    // Existing rating (for toggle detection) and the prompt snapshot (the user
+    // question that preceded this answer) are independent — fetch in parallel.
+    const [existingResult, promptResult] = await Promise.all([
+      supabase
+        .from('message_feedback')
+        .select('id, feedback_type')
+        .eq('message_id', messageId)
+        .eq('user_id', userId)
+        .maybeSingle(),
+      supabase
+        .from('chat_messages')
+        .select('content')
+        .eq('session_id', messageRow.session_id)
+        .eq('role', 'user')
+        .lt('created_at', messageRow.created_at)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    if (existingResult.error) {
+      log.error('Message feedback lookup failed', { error: existingResult.error.message });
+      res.status(500).json({ error: 'Internal error' });
+      return;
+    }
+
+    const existing = existingResult.data as { id: string; feedback_type: string } | null;
+    const promptSnapshot = promptResult.data?.content
+      ? promptResult.data.content.slice(0, SNAPSHOT_MAX_LENGTH)
+      : null;
+
+    // Same type re-submitted → the active button was clicked again: remove.
+    if (existing && existing.feedback_type === feedbackType) {
+      const [deleteResult, syncResult] = await Promise.all([
+        supabase.from('message_feedback').delete().eq('id', existing.id),
+        supabase.from('chat_messages').update({ feedback: null }).eq('id', messageId),
+      ]);
+      if (deleteResult.error) {
+        log.error('Message feedback delete failed', { error: deleteResult.error.message });
+        res.status(500).json({ error: 'Failed to save feedback' });
+        return;
+      }
+      if (syncResult.error) {
+        log.error('Legacy feedback column sync failed', { error: syncResult.error.message });
+      }
+      res.json({ success: true, action: 'removed', feedback: null });
+      return;
+    }
+
+    let saveError: { message: string } | null;
+    if (existing) {
+      ({ error: saveError } = await supabase
+        .from('message_feedback')
+        .update({
+          feedback_type: feedbackType,
+          ...dislikeMeta,
+          prompt_snapshot: promptSnapshot,
+          response_snapshot: responseSnapshot,
+          model_version: modelVersion,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id));
+    } else {
+      ({ error: saveError } = await supabase.from('message_feedback').insert({
+        conversation_id: messageRow.session_id,
+        message_id: messageId,
+        user_id: userId,
+        feedback_type: feedbackType,
+        ...dislikeMeta,
+        prompt_snapshot: promptSnapshot,
+        response_snapshot: responseSnapshot,
+        model_version: modelVersion,
+      }));
+    }
+
+    if (saveError) {
+      log.error('Message feedback save failed', { error: saveError.message });
       res.status(500).json({ error: 'Failed to save feedback' });
       return;
     }
 
+    // Legacy column sync — best-effort, never fails the request.
+    const { error: syncError } = await supabase
+      .from('chat_messages')
+      .update({ feedback: isPositive ? 1 : -1 })
+      .eq('id', messageId);
+    if (syncError) {
+      log.error('Legacy feedback column sync failed', { error: syncError.message });
+    }
+
     // ── Retrieval feedback loop: negative feedback → log miss ──────────────
-    if (!isPositive) {
+    if (!isPositive && promptSnapshot !== null) {
       try {
-        // Get the session + timestamp for this message to find the preceding user query
-        const { data: msgRow } = await supabase
-          .from('chat_messages')
-          .select('session_id, created_at')
-          .eq('id', messageId)
-          .maybeSingle();
-
-        if (msgRow?.session_id) {
-          // Get the last user message BEFORE the rated assistant message —
-          // not before "now", or a newer question would be misattributed
-          // when the user keeps chatting and rates an older answer later.
-          const { data: lastUserMsg } = await supabase
-            .from('chat_messages')
-            .select('content')
-            .eq('session_id', msgRow.session_id)
-            .eq('role', 'user')
-            .lt('created_at', msgRow.created_at)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          if (lastUserMsg?.content) {
-            await supabase.from('retrieval_feedback').insert({
-              user_id: userId,
-              query_text: lastUserMsg.content.slice(0, 2000),
-              chunks_retrieved: 0,
-              user_satisfied: false,
-            });
-          }
-        }
+        await supabase.from('retrieval_feedback').insert({
+          user_id: userId,
+          query_text: promptSnapshot.slice(0, 2000),
+          chunks_retrieved: 0,
+          user_satisfied: false,
+        });
       } catch (err) {
         // Silent — retrieval feedback failure must never break the main flow
         log.error('Retrieval feedback insert failed (passive)', { error: (err as Error).message });
       }
     }
 
-    res.json({ success: true });
+    res.json({
+      success: true,
+      action: existing ? 'updated' : 'created',
+      feedback: isPositive ? 1 : -1,
+    });
   }),
 );
 

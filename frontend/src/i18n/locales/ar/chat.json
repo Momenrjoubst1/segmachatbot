@@ -259,5 +259,18 @@
   "photo.openPreview": "معاينة الصورة",
   "voice.start": "تحدث الآن (إملاء صوتي)",
   "voice.stop": "إيقاف الإملاء",
-  "voice.micDenied": "تم رفض الوصول للميكروفون. اسمح به من إعدادات الموقع في المتصفح ثم أعد المحاولة."
+  "voice.micDenied": "تم رفض الوصول للميكروفون. اسمح به من إعدادات الموقع في المتصفح ثم أعد المحاولة.",
+  "feedback.helpful": "إجابة مفيدة",
+  "feedback.notHelpful": "إجابة غير مفيدة",
+  "feedback.dislikeTitle": "ما الذي لم يعجبك؟",
+  "feedback.dislikeDescription": "تساعدنا ملاحظاتك في تحسين الإجابات. إضافة السبب اختيارية.",
+  "feedback.reason.inaccurate": "غير دقيقة",
+  "feedback.reason.not_helpful": "غير مفيدة",
+  "feedback.reason.off_topic": "خارج الموضوع",
+  "feedback.reason.harmful": "ضارة",
+  "feedback.reason.other": "أخرى",
+  "feedback.commentPlaceholder": "أخبرنا بالمزيد (اختياري)",
+  "feedback.submit": "إرسال",
+  "feedback.cancel": "إلغاء",
+  "feedback.saveFailed": "تعذّر حفظ الملاحظات. حاول مرة أخرى."
 }
