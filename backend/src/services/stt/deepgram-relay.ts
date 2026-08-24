@@ -106,6 +106,8 @@ export class SttRelaySession {
   private bytesForwarded = 0;
   private deepgramReady = false;
   private pendingAudio: Buffer[] = [];
+  private dgResultsCount = 0;
+  private lastStatsSentAt = 0;
   private static readonly MAX_PENDING_BYTES = 5 * 1024 * 1024;
 
   constructor(userId: string, clientWs: WebSocket, sampleRateHint: number, events: RelaySessionEvents) {
@@ -224,9 +226,24 @@ export class SttRelaySession {
           channel?: { alternatives?: Array<{ transcript?: string }> };
         };
         if (msg.type !== "Results") return;
+        this.dgResultsCount += 1;
         const transcript =
           msg.channel?.alternatives?.[0]?.transcript?.trim() ?? "";
-        if (!transcript) return;
+        if (!transcript) {
+          // Deepgram heard the stream but recognized no speech — surface a
+          // periodic heartbeat so clients can distinguish "no audio" from
+          // "audio present but untranscribable".
+          const now = Date.now();
+          if (now - this.lastStatsSentAt > 2000 && this.clientWs.readyState === WebSocket.OPEN) {
+            this.lastStatsSentAt = now;
+            this.clientWs.send(JSON.stringify({
+              type: "dg_stats",
+              results: this.dgResultsCount,
+              bytesForwarded: this.bytesForwarded,
+            }));
+          }
+          return;
+        }
         events.onText(msg.is_final ? "final" : "partial", transcript);
         if (!this.closed && this.clientWs.readyState === WebSocket.OPEN) {
           this.clientWs.send(JSON.stringify({ type: msg.is_final ? "final" : "partial", text: transcript }));

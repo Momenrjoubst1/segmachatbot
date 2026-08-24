@@ -271,7 +271,11 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
         optsRef.current.writeToComposer(turnTextRef.current);
       },
       onRms: (rms) => handleRmsRef.current(rms),
-      onEvent: () => {},
+      // Full relay visibility in the ?voiceDebug=1 overlay: ready/partial/
+      // final/ws_close/mic_config — pinpoints the broken hop in one test.
+      onEvent: (evt) => {
+        voiceDebugBus.event(`relay_${evt.kind}`, evt.detail);
+      },
     });
     controllerRef.current = controller;
     await controller.start();

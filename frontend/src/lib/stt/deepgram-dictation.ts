@@ -163,6 +163,11 @@ export class DictationController {
       // nothing. Must arrive before the first binary frame.
       const nativeRate = ctx.sampleRate;
       const outputRate = nativeRate >= 16000 ? 16000 : Math.round(nativeRate);
+      const trackLabel = this.mediaStream?.getAudioTracks()[0]?.label ?? "unknown-device";
+      this.callbacks.onEvent?.({
+        kind: "mic_config",
+        detail: `${trackLabel} native=${nativeRate} -> wire=${outputRate}`,
+      });
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "config", sampleRate: outputRate }));
       }
