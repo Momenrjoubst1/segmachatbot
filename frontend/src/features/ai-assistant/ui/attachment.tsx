@@ -91,7 +91,7 @@ function formatFileSize(bytes: number): string {
 
 let validationObserverInstalled = false;
 
-function installFileInputValidation() {
+export function installFileInputValidation() {
   if (validationObserverInstalled || typeof document === "undefined") return;
   validationObserverInstalled = true;
 

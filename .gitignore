@@ -27,3 +27,6 @@ pdf-processor/venv/
 # local tooling state
 .opencode/
 .freebuff/
+backend/.env-fix.py
+backend/.env-fix.py.disabled
+backend/.env-tmp.py

@@ -4,7 +4,6 @@ import {
   ComposerAttachments,
 } from "../../../ui/attachment";
 import { MicButton } from "../../../ui/MicButton";
-import { VoiceAmbienceLayer } from "../../../ui/VoiceAmbienceLayer";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ComposerTriggerPopover } from "../../../ui/composer-trigger-popover";
@@ -30,10 +29,6 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useSendState } from "@/context/SendStateContext";
 import { ComposerStatus } from "../../../ui/bot-activity/components/ComposerStatus";
-import {
-  VoiceDebugOverlay,
-  VOICE_DEBUG_PARAM,
-} from "../../../ui/VoiceDebugOverlay";
 import { PROMPT_TEMPLATES } from "../../../config/prompt-templates";
 
 /**
@@ -141,7 +136,6 @@ export const ThreadComposer: FC = () => {
   const { limitReached } = useGuestMode();
   const mention = useUnstableMentionAdapter({ fallbackIcon: WrenchIcon });
   const isThreadEmpty = useAuiState((s) => s.thread.isEmpty);
-  void VOICE_DEBUG_PARAM;
 
   // ── "/" prompt templates (Claude-style) ────────────────────────────────
   // Type "/" in the composer → pick a template → its prompt fills the box.
@@ -245,8 +239,7 @@ export const ThreadComposer: FC = () => {
             className="relative flex w-full flex-col gap-2 rounded-3xl border border-[#EBE5DF] bg-white p-2.5 text-[#2C2825] shadow-sm transition-[shadow,background-color] hover:bg-[#F9F6F0] focus-within:bg-white focus-within:border-[#2C2825]/60 focus-within:ring-2 focus-within:ring-[#2C2825]/10 data-[dragging=true]:border-[#2C2825]/60 data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50"
             style={{ marginBottom: "var(--composer-keyboard-offset, 0px)" }}
           >
-            {/* Audio-reactive glow (live voice mode) — sits behind content */}
-            <VoiceAmbienceLayer />
+            {/* Audio-reactive visuals live inside the VoiceOverlay (Claude-style) */}
             <ComposerQuotePreview />
             <ComposerAttachments />
             <div dir="auto" className="contents">
@@ -279,7 +272,6 @@ export const ThreadComposer: FC = () => {
             {t("composerDisclaimer")}
           </p>
         )}
-        {VOICE_DEBUG_PARAM.enabled && <VoiceDebugOverlay />}
       </ComposerPrimitive.Root>
     </ComposerPrimitive.Unstable_TriggerPopoverRoot>
   );
