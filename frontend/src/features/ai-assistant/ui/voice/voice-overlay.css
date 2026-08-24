@@ -305,6 +305,56 @@
   background: #ef444426;
 }
 
+/* ─── Typed follow-up row ────────────────────────────────────────────── */
+
+.vo-type-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 92%;
+  max-width: 440px;
+}
+
+.vo-type-input {
+  flex: 1;
+  height: 42px;
+  padding: 0 1rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  color: var(--foreground, inherit);
+  background: var(--muted, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  outline: none;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.dark .vo-type-input {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.vo-type-input:focus {
+  border-color: rgb(var(--vo-rgb) / 0.45);
+  background: transparent;
+}
+
+.vo-type-input::placeholder {
+  color: var(--muted-foreground, #999);
+  opacity: 0.7;
+}
+
+.vo-type-send {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+}
+
+.vo-type-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
 /* ─── Persona picker ─────────────────────────────────────────────────── */
 
 .vo-persona-row {

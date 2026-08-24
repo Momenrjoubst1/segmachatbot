@@ -17,12 +17,13 @@
 
 import "./voice-overlay.css";
 
-import { type FC, useMemo } from "react";
+import { type FC, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   MicIcon,
   MicOffIcon,
   PhoneOffIcon,
+  SendHorizontalIcon,
 } from "lucide-react";
 import {
   Dialog,
@@ -54,6 +55,14 @@ interface SpeakToChatController {
   stop: () => void;
   interimText: string;
   setPersona: (personaId: string) => void;
+  /**
+   * Type into the composer WITHOUT leaving the overlay (Claude-style typed
+   * follow-up). The text replaces the composer content; the caller submits
+   * the composer form itself.
+   */
+  typeText?: (text: string) => void;
+  /** Submit the composer form (sends whatever is in the box). */
+  submitComposer?: () => void;
 }
 
 interface PersonaInfo {
@@ -70,6 +79,8 @@ interface VoiceOverlayProps {
   s2c: SpeakToChatController;
   /** Optional persona catalog for the picker. */
   personas?: PersonaInfo[];
+  /** Currently selected persona id (drives the radio checked state). */
+  activePersonaId?: string;
 }
 
 const STATE_TO_OVERLAY: Record<string, VoiceOverlayState> = {
@@ -85,9 +96,11 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({
   onOpenChange,
   s2c,
   personas = [],
+  activePersonaId,
 }) => {
   const { t, i18n } = useTranslation("chat");
   const isAr = i18n.language?.startsWith("ar");
+  const [typedText, setTypedText] = useState("");
 
   const overlayState =
     STATE_TO_OVERLAY[s2c.state] ?? ("connecting" as VoiceOverlayState);
@@ -164,6 +177,44 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({
               </p>
             )}
 
+            {/* Typed follow-up — Claude-style: write without leaving voice */}
+            <form
+              className="vo-type-row"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const text = typedText.trim();
+                if (!text || !s2c.typeText || !s2c.submitComposer) return;
+                s2c.typeText(text);
+                setTypedText("");
+                // One frame for Lexical to apply setText before submit.
+                window.setTimeout(() => s2c.submitComposer?.(), 120);
+              }}
+            >
+              <input
+                type="text"
+                dir="auto"
+                value={typedText}
+                onChange={(e) => setTypedText(e.target.value)}
+                placeholder={t("voice.type_followup", {
+                  defaultValue: "…أو اكتب سؤالك هنا",
+                })}
+                aria-label={t("voice.type_followup", {
+                  defaultValue: "Type a follow-up",
+                })}
+                data-testid="overlay-text-input"
+                className="vo-type-input"
+              />
+              <button
+                type="submit"
+                disabled={!typedText.trim()}
+                aria-label={t("sendMessage", { defaultValue: "Send" })}
+                data-testid="overlay-send-button"
+                className="vo-control-btn vo-type-send"
+              >
+                <SendHorizontalIcon className="size-4" />
+              </button>
+            </form>
+
             {/* Persona picker */}
             {personas.length > 1 && (
               <div
@@ -178,7 +229,7 @@ export const VoiceOverlay: FC<VoiceOverlayProps> = ({
                     key={p.id}
                     type="button"
                     role="radio"
-                    aria-checked={false}
+                    aria-checked={p.id === activePersonaId}
                     onClick={() => s2c.setPersona(p.id)}
                     className="vo-persona-chip"
                   >

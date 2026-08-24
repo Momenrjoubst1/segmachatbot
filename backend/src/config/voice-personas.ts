@@ -59,10 +59,11 @@ const ENV_PRIMARY = process.env.ELEVENLABS_VOICE_ID?.trim() ?? "";
 const ENV_ALT = process.env.ELEVENLABS_VOICE_ID_ALT?.trim() ?? "";
 
 const ELEVENLABS_VOICES = {
-  /** Primary — the project default (Arabic by convention). */
-  primary: ENV_PRIMARY,
-  /** Alternate — typically the English voice. */
-  alt: ENV_ALT,
+  /** Primary — Bella, soft warm female. Verified working on the FREE plan
+   *  via API with Arabic through eleven_flash_v2_5 (2026-08-24). */
+  primary: ENV_PRIMARY || "EXAVITQu4vr4xnSDxMaL",
+  /** Alternate — Adam, deep narrative male. Free-plan verified. */
+  alt: ENV_ALT || "pNInz6obpgDQGcFmaJgB",
 } as const;
 
 export const VOICE_PERSONAS: VoicePersona[] = [
@@ -121,16 +122,16 @@ export const VOICE_PERSONAS: VoicePersona[] = [
     language: "ar",
   },
 
-  // ─── English (uses ELEVENLABS_VOICE_ID_ALT) ─────────────────────
+  // ─── English (uses Adam — free-plan verified) ──────────────────
   {
     id: "english-alt",
     nameAr: "إنجليزي",
     nameEn: "English",
-    descAr: "مساعد بالإنجليزية بصوت ELEVENLABS_VOICE_ID_ALT",
-    descEn: "English assistant using ELEVENLABS_VOICE_ID_ALT",
-    edgeVoice: "en-US-AriaNeural",
+    descAr: "مساعد بالإنجليزية بصوت Adam العميق",
+    descEn: "English assistant with Adam's deep voice",
+    edgeVoice: "en-US-GuyNeural",
     locale: "en-US",
-    gender: "female",
+    gender: "male",
     rate: "+0%",
     elevenLabsVoiceId: ELEVENLABS_VOICES.alt || undefined,
     language: "en",

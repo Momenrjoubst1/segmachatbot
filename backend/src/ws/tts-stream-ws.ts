@@ -158,6 +158,10 @@ function handleTtsUpgrade(
         // First message MUST contain xi_api_key + voice settings.
         // ElevenLabs will then start streaming audio back as we send text.
         const initMsg = {
+          // BOM space is REQUIRED: without a `text` field ElevenLabs treats
+          // the first frame as an empty turn and immediately closes with
+          // {"audio":null,"isFinal":true} (verified 2026-08-24).
+          text: " ",
           xi_api_key: apiKey,
           voice_settings: {
             stability: 0.5,
@@ -165,14 +169,7 @@ function handleTtsUpgrade(
             style: 0.0,
             use_speaker_boost: true,
           },
-          generation_config: relayCfg.autoMode
-            ? { auto_mode: true }
-            : { chunk_length_schedule: relayCfg.chunkSchedule },
-          // Language hint: when the persona carries an Arabic locale we send
-          // "ar"; otherwise let ElevenLabs auto-detect.
-          ...(relayCfg.model.includes("flash") || relayCfg.model.includes("multilingual")
-            ? {}
-            : {}),
+          generation_config: { chunk_length_schedule: relayCfg.chunkSchedule },
         };
         try {
           ws.send(JSON.stringify(initMsg));
@@ -209,33 +206,44 @@ function handleTtsUpgrade(
 
       ws.on("message", (data: unknown, isBinary: boolean) => {
         if (closed) return;
-        if (isBinary) {
-          // MP3 chunk — forward verbatim to the client.
-          try {
-            if (clientWs.readyState === WebSocket.OPEN) {
-              clientWs.send(data as ArrayBuffer);
-            }
-          } catch { /* noop */ }
-          return;
-        }
-        // JSON event from ElevenLabs (mostly `{"audio":"<base64>",...}` in the
-        // older HTTP-streaming API, or `alignment` / `error` events here).
-        // Our WebSocket path uses binary chunks, so JSON here is rare.
+        // ElevenLabs stream-input returns audio as JSON frames shaped
+        // {"audio": "<base64 mp3>", "alignment": {...}, ...} — NOT binary
+        // frames. Decode and re-forward as binary MP3 to the browser so the
+        // client stays a dumb byte pipe.
         try {
-          const evt = JSON.parse(String(data)) as { type?: string; error?: string; message?: string };
-          if (evt.error || evt.type === "error") {
-            log.warn("TTS upstream error event", { err: String(evt.error ?? evt.message) });
+          const raw = typeof data === "string" ? data : String(data as Buffer);
+          const evt = JSON.parse(raw) as {
+            audio?: string;
+            error?: string;
+            message?: string;
+            detail?: string | { status?: string; message?: string };
+          };
+          if (evt.audio) {
+            const buf = Buffer.from(evt.audio, "base64");
+            if (buf.length > 0 && clientWs.readyState === WebSocket.OPEN) {
+              clientWs.send(buf);
+            }
+            return;
+          }
+          const detailStatus =
+            typeof evt.detail === "object" && evt.detail !== null ? evt.detail.status : undefined;
+          if (evt.error || detailStatus === "invalid_api_key") {
+            log.warn("TTS upstream error event", { err: String(evt.error ?? detailStatus ?? "") });
             try {
               clientWs.send(
-                JSON.stringify({ type: "error", message: String(evt.error ?? evt.message ?? "upstream_error") }),
+                JSON.stringify({ type: "error", message: String(evt.error ?? evt.detail ?? "upstream_error") }),
               );
             } catch { /* noop */ }
             cleanup(1011, "upstream_error");
             return;
           }
-          // Non-error events (e.g. alignment) are intentionally not forwarded
-          // to keep the wire protocol minimal.
-        } catch { /* ignore malformed JSON */ }
+          // Alignment / metadata-only frames: intentionally not forwarded.
+        } catch {
+          // Binary frame (defensive: some formats emit binary) — forward verbatim.
+          if (isBinary && clientWs.readyState === WebSocket.OPEN) {
+            try { clientWs.send(data as Buffer); } catch { /* noop */ }
+          }
+        }
       });
 
       ws.on("close", (ev: { code: number; reason: string }) => {

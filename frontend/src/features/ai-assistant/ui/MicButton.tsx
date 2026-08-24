@@ -12,6 +12,8 @@ import { useChatModel } from "../context/ChatModelContext";
 import type { KnownModelId } from "../model-catalog";
 import { useDictation } from "@/hooks/useDictation";
 import { useSpeakToChat } from "@/hooks/useSpeakToChat";
+import { useVoiceHotkey } from "@/hooks/useVoiceHotkey";
+import { fetchVoicePersonas, type VoicePersonaInfo } from "@/lib/tts/tts-client";
 import { voiceDebugBus } from "@/lib/stt/voice-debug-bus";
 import { voiceSoundEffects } from "@/lib/audio/voice-sound-effects";
 import { VoiceSessionPanel } from "./VoiceSessionPanel";
@@ -153,6 +155,42 @@ export const MicButton: FC<MicButtonProps> = ({
   // speak-to-chat session is starting. It auto-closes on stop.
   const [overlayOpen, setOverlayOpen] = useState(false);
 
+  // ---- Live-voice toggle (shared by button click + keyboard hotkey) -------
+  // Defined BEFORE the guest-mode early-return below because hooks must not
+  // sit behind conditional returns.
+  const toggleLiveVoice = useCallback(() => {
+    if (s2cActive) {
+      voiceSoundEffects.playDeactivate();
+      s2c.stop();
+      setOverlayOpen(false);
+      return;
+    }
+    voiceSoundEffects.playActivate();
+    setOverlayOpen(true);
+    if (dictRecording) void stopDict().then(() => void s2c.start());
+    else void s2c.start();
+  }, [s2cActive, s2c, dictRecording, stopDict]);
+
+  // Claude/Grok-style activation: Ctrl+Shift+V (Cmd+Shift+V on macOS).
+  // Suppressed inside text inputs so typing is never hijacked.
+  useVoiceHotkey({ onToggle: toggleLiveVoice });
+
+  // ---- Persona catalog for the overlay picker ------------------------------
+  // Fetched once on mount; failure keeps the picker hidden (default persona
+  // still applies server-side via useSpeakToChat's own fetch).
+  const [personas, setPersonas] = useState<VoicePersonaInfo[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void fetchVoicePersonas()
+      .then((list) => {
+        if (alive && list.length) setPersonas(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // Voice fast-path: while a voice session owns the floor, sends ride the
   // fast Flash model; the user's picker choice returns when it ends.
   const { modelRef, effortRef, setModel, setEffort } = useChatModel();
@@ -186,17 +224,8 @@ export const MicButton: FC<MicButtonProps> = ({
   if (isGuestMode || limitReached || dictStatus === "disabled") return null;
 
   const handleLiveClick = () => {
-    // Primary voice toggle = live voice (speak-to-chat with TTS reply).
-    if (s2cActive) {
-      voiceSoundEffects.playDeactivate();
-      s2c.stop();
-      setOverlayOpen(false);
-      return;
-    }
-    voiceSoundEffects.playActivate();
-    setOverlayOpen(true);
-    if (dictRecording) void stopDict().then(() => void s2c.start());
-    else void s2c.start();
+    // Same path as the Ctrl+Shift+V hotkey — one shared toggle.
+    toggleLiveVoice();
   };
 
   const s2cPanelState =
@@ -243,7 +272,15 @@ export const MicButton: FC<MicButtonProps> = ({
             s2c.stop();
           }
         }}
-        s2c={s2c}
+        s2c={{
+          ...s2c,
+          // Typed follow-up inside the overlay: write into the composer and
+          // submit through the real form path (same as a typed message).
+          typeText: (text: string) => input?.setText(text),
+          submitComposer: submitComposerForm,
+        }}
+        personas={personas}
+        activePersonaId={s2c.personaId}
       />
 
       {/* Dictation mic with Claude-style device selector dropdown & VU meter */}

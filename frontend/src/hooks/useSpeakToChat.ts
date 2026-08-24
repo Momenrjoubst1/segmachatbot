@@ -176,24 +176,31 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
 
   // ---- Persona --------------------------------------------------------------
   const personaIdRef = useRef("sana");
+  /** Mirrors personaIdRef so React UI (overlay picker) re-renders on change. */
+  const [personaId, setPersonaId] = useState("sana");
   useEffect(() => {
+    let initial = "sana";
     try {
       const saved = localStorage.getItem(PERSONA_STORAGE_KEY);
-      if (saved) {
-        personaIdRef.current = saved;
-        return;
-      }
+      if (saved) initial = saved;
     } catch { /* private mode */ }
+    personaIdRef.current = initial;
+    setPersonaId(initial);
+    if (initial !== "sana") return; // saved choice wins; no fetch needed
     void fetchVoicePersonas()
       .then((list) => {
         const def = list.find((p) => p.default) ?? list[0];
-        if (def) personaIdRef.current = def.id;
+        if (def && personaIdRef.current === "sana") {
+          personaIdRef.current = def.id;
+          setPersonaId(def.id);
+        }
       })
       .catch(() => undefined); // default persona stands
   }, []);
 
   const setPersona = useCallback((personaId: string): void => {
     personaIdRef.current = personaId;
+    setPersonaId(personaId);
     try { localStorage.setItem(PERSONA_STORAGE_KEY, personaId); } catch { /* private mode */ }
   }, []);
 
@@ -293,7 +300,7 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
         setInterimText(turnTextRef.current);
         optsRef.current.writeToComposer(turnTextRef.current);
       },
-      onRms: (rms) => handleRmsRef.current(rms),
+      onRms: (rms, zcr) => handleRmsRef.current(rms, zcr),
       // Full relay visibility in the ?voiceDebug=1 overlay: ready/partial/
       // final/ws_close/mic_config — pinpoints the broken hop in one test.
       onEvent: (evt) => {
@@ -305,7 +312,7 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
   }, []);
   startMicRef.current = startMic;
 
-  const handleRms = useCallback((rms: number) => {
+  const handleRms = useCallback((rms: number, zcr?: number) => {
     const st = stateRef.current;
     if (st === "speaking") {
       // Barge-in detection: sustain loud input -> stop the bot talking
@@ -343,6 +350,7 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     const decision = detectorRef.current?.feed(
       rms,
       isLikelyIncomplete(turnTextRef.current),
+      zcr,
     );
     if (decision?.endpoint) void endTurnRef.current();
   }, []);
@@ -484,5 +492,5 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     voiceDebugBus.setState(state === "off" ? "idle" : `s2c:${state}`);
   }, [state]);
 
-  return { state, busy, muted, setMuted, start, stop, setPersona, interimText };
+  return { state, busy, muted, setMuted, start, stop, setPersona, personaId, interimText };
 }

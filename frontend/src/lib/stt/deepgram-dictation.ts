@@ -24,10 +24,11 @@ export interface DictationCallbacks {
   /** Low-level diagnostic events for debugging overlays. */
   onEvent?: (evt: { kind: string; detail?: string }) => void;
   /**
-   * Per-frame loudness (Int16-domain RMS) — consumed by the live-voice
+   * Per-frame loudness (Int16-domain RMS) + zero-crossing rate [0,1] —
+   * consumed by the live-voice endpointer (speech gate + noise rejection).
    * endpointing detector and barge-in logic. Fires every worklet frame.
    */
-  onRms?: (rms: number) => void;
+  onRms?: (rms: number, zcr?: number) => void;
   /**
    * Optional gate consulted per frame BEFORE RMS/send work. True = drop the
    * frame client-side (mute / half-duplex): nothing leaves the device and
@@ -190,9 +191,18 @@ export class DictationController {
           if (this.callbacks.onRms && ws.readyState === WebSocket.OPEN) {
             const buf = msg.buffer;
             let sum = 0;
-            for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+            let crossings = 0;
+            for (let i = 0; i < buf.length; i++) {
+              sum += buf[i] * buf[i];
+              // Zero-crossing rate: sign flips per sample. Speech waveforms
+              // cross rarely (voiced fundamentals); hiss/fans cross constantly.
+              if ((buf[i] >= 0) !== (buf[i + 1 < buf.length ? i + 1 : i] >= 0)) {
+                crossings++;
+              }
+            }
             const rms = Math.sqrt(sum / Math.max(1, buf.length));
-            this.callbacks.onRms(rms);
+            const zcr = crossings / Math.max(1, buf.length);
+            this.callbacks.onRms(rms, zcr);
           }
           if (ws.readyState === WebSocket.OPEN) ws.send(msg.buffer);
         }
