@@ -30,11 +30,26 @@ const log = createLogger("stt-relay");
 const STT_MODEL = process.env.STT_DEEPGRAM_MODEL?.trim() || "nova-3";
 const STT_LANGUAGE = process.env.STT_DEEPGRAM_LANGUAGE?.trim() || "ar";
 
-const DEEPGRAM_WS_URL =
-  "wss://api.deepgram.com/v1/listen" +
-  `?model=${encodeURIComponent(STT_MODEL)}&language=${encodeURIComponent(STT_LANGUAGE)}` +
-  "&smart_format=true&punctuate=true" +
-  "&endpointing=800&encoding=linear16&sample_rate=16000&channels=1";
+/**
+ * The stream MUST be labeled with the audio's TRUE rate. The browser
+ * downsamples to 16 kHz when its context runs faster, but narrowband mics
+ * (Bluetooth HFP runs at 8/16 kHz) pass through at their native rate —
+ * mislabeled audio is time-stretched for Deepgram and transcribes to
+ * NOTHING. The client reports its real post-decimation rate in the config
+ * frame; this builds the matching URL.
+ */
+function buildListenUrl(sampleRate: number): string {
+  const rate = Number.isFinite(sampleRate) && sampleRate >= 4000 && sampleRate <= 96_000
+    ? Math.round(sampleRate)
+    : 16_000;
+  return (
+    "wss://api.deepgram.com/v1/listen" +
+    `?model=${encodeURIComponent(STT_MODEL)}&language=${encodeURIComponent(STT_LANGUAGE)}` +
+    "&smart_format=true&punctuate=true" +
+    "&endpointing=800&encoding=linear16" +
+    `&sample_rate=${rate}&channels=1`
+  );
+}
 
 const MAX_SESSION_MS =
   parseInt(process.env.STT_MAX_SESSION_SECONDS || "120", 10) * 1000;
@@ -174,7 +189,7 @@ export class SttRelaySession {
     });
   }
 
-  private openDeepgram(_sampleRateHint: number, events: RelaySessionEvents): void {
+  private openDeepgram(sampleRateHint: number, events: RelaySessionEvents): void {
     const apiKey = process.env.DEEPGRAM_API_KEY?.trim();
     if (!apiKey) {
       events.onClose(4003, "stt_disabled");
@@ -182,7 +197,7 @@ export class SttRelaySession {
       return;
     }
 
-    const dg = new WebSocket(DEEPGRAM_WS_URL, {
+    const dg = new WebSocket(buildListenUrl(sampleRateHint), {
       headers: { Authorization: `Token ${apiKey}` },
     });
 

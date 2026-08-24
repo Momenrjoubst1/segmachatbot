@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
+import { voiceSoundEffects } from "@/lib/audio/voice-sound-effects";
 
 interface VoiceSessionCore {
   state: string;
@@ -108,7 +109,10 @@ export const VoiceSessionPanel: FC<VoiceSessionPanelProps> = ({
 
         <button
           type="button"
-          onClick={session.stop}
+          onClick={() => {
+            voiceSoundEffects.playDeactivate();
+            session.stop();
+          }}
           aria-label={t("voice.end_session")}
           data-testid="voice-end-button"
           className="voice-panel__btn voice-panel__btn--end"

@@ -114,8 +114,14 @@ export class DictationController {
 
     try {
       // 1. Microphone
+      const storedDeviceId =
+        typeof localStorage !== "undefined"
+          ? localStorage.getItem("sigma_selected_mic_device") || undefined
+          : undefined;
+
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
+          deviceId: storedDeviceId ? { exact: storedDeviceId } : undefined,
           channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
@@ -149,6 +155,18 @@ export class DictationController {
 
       const ctx = new AudioContext();
       this.audioCtx = ctx;
+
+      // Label the stream with the TRUE post-decimation rate. The worklet
+      // downsamples to 16 kHz when the context runs faster, but narrowband
+      // mics (Bluetooth HFP: 8/16 kHz) pass through at their native rate —
+      // mislabeled audio is time-stretched at Deepgram and transcribes to
+      // nothing. Must arrive before the first binary frame.
+      const nativeRate = ctx.sampleRate;
+      const outputRate = nativeRate >= 16000 ? 16000 : Math.round(nativeRate);
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "config", sampleRate: outputRate }));
+      }
+
       await ctx.audioWorklet.addModule("/worklets/pcm-capture-worklet.js");
       const worklet = new AudioWorkletNode(ctx, "pcm-capture-processor");
       this.worklet = worklet;

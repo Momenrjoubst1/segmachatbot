@@ -281,5 +281,6 @@
   "voice.agent_error_stalled": "Voice engine stopped responding. Please start a new session.",
   "voice.agent_notice_half_duplex": "Echo detected — the mic now pauses while Sigma speaks.",
   "voice.tts_unavailable": "Text-to-speech is unavailable right now — replies continue as text only.",
-  "voice.listening_ellipsis": "Listening…"
+  "voice.listening_ellipsis": "Listening…",
+  "voice.flash_model": "⚡ Voice mode uses Gemini 2.5 Flash for instant replies — your model returns when the session ends."
 }

@@ -260,11 +260,15 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       onInterim: (t) => {
         turnTextRef.current = t;
         setInterimText(t);
+        // Live words IN THE COMPOSER — the user watches the box fill as they
+        // speak (their explicit requirement; matches dictation UX).
+        optsRef.current.writeToComposer(t);
         voiceDebugBus.event("s2c_interim", t.slice(0, 60));
       },
       onFinalSegment: (seg) => {
         turnTextRef.current = (turnTextRef.current + " " + seg).trim();
         setInterimText(turnTextRef.current);
+        optsRef.current.writeToComposer(turnTextRef.current);
       },
       onRms: (rms) => handleRmsRef.current(rms),
       onEvent: () => {},

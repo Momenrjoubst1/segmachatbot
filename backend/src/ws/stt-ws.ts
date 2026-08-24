@@ -32,7 +32,8 @@ export function isSttEnabled(): boolean {
   return Boolean(process.env.DEEPGRAM_API_KEY?.trim());
 }
 
-async function verifyToken(
+/** Shared with the /ws/voice-agent relay — identical auth contract. */
+export async function verifyToken(
   token: string,
   allowAnonDev: boolean,
   socket: Duplex,
@@ -101,19 +102,35 @@ function handleSttUpgrade(req: import("http").IncomingMessage, socket: Duplex, h
 
     let configSeen = false;
     let session: SttRelaySession | null = null;
-    session = new SttRelaySession(auth.userId, clientWs, 16000, {
-      onText: () => { /* forwarded inside relay */ },
-      onClose: () => cleanupActive(auth.userId),
-    });
+    // The session is created LAZILY on the first client frame so the config
+    // frame's sample rate (the mic's TRUE post-decimation rate) can label the
+    // Deepgram stream correctly — a hardcoded 16k mislabels narrowband mics
+    // (Bluetooth HFP) and transcribes to nothing.
+    let negotiatedRate = 16000;
+    const ensureSession = (): SttRelaySession =>
+      session ??= new SttRelaySession(auth.userId, clientWs, negotiatedRate, {
+        onText: () => { /* forwarded inside relay */ },
+        onClose: () => cleanupActive(auth.userId),
+      });
 
     clientWs.on("message", (data: unknown, isBinary: boolean) => {
       if (!configSeen && !isBinary) {
         try {
-          const cfg = JSON.parse(String(data)) as { type?: string };
-          if (cfg.type === "config") { configSeen = true; return; }
+          const cfg = JSON.parse(String(data)) as { type?: string; sampleRate?: number };
+          if (cfg.type === "config") {
+            configSeen = true;
+            if (
+              typeof cfg.sampleRate === "number" &&
+              cfg.sampleRate >= 4000 && cfg.sampleRate <= 96_000
+            ) {
+              negotiatedRate = Math.round(cfg.sampleRate);
+            }
+            ensureSession();
+            return;
+          }
         } catch { /* treat as audio anyway */ }
       }
-      session?.handleClientMessage(data, isBinary);
+      ensureSession().handleClientMessage(data, isBinary);
     });
 
     clientWs.on("close", () => {

@@ -42,11 +42,14 @@ export interface EndpointConfig {
 }
 
 export const DEFAULT_ENDPOINT_CONFIG: EndpointConfig = {
-  silenceMs: 850,
+  // Tuned for conversational snappiness: Claude/Grok-class products send
+  // after ~500-700ms of silence. 600ms + the Arabic-aware incomplete guard
+  // feels near-instant without clipping mid-clause pauses.
+  silenceMs: 600,
   hangoverMs: 250,
   speechStartRms: 350,
   speechHoldRms: 220,
-  semanticExtendMs: 500,
+  semanticExtendMs: 350,
   minUtteranceMs: 700,
   maxUtteranceMs: 60_000,
 };

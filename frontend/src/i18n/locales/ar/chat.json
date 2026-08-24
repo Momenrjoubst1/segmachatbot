@@ -281,5 +281,6 @@
   "voice.agent_error_stalled": "المحرك الصوتي وقف عن الاستجابة. ابدأ جلسة جديدة.",
   "voice.agent_notice_half_duplex": "لاحظنا صدى — الميكروفون بسكت لما سيجما بيحكي.",
   "voice.tts_unavailable": "القراءة الصوتية غير متوفرة هلأ — رح تكمل الردود نصية فقط.",
-  "voice.listening_ellipsis": "عم أسمعك…"
+  "voice.listening_ellipsis": "عم أسمعك…",
+  "voice.flash_model": "⚡ الوضع الصوتي بيستخدم Gemini 2.5 Flash لردود فورية — نموذجك بيرجع بعد ما تخلص الجلسة."
 }

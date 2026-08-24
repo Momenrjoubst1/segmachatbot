@@ -71,17 +71,17 @@ describe("SilenceEndpointDetector", () => {
     const c = makeClock();
     const d = new SilenceEndpointDetector(base, c.now);
     for (let i = 0; i < 20; i++) { c.advance(50); d.feed(800); }
-    // silent while text ends with "و" -> needs +500ms more
+    // silent while text ends with "و" -> needs +350ms more
     let fired = false;
-    for (let i = 1; i <= 20; i++) {
+    for (let i = 1; i <= 16; i++) {
       c.advance(50);
       if (d.feed(10, true /* incomplete clause */).endpoint) { fired = true; break; }
     }
-    // would have fired at 850 without extension; with +500 must not fire by 1000
+    // would have fired at 600 without extension; with +350 must not fire by 800
     expect(fired).toBe(false);
     // continue to 1400ms of silence -> fires even as semantic continuation
     fired = false;
-    for (let i = 0; i < 10 && !fired; i++) {
+    for (let i = 0; i < 12 && !fired; i++) {
       c.advance(50);
       fired = d.feed(10, true).endpoint;
     }
