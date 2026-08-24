@@ -37,6 +37,7 @@ import {
   fetchVoicePersonas,
   TtsError,
 } from "@/lib/tts/tts-client";
+import { ElevenLabsStreamingTts } from "@/lib/tts/elevenlabs-streaming";
 
 export type SpeakToChatState =
   | "off"
@@ -87,6 +88,8 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
   const playerRef = useRef<AudioQueuePlayer | null>(null);
   const splitterRef = useRef<StreamingSentenceSplitter | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  /** Streaming TTS client (ElevenLabs WebSocket). Created per session. */
+  const ttsStreamRef = useRef<ElevenLabsStreamingTts | null>(null);
 
   const turnTextRef = useRef("");
   const lastSentTextRef = useRef("");
@@ -131,26 +134,42 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
   }, [messages, state]);
 
   // ---- Speech synthesis + playback ----------------------------------------
-  const speakSentence = useCallback(async (sentence: string) => {
+  // WebSocket streaming path (ElevenLabs Flash v2.5, sub-100ms TTFB) when
+  // the session has an open TTS stream; otherwise fall back to the HTTP
+  // per-sentence route. The HTTP fallback is what surfaces "tts_unavailable"
+  // — the WebSocket path degrades silently by playing nothing.
+  const speakSentence = useCallback((sentence: string) => {
     const player = playerRef.current;
     if (!player) return;
-    const ac = new AbortController();
-    abortRef.current?.abort();
-    abortRef.current = ac;
-    try {
-      const audio = await synthesizeChunk(
-        sentence,
-        personaIdRef.current,
-        ac.signal,
-      );
-      await player.enqueue(audio.slice(0));
-    } catch (err) {
-      if (err instanceof TtsError && err.kind === "unavailable") {
-        suppressSpeechRef.current = true;
-        optsRef.current.onNotice?.("tts_unavailable");
-      }
-      // aborted / network blips: skip silently — text still flows
+    const stream = ttsStreamRef.current;
+    if (stream && stream.streamState === "open") {
+      // Sentence boundary: push the text and flush so ElevenLabs starts
+      // generating this sentence immediately even if the next hasn't
+      // arrived yet.
+      stream.pushText(sentence);
+      stream.flush();
+      return;
     }
+    // HTTP fallback — kept for environments without an ElevenLabs key.
+    void (async () => {
+      const ac = new AbortController();
+      abortRef.current?.abort();
+      abortRef.current = ac;
+      try {
+        const audio = await synthesizeChunk(
+          sentence,
+          personaIdRef.current,
+          ac.signal,
+        );
+        await player.enqueue(audio.slice(0));
+      } catch (err) {
+        if (err instanceof TtsError && err.kind === "unavailable") {
+          suppressSpeechRef.current = true;
+          optsRef.current.onNotice?.("tts_unavailable");
+        }
+        // aborted / network blips: skip silently — text still flows
+      }
+    })();
   }, []);
   const speakSentenceRef = useRef(speakSentence);
   speakSentenceRef.current = speakSentence;
@@ -350,6 +369,34 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
         setState((s) => (s === "thinking" || s === "listening" ? "speaking" : s));
       }
     });
+
+    // Open the ElevenLabs streaming TTS WebSocket (non-blocking: a connect
+    // failure is silent — speakSentence() falls back to the HTTP route).
+    ttsStreamRef.current = new ElevenLabsStreamingTts(
+      { voiceId: personaIdRef.current, autoMode: true },
+      {
+        onAudio: (chunk) => {
+          // Forward the MP3 chunk straight to the existing player queue.
+          // The player's enqueue() decodes asynchronously so it never blocks
+          // the WS callback.
+          playerRef.current?.enqueue(chunk.slice(0)).catch(() => undefined);
+        },
+        onError: (err) => {
+          voiceDebugBus.event("tts_stream_error", err.message);
+          // Don't surface as a toast on every transient hiccup; the HTTP
+          // fallback is the safety net and the user will hear silence.
+        },
+        onClosed: (info) => {
+          voiceDebugBus.event("tts_stream_closed", `${info.code} ${info.reason}`);
+        },
+      },
+    );
+    void ttsStreamRef.current.connect().then((ok) => {
+      if (!ok) {
+        voiceDebugBus.event("tts_stream_connect_failed", "");
+      }
+    });
+
     splitterRef.current = new StreamingSentenceSplitter();
     turnTextRef.current = "";
     lastSentTextRef.current = "";
@@ -376,6 +423,9 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     abortRef.current?.abort();
     controllerRef.current?.stop().catch(() => undefined);
     playerRef.current?.stopAll();
+    ttsStreamRef.current?.endStream();
+    ttsStreamRef.current?.close();
+    ttsStreamRef.current = null;
     teardownRef.current();
     setInterimText("");
     setState("off");
