@@ -37,3 +37,10 @@ backend/*.cjs
 # Local media artifacts
 Recording*.mp4
 backend/.tmp-tts-test/
+.claude/
+.wip-backup/
+scripts/i18n-add-agent-keys.cjs
+scripts/probe-deepgram-agent.cjs
+scripts/voice-tunnel-keepalive.ps1
+scripts/voice-tunnel.bat
+sound-effect-4723.mp3
