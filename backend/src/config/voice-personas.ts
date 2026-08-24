@@ -43,22 +43,26 @@ export interface VoicePersona {
 }
 
 /**
- * ElevenLabs stock voice IDs (multilingual v2 / flash v2.5 compatible).
- * Replace with voices cloned in your own Voice Library for production.
+ * ElevenLabs voice IDs sourced from the project's .env so the
+ * persona → voice mapping stays in lockstep with the deploy config.
+ *
+ *   - ELEVENLABS_VOICE_ID      — primary voice (default for all personas
+ *                                unless they pin their own ID)
+ *   - ELEVENLABS_VOICE_ID_ALT  — secondary voice (used for the English
+ *                                personas below, or whatever locale the
+ *                                user wants as the "alternate")
+ *
+ * When you add a new cloned voice in your ElevenLabs Voice Library, copy
+ * its id into .env and add a new persona below that references it.
  */
+const ENV_PRIMARY = process.env.ELEVENLABS_VOICE_ID?.trim() ?? "";
+const ENV_ALT = process.env.ELEVENLABS_VOICE_ID_ALT?.trim() ?? "";
+
 const ELEVENLABS_VOICES = {
-  // English
-  rachel: "21m00Tcm4TlvDq8ikWAM",   // calm, clear — English female
-  bella: "EXAVITQu4vr4xnSDxMaL",   // soft, warm — English female
-  elli: "MF3mGyEYCl7XYWbV9V6O",     // friendly, conversational — English female
-  adam: "pNInz6obpgDQGcFmaJgB",     // deep, narrative — English male
-  josh: "TxGEqnHWrfWFTfGW9XjX",     // warm, deep — English male
-  arnold: "VR6AewLTigWG4xSOukaG",  // crisp, confident — English male
-  // Arabic — use community voices from the Voice Library for best quality.
-  // The IDs below are placeholders; clone Arabic voices from your library
-  // and update them here.
-  arabicFemale1: "", // TODO: replace with your cloned Arabic female voice id
-  arabicMale1: "",   // TODO: replace with your cloned Arabic male voice id
+  /** Primary — the project default (Arabic by convention). */
+  primary: ENV_PRIMARY,
+  /** Alternate — typically the English voice. */
+  alt: ENV_ALT,
 } as const;
 
 export const VOICE_PERSONAS: VoicePersona[] = [
@@ -73,7 +77,7 @@ export const VOICE_PERSONAS: VoicePersona[] = [
     locale: "ar-JO",
     gender: "female",
     rate: "+0%",
-    elevenLabsVoiceId: ELEVENLABS_VOICES.arabicFemale1 || undefined,
+    elevenLabsVoiceId: ELEVENLABS_VOICES.primary || undefined,
     language: "ar",
     default: true,
   },
@@ -87,7 +91,7 @@ export const VOICE_PERSONAS: VoicePersona[] = [
     locale: "ar-SA",
     gender: "male",
     rate: "-4%",
-    elevenLabsVoiceId: ELEVENLABS_VOICES.arabicMale1 || undefined,
+    elevenLabsVoiceId: ELEVENLABS_VOICES.primary || undefined,
     language: "ar",
   },
   {
@@ -100,6 +104,7 @@ export const VOICE_PERSONAS: VoicePersona[] = [
     locale: "ar-EG",
     gender: "female",
     rate: "+6%",
+    elevenLabsVoiceId: ELEVENLABS_VOICES.primary || undefined,
     language: "ar",
   },
   {
@@ -112,47 +117,22 @@ export const VOICE_PERSONAS: VoicePersona[] = [
     locale: "ar-SY",
     gender: "male",
     rate: "+0%",
+    elevenLabsVoiceId: ELEVENLABS_VOICES.primary || undefined,
     language: "ar",
   },
 
-  // ─── English ──────────────────────────────────────────────────────
+  // ─── English (uses ELEVENLABS_VOICE_ID_ALT) ─────────────────────
   {
-    id: "rachel-en",
-    nameAr: "راشيل (إنجليزي)",
-    nameEn: "Rachel (EN)",
-    descAr: "مساعدة هادئة وواضحة بالإنجليزية",
-    descEn: "Calm, clear English assistant",
+    id: "english-alt",
+    nameAr: "إنجليزي",
+    nameEn: "English",
+    descAr: "مساعد بالإنجليزية بصوت ELEVENLABS_VOICE_ID_ALT",
+    descEn: "English assistant using ELEVENLABS_VOICE_ID_ALT",
     edgeVoice: "en-US-AriaNeural",
     locale: "en-US",
     gender: "female",
     rate: "+0%",
-    elevenLabsVoiceId: ELEVENLABS_VOICES.rachel,
-    language: "en",
-  },
-  {
-    id: "adam-en",
-    nameAr: "آدم (إنجليزي)",
-    nameEn: "Adam (EN)",
-    descAr: "صوت عميق وسردي بالإنجليزية",
-    descEn: "Deep narrative English voice",
-    edgeVoice: "en-US-GuyNeural",
-    locale: "en-US",
-    gender: "male",
-    rate: "-2%",
-    elevenLabsVoiceId: ELEVENLABS_VOICES.adam,
-    language: "en",
-  },
-  {
-    id: "josh-en",
-    nameAr: "جوش (إنجليزي)",
-    nameEn: "Josh (EN)",
-    descAr: "صوت دافئ وعميق بالإنجليزية",
-    descEn: "Warm, deep English voice",
-    edgeVoice: "en-US-DavisNeural",
-    locale: "en-US",
-    gender: "male",
-    rate: "+0%",
-    elevenLabsVoiceId: ELEVENLABS_VOICES.josh,
+    elevenLabsVoiceId: ELEVENLABS_VOICES.alt || undefined,
     language: "en",
   },
 ];
