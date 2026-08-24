@@ -30,3 +30,6 @@ pdf-processor/venv/
 backend/.env-fix.py
 backend/.env-fix.py.disabled
 backend/.env-tmp.py
+
+# Dev probe scripts (local only)
+backend/*.cjs
