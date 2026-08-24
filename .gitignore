@@ -33,3 +33,7 @@ backend/.env-tmp.py
 
 # Dev probe scripts (local only)
 backend/*.cjs
+
+# Local media artifacts
+Recording*.mp4
+backend/.tmp-tts-test/
