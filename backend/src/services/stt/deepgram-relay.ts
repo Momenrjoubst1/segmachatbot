@@ -46,6 +46,9 @@ function buildListenUrl(sampleRate: number): string {
     "wss://api.deepgram.com/v1/listen" +
     `?model=${encodeURIComponent(STT_MODEL)}&language=${encodeURIComponent(STT_LANGUAGE)}` +
     "&smart_format=true&punctuate=true" +
+    // interim_results: words stream to the composer WHILE the user speaks —
+    // without it Deepgram stays silent until its own endpointing fires.
+    "&interim_results=true" +
     "&endpointing=800&encoding=linear16" +
     `&sample_rate=${rate}&channels=1`
   );
@@ -133,10 +136,19 @@ export class SttRelaySession {
   handleClientMessage(data: unknown, isBinary: boolean): void {
     if (this.closed) return;
     if (!isBinary) {
-      // Client may send {type:"stop"} to finish gracefully
       try {
         const msg = JSON.parse(String(data)) as { type?: string };
-        if (msg.type === "stop") this.close(1000, "client_stop");
+        if (msg.type === "stop") { this.close(1000, "client_stop"); return; }
+        // Finalize: ask Deepgram to emit the is_final Results for audio
+        // processed so far, RIGHT NOW. The client's turn-end uses this so
+        // the transcript arrives in ~100ms instead of waiting out Deepgram's
+        // 800ms endpointing — and the session stays open for the next turn.
+        if (msg.type === "finalize") {
+          if (this.deepgramReady && this.deepgramWs?.readyState === WebSocket.OPEN) {
+            this.deepgramWs.send(JSON.stringify({ type: "Finalize" }));
+          }
+          return;
+        }
       } catch { /* ignore malformed control frames */ }
       return;
     }

@@ -183,11 +183,17 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     const controller = controllerRef.current;
     if (!controller || stoppingRef.current) return;
     setState("sending");
-    try {
-      await controller.stop(); // flushes Deepgram finals
-    } catch { /* keep going with what we have */ }
 
-    const text = turnTextRef.current.trim();
+    // Finalize NOW: Deepgram emits the is_final transcript in ~100-200ms
+    // instead of waiting out its own 800ms endpointing. The session STAYS
+    // OPEN — killing it here (the old behavior) destroyed the final
+    // in-flight, so every turn arrived empty and was discarded forever.
+    let text = turnTextRef.current.trim();
+    try {
+      text = (await controller.finalize(1200)).trim();
+    } catch { /* keep what we have */ }
+    if (stoppingRef.current) return;
+
     const words = text ? text.split(/\s+/).length : 0;
 
     if (words >= 2 && text !== lastSentTextRef.current) {
@@ -211,9 +217,8 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
         optsRef.current.submitComposer();
         setState((s) => (s === "sending" ? "thinking" : s));
       }, 120);
-      // Mic re-opens automatically below so the next turn can start while
-      // the bot thinks/speaks.
-      void reopenMicRef.current();
+      // The mic/session keeps running — the next turn starts instantly with
+      // zero reconnect gap while the bot thinks/speaks.
     } else {
       // Blip/noise or duplicate — discard and keep listening
       turnTextRef.current = "";
@@ -221,7 +226,6 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       detectorRef.current?.reset();
       optsRef.current.writeToComposer("");
       setState("listening");
-      void reopenMicRef.current();
     }
   }, []);
   const endTurnRef = useRef(endTurn);

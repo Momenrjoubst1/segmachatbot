@@ -37,8 +37,11 @@ export interface DictationCallbacks {
 }
 
 interface RelayServerMessage {
-  type: "ready" | "partial" | "final";
+  type: "ready" | "partial" | "final" | "dg_stats" | "usage";
   text?: string;
+  results?: number;
+  bytesForwarded?: number;
+  seconds?: number;
 }
 
 const MAX_SESSION_MS = 120000;
@@ -83,6 +86,7 @@ export class DictationController {
   private readyResolve: (() => void) | null = null;
   private readyReject: ((e: DictationError) => void) | null = null;
   private stopResolve: ((text: string) => void) | null = null;
+  private finalizeResolve: (() => void) | null = null;
 
   constructor(private callbacks: DictationCallbacks = {}) {}
 
@@ -277,6 +281,11 @@ export class DictationController {
           this.interimText = "";
           this.callbacks.onFinalSegment?.(msg.text);
         }
+        // A finalize() request completes on the first final that lands.
+        this.finalizeResolve?.();
+        break;
+      case "dg_stats":
+        this.callbacks.onEvent?.({ kind: "dg_stats", detail: `results=${msg.results} bytes=${msg.bytesForwarded}` });
         break;
     }
   }
@@ -309,6 +318,34 @@ export class DictationController {
     this.cleanup();
     this.setState("idle");
     return text;
+  }
+
+  /**
+   * Ask Deepgram to finalize the audio processed so far RIGHT NOW and
+   * resolve with the transcript as soon as the final lands (~100-200ms),
+   * instead of waiting out its 800ms endpointing. The session STAYS OPEN —
+   * the next turn keeps streaming into the same socket. Falls back to
+   * whatever is accumulated after `timeoutMs`.
+   */
+  finalize(timeoutMs = 1200): Promise<string> {
+    if (this.state !== "recording") return Promise.resolve(this.getTranscript());
+    return new Promise<string>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        this.finalizeResolve = null;
+        clearTimeout(timer);
+        resolve(this.getTranscript());
+      };
+      this.finalizeResolve = finish;
+      const timer = setTimeout(finish, timeoutMs);
+      try {
+        this.ws?.send(JSON.stringify({ type: "finalize" }));
+      } catch {
+        finish();
+      }
+    });
   }
 
   /** Hard abort. */
