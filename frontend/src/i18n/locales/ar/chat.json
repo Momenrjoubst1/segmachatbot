@@ -282,5 +282,12 @@
   "voice.agent_notice_half_duplex": "لاحظنا صدى — الميكروفون بسكت لما سيجما بيحكي.",
   "voice.tts_unavailable": "القراءة الصوتية غير متوفرة هلأ — رح تكمل الردود نصية فقط.",
   "voice.listening_ellipsis": "عم أسمعك…",
-  "voice.flash_model": "⚡ الوضع الصوتي بيستخدم Gemini 2.5 Flash لردود فورية — نموذجك بيرجع بعد ما تخلص الجلسة."
+  "voice.flash_model": "⚡ الوضع الصوتي بيستخدم Gemini 2.5 Flash لردود فورية — نموذجك بيرجع بعد ما تخلص الجلسة.",
+  "voice.overlay_title": "محادثة صوتية حية",
+  "voice.overlay_description": "احكي طبيعي — كلامك يظهر بينما تتكلم، وسيجما يرد نصاً وصوتاً.",
+  "voice.persona_label": "صوت سيجما",
+  "voice.sample_1": "اشرح لي نظرية فيثاغورس",
+  "voice.sample_2": "ساعدني أكتب مقال عن البيئة",
+  "voice.sample_3": "لخّص لي هذا الدرس",
+  "voice.type_followup": "…أو اكتب سؤالك هنا"
 }

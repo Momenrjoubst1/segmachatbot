@@ -33,6 +33,13 @@ export interface EndpointConfig {
   speechStartRms: number;
   /** RMS below which we consider the speaker paused (hysteresis). */
   speechHoldRms: number;
+  /**
+   * ZCR above which a frame is treated as noise even when loud (0..1).
+   * Speech fundamentals sit below ~0.15; hiss/fans/keyboard clatter cross
+   * 0.3+. Frames with zcr > zcrNoiseMax AND rms < speechStartRms*1.6 are
+   * ignored for gate-opening. undefined disables the check.
+   */
+  zcrNoiseMax?: number;
   /** Extra silence added when transcript looks mid-clause (ms). */
   semanticExtendMs: number;
   /** Ignore endpoints for utterances shorter than this (ms). */
@@ -49,6 +56,7 @@ export const DEFAULT_ENDPOINT_CONFIG: EndpointConfig = {
   hangoverMs: 250,
   speechStartRms: 350,
   speechHoldRms: 220,
+  zcrNoiseMax: 0.35,
   semanticExtendMs: 350,
   minUtteranceMs: 700,
   maxUtteranceMs: 60_000,
@@ -81,17 +89,26 @@ export class SilenceEndpointDetector {
   }
 
   /**
-   * Feed one audio frame's RMS.
+   * Feed one audio frame's RMS (+ optional ZCR).
    *
    * @param rms Int16-domain root-mean-square of the frame.
    * @param semanticContinuation true while the live transcript looks like an
    *        unfinished clause ("...و", "...that", trailing comma/colon).
+   * @param zcr Zero-crossing rate in [0,1] — optional noise discriminator.
+   *        Loud frames with very high ZCR (hiss/fans) do not open the gate.
    */
-  feed(rms: number, semanticContinuation = false): EndpointDecision {
+  feed(rms: number, semanticContinuation = false, zcr?: number): EndpointDecision {
     const t = this.now();
 
     if (!this.speechStarted) {
-      if (rms >= this.cfg.speechStartRms) {
+      // Noise gate: loud-but-noisy frames (high zero-crossing rate — hiss,
+      // fans, keyboard clatter) must not open the speech gate on their own.
+      const zcrNoisy =
+        zcr !== undefined &&
+        this.cfg.zcrNoiseMax !== undefined &&
+        zcr > this.cfg.zcrNoiseMax &&
+        rms < this.cfg.speechStartRms * 1.6;
+      if (!zcrNoisy && rms >= this.cfg.speechStartRms) {
         this.speechStarted = true;
         this.utteranceStartTs = t;
         this.lastVoicedTs = t;

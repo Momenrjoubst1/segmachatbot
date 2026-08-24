@@ -282,5 +282,12 @@
   "voice.agent_notice_half_duplex": "Echo detected — the mic now pauses while Sigma speaks.",
   "voice.tts_unavailable": "Text-to-speech is unavailable right now — replies continue as text only.",
   "voice.listening_ellipsis": "Listening…",
-  "voice.flash_model": "⚡ Voice mode uses Gemini 2.5 Flash for instant replies — your model returns when the session ends."
+  "voice.flash_model": "⚡ Voice mode uses Gemini 2.5 Flash for instant replies — your model returns when the session ends.",
+  "voice.overlay_title": "Live voice session",
+  "voice.overlay_description": "Speak naturally — your words appear as you talk; Sigma replies in both text and voice.",
+  "voice.persona_label": "Sigma's voice",
+  "voice.sample_1": "Explain the Pythagorean theorem to me",
+  "voice.sample_2": "Help me write an essay about the environment",
+  "voice.sample_3": "Summarize this lesson for me",
+  "voice.type_followup": "…or type your question here"
 }

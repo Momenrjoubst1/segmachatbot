@@ -266,6 +266,12 @@ if (appConfig.nodeEnv !== "test") {
       logger.info("STT WebSocket ready");
     }).catch((err) => logger.warn("STT WebSocket attach failed", { error: err.message }));
 
+    // Live Voice TTS relay — /ws/tts-stream (ElevenLabs Flash v2.5 streaming)
+    import("./ws/tts-stream-ws.js").then(({ attachTtsStreamWebSocket }) => {
+      attachTtsStreamWebSocket(server);
+      logger.info("TTS stream WebSocket ready");
+    }).catch((err) => logger.warn("TTS stream WebSocket attach failed", { error: err.message }));
+
     // Start textbook processing worker (non-blocking, only processes when jobs exist)
     import("./services/textbook/textbook-worker.js").then(({ startTextbookWorker }) => {
       startTextbookWorker();

@@ -11,23 +11,14 @@ import { unstable_useComposerInput } from "../shims/assistant-ui-compat-shim";
 import { useChatModel } from "../context/ChatModelContext";
 import type { KnownModelId } from "../model-catalog";
 import { useDictation } from "@/hooks/useDictation";
-import {
-  useAgentVoice,
-  fetchAgentVoiceStatus,
-  type AgentErrorKind,
-} from "@/hooks/useAgentVoice";
 import { useSpeakToChat } from "@/hooks/useSpeakToChat";
+import { useVoiceHotkey } from "@/hooks/useVoiceHotkey";
+import { fetchVoicePersonas, type VoicePersonaInfo } from "@/lib/tts/tts-client";
 import { voiceDebugBus } from "@/lib/stt/voice-debug-bus";
 import { voiceSoundEffects } from "@/lib/audio/voice-sound-effects";
 import { VoiceSessionPanel } from "./VoiceSessionPanel";
 import { MicrophoneMenu } from "./MicrophoneMenu";
-
-/**
- * Dormant-mode flag: the realtime Deepgram-Agent call experience stays
- * available for opt-in deployments, but the voice button's default behavior
- * is speak-to-chat — voice as an input method for the regular pipeline.
- */
-const AGENT_MODE = import.meta.env.VITE_VOICE_LIVE_AGENT === "true";
+import { VoiceOverlay } from "./voice/VoiceOverlay";
 
 /**
  * Voice replies run on a FAST model: spoken turns need sub-second first
@@ -48,10 +39,14 @@ interface MicButtonProps {
 }
 
 /**
- * Voice controls for the composer:
- *  - 🎤 dictation: speech -> text in the box, manual send.
- *  - ~ LIVE: Deepgram Voice Agent conversation — one WebSocket handles STT,
- *    our chatbot brain, and spoken replies with native barge-in.
+ * Voice controls for the composer (post-refactor: only TWO systems):
+ *
+ *  - 🎤 Mic-only (System 2): speech -> text in the box, manual send.
+ *    Bot replies TEXT ONLY. This is the small, lightweight input method.
+ *
+ *  - 🌊 Live Voice (System 1): speech -> text in the box LIVE -> auto-sent
+ *    when the user finishes -> bot replies with BOTH text and voice
+ *    (ElevenLabs Flash v2.5 streaming TTS). Full Claude/Grok-style overlay.
  */
 export const MicButton: FC<MicButtonProps> = ({
   className,
@@ -61,16 +56,9 @@ export const MicButton: FC<MicButtonProps> = ({
   const { isGuestMode, limitReached } = useGuestMode();
   const input = unstable_useComposerInput();
 
-  const [agentEnabled, setAgentEnabled] = useState(true);
-  const [agentVoices, setAgentVoices] = useState<Array<{ key: string; label: string }>>([]);
-  const [selectedVoice, setSelectedVoice] = useState<string>(
-    () => localStorage.getItem("sigma_agent_voice") || "primary",
-  );
-  const [liveState, setLiveState] = useState<ReturnType<typeof useAgentVoice>["state"]>("off");
-
   const baseRef = useRef<string>("");
 
-  // ---- Dictation mode -------------------------------------------------------
+  // ---- Dictation mode (System 2: Mic-only) --------------------------------
   const applyText = useCallback(
     (text: string) => {
       const before = input?.value ?? "";
@@ -108,7 +96,7 @@ export const MicButton: FC<MicButtonProps> = ({
   const dictRecording = dictStatus === "recording";
   const seconds = useElapsedSeconds(dictRecording);
 
-  // Debug bus publishing (?voiceDebug=1 overlay)
+  // Debug bus publishing (for ?voiceDebug=1 overlay if present)
   useEffect(() => {
     voiceDebugBus.setMounted(true, "");
     voiceDebugBus.event("mic_mounted", "composer voice controls ready");
@@ -118,58 +106,12 @@ export const MicButton: FC<MicButtonProps> = ({
     voiceDebugBus.event("dict_status", dictStatus);
     voiceDebugBus.setState(dictStatus);
   }, [dictStatus]);
-  useEffect(() => {
-    voiceDebugBus.event("live_state", liveState);
-    voiceDebugBus.setState(liveState === "off" ? "idle" : `agent:${liveState}`);
-  }, [liveState]);
 
   useEffect(() => {
     if (dictRecording) baseRef.current = input?.value ?? "";
   }, [dictRecording, input]);
 
-  // ---- Live mode (Deepgram Voice Agent) --------------------------------------
-  /** One toast per distinct failure kind — the hook fires onError once per
-   *  fatal event, so a simple mapping here can't spam. */
-  const handleAgentError = useCallback(
-    (kind: AgentErrorKind) => {
-      voiceDebugBus.event("agent_error", kind);
-      switch (kind) {
-        case "think":
-          toast.error(t("voice.agent_error_think"));
-          break;
-        case "auth":
-          toast.error(t("voice.agent_error_auth"));
-          break;
-        case "busy":
-          toast.error(t("voice.agent_error_busy"));
-          break;
-        case "stalled":
-          toast.error(t("voice.agent_error_stalled"));
-          break;
-        case "session_end":
-          toast.info(t("voice.session_ended_time"));
-          break;
-        default:
-          toast.error(t("voice.agent_error_connection"));
-          break;
-      }
-    },
-    [t],
-  );
-
-  const handleAgentNotice = useCallback(
-    (notice: "half_duplex") => {
-      if (notice === "half_duplex") toast.info(t("voice.agent_notice_half_duplex"));
-    },
-    [t],
-  );
-
-  const live = useAgentVoice({
-    onError: handleAgentError,
-    onNotice: handleAgentNotice,
-  });
-
-  // ---- Speak-to-chat (default voice mode) ------------------------------------
+  // ---- Live Voice mode (System 1: speak-to-chat + TTS) --------------------
   // Voice as an INPUT METHOD for the regular chat: auto-send on turn end,
   // reply read aloud. The message takes the exact path a typed one would.
   const submitComposerForm = useCallback(() => {
@@ -205,10 +147,49 @@ export const MicButton: FC<MicButtonProps> = ({
     ),
   });
 
-  const agentActive =
-    AGENT_MODE && live.state !== "off" && live.state !== "error";
   const s2cActive = s2c.state !== "off";
-  const liveActive = agentActive || s2cActive;
+  const liveActive = s2cActive;
+
+  // ---- Voice-overlay (Claude/Grok-style modal) ----------------------------
+  // The overlay opens when the live voice button is clicked and the
+  // speak-to-chat session is starting. It auto-closes on stop.
+  const [overlayOpen, setOverlayOpen] = useState(false);
+
+  // ---- Live-voice toggle (shared by button click + keyboard hotkey) -------
+  // Defined BEFORE the guest-mode early-return below because hooks must not
+  // sit behind conditional returns.
+  const toggleLiveVoice = useCallback(() => {
+    if (s2cActive) {
+      voiceSoundEffects.playDeactivate();
+      s2c.stop();
+      setOverlayOpen(false);
+      return;
+    }
+    voiceSoundEffects.playActivate();
+    setOverlayOpen(true);
+    if (dictRecording) void stopDict().then(() => void s2c.start());
+    else void s2c.start();
+  }, [s2cActive, s2c, dictRecording, stopDict]);
+
+  // Claude/Grok-style activation: Ctrl+Shift+V (Cmd+Shift+V on macOS).
+  // Suppressed inside text inputs so typing is never hijacked.
+  useVoiceHotkey({ onToggle: toggleLiveVoice });
+
+  // ---- Persona catalog for the overlay picker ------------------------------
+  // Fetched once on mount; failure keeps the picker hidden (default persona
+  // still applies server-side via useSpeakToChat's own fetch).
+  const [personas, setPersonas] = useState<VoicePersonaInfo[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void fetchVoicePersonas()
+      .then((list) => {
+        if (alive && list.length) setPersonas(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Voice fast-path: while a voice session owns the floor, sends ride the
   // fast Flash model; the user's picker choice returns when it ends.
@@ -240,38 +221,11 @@ export const MicButton: FC<MicButtonProps> = ({
   // the user types — unless a live session is already running.
   const hideLive = hideLiveWhenText && !liveActive;
 
-  useEffect(() => setLiveState(live.state), [live.state]);
-
-  useEffect(() => {
-    fetchAgentVoiceStatus().then(({ enabled, voices }) => {
-      setAgentEnabled(enabled);
-      setAgentVoices(voices ?? []);
-    });
-  }, []);
-
   if (isGuestMode || limitReached || dictStatus === "disabled") return null;
 
   const handleLiveClick = () => {
-    // Primary voice toggle = speak-to-chat (the regular pipeline, spoken).
-    if (s2cActive) {
-      voiceSoundEffects.playDeactivate();
-      s2c.stop();
-      return;
-    }
-    voiceSoundEffects.playActivate();
-    if (dictRecording) void stopDict().then(() => void s2c.start());
-    else void s2c.start();
-  };
-
-  const handleAgentClick = () => {
-    if (agentActive) {
-      voiceSoundEffects.playDeactivate();
-      live.stop();
-      return;
-    }
-    voiceSoundEffects.playActivate();
-    if (dictRecording) void stopDict().then(() => void live.start());
-    else void live.start();
+    // Same path as the Ctrl+Shift+V hotkey — one shared toggle.
+    toggleLiveVoice();
   };
 
   const s2cPanelState =
@@ -286,44 +240,48 @@ export const MicButton: FC<MicButtonProps> = ({
     off: "",
   };
 
-  // Primary toggle reflects whichever voice mode owns the floor (speak-to-
-  // chat by default; the realtime Agent mode only exists behind the flag).
-  const primaryState = s2cActive ? s2cPanelState : agentActive ? live.state : "off";
+  const primaryState = s2cActive ? s2cPanelState : "off";
   const primaryBusy =
     primaryState === "connecting" || primaryState === "thinking";
 
   return (
     <>
-      {/* Live session card: state + mute + hangup (+ transcript in agent mode) */}
-      {s2cActive && (
+      {/* Live session card: state + mute + hangup + live transcript */}
+      {s2cActive && !overlayOpen && (
         <VoiceSessionPanel
           session={{
             state: s2cPanelState,
             muted: s2c.muted,
             setMuted: s2c.setMuted,
-            stop: s2c.stop,
+            stop: () => {
+              s2c.stop();
+              setOverlayOpen(false);
+            },
             interim: s2c.interimText,
           }}
         />
       )}
-      {agentActive && (
-        <VoiceSessionPanel
-          session={{
-            state: live.state,
-            muted: live.muted,
-            setMuted: live.setMuted,
-            stop: live.stop,
-            transcripts: live.transcripts,
-            sessionRemainingMs: live.sessionRemainingMs,
-          }}
-          voices={agentVoices}
-          selectedVoice={selectedVoice}
-          onSelectVoice={(key) => {
-            setSelectedVoice(key);
-            live.setVoice(key);
-          }}
-        />
-      )}
+
+      {/* The Claude/Grok-style full-screen overlay for Live Voice */}
+      <VoiceOverlay
+        open={overlayOpen}
+        onOpenChange={(next) => {
+          setOverlayOpen(next);
+          if (!next && s2cActive) {
+            voiceSoundEffects.playDeactivate();
+            s2c.stop();
+          }
+        }}
+        s2c={{
+          ...s2c,
+          // Typed follow-up inside the overlay: write into the composer and
+          // submit through the real form path (same as a typed message).
+          typeText: (text: string) => input?.setText(text),
+          submitComposer: submitComposerForm,
+        }}
+        personas={personas}
+        activePersonaId={s2c.personaId}
+      />
 
       {/* Dictation mic with Claude-style device selector dropdown & VU meter */}
       <MicrophoneMenu
@@ -341,8 +299,8 @@ export const MicButton: FC<MicButtonProps> = ({
         }}
       />
 
-      {/* Voice-mode toggle (speak-to-chat) — hidden while the composer has
-          text so the send button can take its slot, Claude-style */}
+      {/* Live Voice mode toggle (speak-to-chat + TTS reply) — hidden while
+          the composer has text so the send button can take its slot. */}
       {!hideLive && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -359,8 +317,7 @@ export const MicButton: FC<MicButtonProps> = ({
                 "text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white",
                 "hover:bg-neutral-200/80 dark:hover:bg-neutral-800 hover:scale-105 active:scale-95",
                 "transition-all duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400",
-                primaryState === "error" &&
-                  "bg-rose-500/20 text-rose-600 hover:text-rose-600 dark:text-rose-300",
+                // (legacy error-state styling kept for future live-agent mode)
                 s2cActive &&
                   (primaryState === "speaking"
                     ? "bg-violet-500/20 text-violet-600 hover:text-violet-600 dark:text-violet-300"
@@ -388,37 +345,6 @@ export const MicButton: FC<MicButtonProps> = ({
               ? stateLabelKey[primaryState] || t("voice.agent_stop")
               : t("voice.agent_start")}
           </TooltipContent>
-        </Tooltip>
-      )}
-
-      {/* Realtime Agent call mode — dormant behind VITE_VOICE_LIVE_AGENT=1 */}
-      {AGENT_MODE && !hideLive && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={handleAgentClick}
-              disabled={!agentEnabled || dictStatus === "starting" || dictStatus === "stopping"}
-              aria-label={agentActive ? t("voice.agent_stop") : t("voice.agent_start")}
-              aria-pressed={agentActive}
-              data-testid="agent-live-button"
-              data-live-state={live.state}
-              className={cn(
-                "relative inline-flex size-9 items-center justify-center rounded-full bg-transparent p-0 cursor-pointer",
-                "text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white",
-                "hover:bg-neutral-200/80 dark:hover:bg-neutral-800 hover:scale-105 active:scale-95",
-                "transition-all duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400",
-                !agentEnabled && "hidden",
-                live.state === "error" &&
-                  "bg-rose-500/20 text-rose-600 hover:text-rose-600 dark:text-rose-300",
-                agentActive && "bg-violet-500/20 text-violet-600 dark:text-violet-300",
-                (live.state === "connecting" || dictStatus === "starting") && "cursor-wait opacity-60",
-              )}
-            >
-              <SoundwaveIcon className="size-5" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">{t("voice.agent_start")}</TooltipContent>
         </Tooltip>
       )}
     </>

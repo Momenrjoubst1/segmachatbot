@@ -32,7 +32,7 @@ export function isSttEnabled(): boolean {
   return Boolean(process.env.DEEPGRAM_API_KEY?.trim());
 }
 
-/** Shared with the /ws/voice-agent relay — identical auth contract. */
+/** Shared auth contract for STT + any future streaming relays. */
 export async function verifyToken(
   token: string,
   allowAnonDev: boolean,

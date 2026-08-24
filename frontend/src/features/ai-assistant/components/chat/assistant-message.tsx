@@ -31,8 +31,43 @@ import { MessageTiming } from "../../ui/message-timing";
 import { SourcesPanel } from "./SourcesPanel";
 import { TooltipIconButton } from "../../ui/tooltip-icon-button";
 import { useChatHistory } from "@/hooks/useChatHistory";
-import type { AgentChatMessage, AgentStep } from "@/hooks/useAgentWebSocket";
+import type { ChatMessage } from "@/context/ChatHistoryContext";
 import { useConnectionContext } from "@/context/ConnectionContext";
+
+/**
+ * Step in a multi-agent task progress timeline. Defined locally to keep
+ * the multi-agent visual layer self-contained — it has no runtime
+ * dependency on the voice-agent removal.
+ */
+export interface AgentStep {
+  id: string;
+  title: string;
+  status: "pending" | "running" | "done" | "error" | "success";
+  detail?: string;
+  logs?: string;
+}
+
+/**
+ * Tool-approval request shape. Extended to include the human-readable tool
+ * name and args the approval card displays.
+ */
+interface ApprovalRequest {
+  toolCallId: string;
+  toolName: string;
+  args?: Record<string, unknown>;
+}
+
+/**
+ * ChatMessage shape with the optional multi-agent fields the assistant
+ * message renderer reads (task_progress, agent_steps, richer approval
+ * request). All multi-agent fields are absent on the simple text-only
+ * pipeline, so the renderer is a no-op for them.
+ */
+type AgentChatMessage = Omit<ChatMessage, "require_approval"> & {
+  require_approval?: ApprovalRequest | null;
+  task_progress?: { percentage: number; message?: string };
+  agent_steps?: AgentStep[];
+};
 import { ragSourcesBridge, type RagSource } from "@/context/ragSourcesBridge";
 
 export const AssistantMessage: FC = () => {

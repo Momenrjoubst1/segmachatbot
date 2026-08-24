@@ -25,6 +25,7 @@ import { useAssistantState } from "./hooks/useAssistantState";
 import { GuestModeProvider, useGuestMode } from "@/context/GuestModeContext";
 import { SendStateProvider } from "@/context/SendStateContext";
 import { BotActivityReporter } from "./ui/bot-activity/BotActivityReporter";
+import { ChatModelProvider } from "./context/ChatModelContext";
 import { AssistantLayoutProvider } from "./context/AssistantLayoutContext";
 import { AssistantSettingsProvider } from "./context/AssistantSettingsContext";
 import { MaterialViewerDialog } from "./ui/material-viewer/MaterialViewerDialog";
@@ -365,40 +366,47 @@ const AssistantAppContent = () => {
                 <LoadErrorPanel errorCode={messagesError} onRetry={retryFetchMessages} />
               </div>
             )}
-            <motion.div
-              key={chatKey}
-              initial={false}
-              animate={{ opacity: 1 }}
-              className="flex flex-1 h-full w-full overflow-hidden"
-            >
-              <AssistantLayoutProvider
-                value={{
-                  activeView: state.activeView,
-                  onToggleView: setActiveView,
-                  artifactPanelOpen: state.artifactPanelOpen,
-                  setArtifactPanelOpen,
-                  emailHistoryOpen: state.emailHistoryOpen,
-                  setEmailHistoryOpen,
-                }}
+            {/*
+              ChatModelProvider lives above the chatKey-keyed remount so the
+              user's model choice persists across new chats / thread switches.
+              Required by MicButton's voice fast-path model swap.
+            */}
+            <ChatModelProvider>
+              <motion.div
+                key={chatKey}
+                initial={false}
+                animate={{ opacity: 1 }}
+                className="flex flex-1 h-full w-full overflow-hidden"
               >
-                <AssistantChatInner
-                  activeCourse={state.activeCourse}
-                  isOnboarded={isOnboarded}
-                  isCoursesLoading={isCoursesLoading}
-                  coursesError={coursesError}
-                  retryCourses={retryCourses}
-                  localOnboarded={false}
-                  handleCompleteOnboarding={handleCompleteOnboarding}
-                  handleSkipOnboarding={handleSkipOnboarding}
-                  setActiveCourse={actions.setActiveCourse}
-                  activeThreadId={activeThreadId}
-                  draftText={draftText}
-                  chatKey={chatKey}
-                  onDraftSave={handleDraftSave}
-                  onThreadSwitch={onThreadChange}
-                />
-              </AssistantLayoutProvider>
-            </motion.div>
+                <AssistantLayoutProvider
+                  value={{
+                    activeView: state.activeView,
+                    onToggleView: setActiveView,
+                    artifactPanelOpen: state.artifactPanelOpen,
+                    setArtifactPanelOpen,
+                    emailHistoryOpen: state.emailHistoryOpen,
+                    setEmailHistoryOpen,
+                  }}
+                >
+                  <AssistantChatInner
+                    activeCourse={state.activeCourse}
+                    isOnboarded={isOnboarded}
+                    isCoursesLoading={isCoursesLoading}
+                    coursesError={coursesError}
+                    retryCourses={retryCourses}
+                    localOnboarded={false}
+                    handleCompleteOnboarding={handleCompleteOnboarding}
+                    handleSkipOnboarding={handleSkipOnboarding}
+                    setActiveCourse={actions.setActiveCourse}
+                    activeThreadId={activeThreadId}
+                    draftText={draftText}
+                    chatKey={chatKey}
+                    onDraftSave={handleDraftSave}
+                    onThreadSwitch={onThreadChange}
+                  />
+                </AssistantLayoutProvider>
+              </motion.div>
+            </ChatModelProvider>
           </div>
         </div>
       </TooltipProvider>

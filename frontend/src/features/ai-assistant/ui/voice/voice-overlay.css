@@ -1,0 +1,400 @@
+/**
+ * voice-overlay.css — Claude/Grok-style live-voice canvas.
+ *
+ * Visual identity:
+ *   - listening  → sky/cyan (user has the floor)
+ *   - thinking   → slate/amber (bot is processing)
+ *   - speaking   → violet/fuchsia (bot has the floor)
+ *
+ * Performance: only transform/opacity/filter animate; the amplitude
+ * custom properties are consumed by transform/box-shadow/opacity only —
+ * no layout-triggering properties anywhere.
+ * Reduced motion (`prefers-reduced-motion: reduce`): all pulse/rotation
+ * animation is disabled; the orb rests as a static gradient.
+ */
+
+/* ─── Tokens ─────────────────────────────────────────────────────────── */
+
+.voice-overlay {
+  --vo-listen-rgb: 14 165 233;      /* sky-500 */
+  --vo-think-rgb: 148 163 184;      /* slate-400 */
+  --vo-speak-rgb: 139 92 246;       /* violet-500 */
+  --vo-rgb: var(--vo-listen-rgb);
+}
+
+.voice-overlay[data-state="listening"] { --vo-rgb: var(--vo-listen-rgb); }
+.voice-overlay[data-state="thinking"] { --vo-rgb: var(--vo-think-rgb); }
+.voice-overlay[data-state="speaking"] { --vo-rgb: var(--vo-speak-rgb); }
+
+/* ─── Shell ──────────────────────────────────────────────────────────── */
+
+.voice-overlay-shell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  width: min(560px, 92vw);
+  border-radius: 28px;
+  padding: 2rem 1.5rem 1.25rem;
+  background:
+    radial-gradient(
+      ellipse at top,
+      rgb(var(--vo-rgb) / 0.08) 0%,
+      transparent 60%
+    ),
+    var(--background, #fff);
+  border: 1px solid rgb(var(--vo-rgb) / 0.15);
+  box-shadow:
+    0 24px 64px -16px rgb(var(--vo-rgb) / 0.25),
+    0 0 0 1px rgb(var(--vo-rgb) / 0.06);
+  transition:
+    box-shadow 400ms ease,
+    border-color 300ms ease,
+    background 300ms ease;
+}
+
+.dark .voice-overlay-shell {
+  --background: #0a0a0a;
+  background:
+    radial-gradient(
+      ellipse at top,
+      rgb(var(--vo-rgb) / 0.12) 0%,
+      transparent 60%
+    ),
+    #0a0a0a;
+}
+
+/* Ambient halo behind the shell */
+.voice-overlay-halo {
+  position: absolute;
+  inset: -40px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgb(var(--vo-rgb) / 0.10) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  opacity: calc(0.4 + var(--voice-amp, 0) * 0.6);
+  filter: blur(24px);
+  transition: opacity 120ms linear;
+}
+
+/* ─── Orb ────────────────────────────────────────────────────────────── */
+
+.vo-orb {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  display: grid;
+  place-items: center;
+}
+
+/* Core sphere: conic gradient that slowly rotates */
+.vo-orb-core {
+  position: absolute;
+  inset: 18px;
+  border-radius: 9999px;
+  background:
+    conic-gradient(
+      from var(--orb-angle, 0deg),
+      rgb(var(--vo-rgb)) 0deg,
+      rgb(var(--vo-rgb) / 0.55) 80deg,
+      rgb(var(--vo-rgb) / 0.9) 160deg,
+      rgb(var(--vo-rgb) / 0.35) 240deg,
+      rgb(var(--vo-rgb)) 360deg
+    );
+  filter: blur(14px);
+  opacity: 0.85;
+  /* Amplitude-driven scale; base scale differs per state */
+  transform: scale(calc(0.94 + var(--voice-amp, 0) * 0.14));
+  transition: transform 90ms ease-out, opacity 200ms ease;
+  will-change: transform;
+}
+
+@keyframes vo-orb-spin {
+  to { --orb-angle: 360deg; }
+}
+@property --orb-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.voice-overlay[data-state="thinking"] .vo-orb-core {
+  animation: vo-orb-spin 2.6s linear infinite;
+}
+
+/* Inner highlight */
+.vo-orb-highlight {
+  position: absolute;
+  inset: 42px;
+  border-radius: 9999px;
+  background:
+    radial-gradient(
+      circle at 32% 28%,
+      rgba(255, 255, 255, 0.85) 0%,
+      rgba(255, 255, 255, 0.25) 38%,
+      transparent 68%
+    );
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* Pulse rings — expand on speaking state */
+.vo-orb-ring {
+  position: absolute;
+  inset: 12px;
+  border-radius: 9999px;
+  border: 2px solid rgb(var(--vo-rgb) / 0.35);
+  pointer-events: none;
+}
+
+@keyframes vo-ring-pulse {
+  0%   { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+
+.voice-overlay[data-state="speaking"] .vo-orb-ring {
+  animation: vo-ring-pulse 1.6s ease-out infinite;
+}
+.voice-overlay[data-state="listening"] .vo-orb-ring {
+  animation: vo-ring-pulse 2.8s ease-out infinite;
+  animation-delay: 0.4s;
+}
+
+/* ─── Live waveform bars ─────────────────────────────────────────────── */
+
+.vo-waveform {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  height: 44px;
+  margin-top: -0.25rem;
+}
+
+.vo-waveform-bar {
+  width: 5px;
+  border-radius: 3px;
+  background: rgb(var(--vo-rgb) / 0.75);
+  height: calc(4px + var(--bar-amp, 0) * 36px);
+  transition: height 90ms ease-out, background-color 200ms ease;
+  will-change: height;
+}
+
+/* ─── State pill + transcript ───────────────────────────────────────── */
+
+.vo-state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.875rem;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgb(var(--vo-rgb));
+  background: rgb(var(--vo-rgb) / 0.10);
+  border: 1px solid rgb(var(--vo-rgb) / 0.20);
+  transition: color 250ms ease, background-color 250ms ease,
+              border-color 250ms ease;
+}
+
+.vo-state-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: vo-dot-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes vo-dot-breathe {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50%       { opacity: 1;   transform: scale(1.05); }
+}
+
+.vo-transcript {
+  max-width: 92%;
+  min-height: 3em;
+  text-align: center;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--foreground, inherit);
+  overflow-wrap: anywhere;
+}
+
+.vo-transcript[data-role="assistant"] {
+  font-weight: 500;
+}
+
+.vo-transcript-placeholder {
+  opacity: 0.45;
+  font-style: italic;
+}
+
+/* ─── Sample prompts ─────────────────────────────────────────────────── */
+
+.vo-sample-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.vo-sample-chip {
+  padding: 0.375rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  color: var(--muted-foreground, #666);
+  background: var(--muted, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  cursor: default;
+  user-select: none;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.dark .vo-sample-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.vo-sample-chip:hover {
+  color: var(--foreground);
+  background: rgb(var(--vo-rgb) / 0.08);
+}
+
+/* ─── Controls row ───────────────────────────────────────────────────── */
+
+.vo-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+.vo-control-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 9999px;
+  color: var(--foreground, inherit);
+  background: var(--muted, rgba(0, 0, 0, 0.05));
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  cursor: pointer;
+  transition: transform 150ms ease, background-color 150ms ease,
+              color 150ms ease;
+}
+
+.vo-control-btn:hover {
+  transform: scale(1.06);
+  background: rgb(var(--vo-rgb) / 0.10);
+}
+
+.vo-control-btn:active { transform: scale(0.96); }
+
+.vo-control-btn--end {
+  background: #ef44441a; /* rose-500/10 */
+  color: #ef4444;
+  border-color: #ef444433;
+}
+
+.vo-control-btn--end:hover {
+  background: #ef444426;
+}
+
+/* ─── Typed follow-up row ────────────────────────────────────────────── */
+
+.vo-type-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 92%;
+  max-width: 440px;
+}
+
+.vo-type-input {
+  flex: 1;
+  height: 42px;
+  padding: 0 1rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  color: var(--foreground, inherit);
+  background: var(--muted, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  outline: none;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.dark .vo-type-input {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.vo-type-input:focus {
+  border-color: rgb(var(--vo-rgb) / 0.45);
+  background: transparent;
+}
+
+.vo-type-input::placeholder {
+  color: var(--muted-foreground, #999);
+  opacity: 0.7;
+}
+
+.vo-type-send {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+}
+
+.vo-type-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ─── Persona picker ─────────────────────────────────────────────────── */
+
+.vo-persona-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.vo-persona-chip {
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted-foreground, #666);
+  background: transparent;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease,
+              border-color 150ms ease;
+}
+
+.vo-persona-chip[aria-checked="true"] {
+  color: rgb(var(--vo-rgb));
+  background: rgb(var(--vo-rgb) / 0.12);
+  border-color: rgb(var(--vo-rgb) / 0.30);
+}
+
+.vo-persona-chip:hover:not([aria-checked="true"]) {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+/* ─── Reduced motion ─────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .vo-orb-core { animation: none !important; }
+  .vo-orb-ring { animation: none !important; opacity: 0.3; }
+  .vo-state-dot { animation: none; opacity: 0.8; }
+  .voice-overlay-halo { filter: blur(16px); }
+  .vo-control-btn:hover { transform: none; }
+}
