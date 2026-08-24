@@ -501,6 +501,13 @@ export function QuizViewer({ content }: { content: string }) {
   );
   const [submitted, setSubmitted] = useState(false);
 
+  // An updated artifact (new version) restarts the attempt.
+  useEffect(() => {
+    if ("error" in parsed) return;
+    setSelections(parsed.questions.map(() => []));
+    setSubmitted(false);
+  }, [parsed]);
+
   if ("error" in parsed) {
     return <div className="p-4 text-sm text-muted-foreground">Invalid quiz data ({parsed.error})</div>;
   }

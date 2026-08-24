@@ -96,15 +96,19 @@ registerTool("update_artifact", {
         return JSON.stringify({ status: "error", message: `الأرتفاكت ${artifact_id} غير موجود أو غير متاح.` });
       }
 
-      let finalContent = current.content;
+      // Composition order: full replacement first, then targeted edits run
+      // on top of the NEW content — so "rewrite it and fix these strings"
+      // works as one intuitive call.
+      let baseContent = current.content;
+      if (content !== undefined) {
+        baseContent = content;
+      }
+      let finalContent = baseContent;
       let replacementsApplied = 0;
       if (find_replace && find_replace.length > 0) {
-        const result = applyReplacements(current.content, find_replace);
+        const result = applyReplacements(baseContent, find_replace);
         finalContent = result.content;
         replacementsApplied = result.applied;
-      }
-      if (content !== undefined) {
-        finalContent = content;
       }
 
       const updated = await updateArtifact(artifact_id, __userId, {

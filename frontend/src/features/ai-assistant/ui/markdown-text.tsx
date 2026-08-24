@@ -9,6 +9,7 @@ import {
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
+import { stripThinkTags } from "./bot-activity/thinkTags";
 import React, { type FC, memo, useRef, useState, useEffect } from "react";
 import { Highlight } from "@/components/ui/perspective-highlight";
 import { CopyIcon, PlayIcon, RefreshCwIcon, DownloadIcon, ShareIcon, Loader2Icon, XIcon } from "lucide-react";
@@ -57,6 +58,11 @@ const MarkdownTextImpl = () => {
         rehypePlugins={[rehypeKatex]}
         className="aui-md"
         components={defaultComponents}
+        // Reasoning tap: strip <think>…</think> blocks from the markdown
+        // source — they are rendered separately by <ThinkingBlock> (see
+        // MessageComponents). Without this, react-markdown would render the
+        // raw tags as literal text.
+        preprocess={stripThinkTags}
       />
       {isStreamingText && role === "assistant" && <CursorBlinker />}
     </span>

@@ -67,7 +67,7 @@ function IconForStep({ step }: { step: BotStep }) {
   return <Icon className="size-3.5" />;
 }
 
-export const BotStatusInline: FC<{ onStop?: () => void; onRetry?: () => void }> = ({ onStop, onRetry }) => {
+export const BotStatusInline: FC<{ onRetry?: () => void }> = ({ onRetry }) => {
   const { t } = useTranslation("botStatus");
   const activity = useBotActivity();
   const [expanded, setExpanded] = useState(false);
@@ -124,17 +124,9 @@ export const BotStatusInline: FC<{ onStop?: () => void; onRetry?: () => void }> 
           )}
         </button>
 
-        {/* Inline action: stop while running, retry on error, regenerate on interrupted */}
-        {isRunning && onStop && (
-          <button
-            type="button"
-            onClick={onStop}
-            className="text-[11px] px-1.5 py-0.5 rounded text-muted-foreground/80 hover:text-foreground hover:bg-muted/60 transition-colors duration-150"
-            aria-label={t("stop")}
-          >
-            {t("stop")}
-          </button>
-        )}
+        {/* Inline action: retry on error, regenerate on interrupted.
+            (Stop intentionally lives in the composer only — a stop button
+            next to the status line was noisy and redundant.) */}
         {isError && onRetry && (
           <button
             type="button"

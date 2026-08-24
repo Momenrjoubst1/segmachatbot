@@ -14,6 +14,12 @@ import { Perspective } from "@/components/ui/perspective-highlight";
 import { MessageTiming } from "../../../ui/message-timing";
 import { BotStatusInline } from "../../../ui/bot-activity/components/BotStatusInline";
 import { MessageSkeleton } from "../../../ui/bot-activity/components/MessageSkeleton";
+import { ThinkingBlock } from "../../../ui/bot-activity/components/ThinkingBlock";
+import { splitThinkBlocks } from "../../../ui/bot-activity/thinkTags";
+import type {
+  AuiReasoningPart,
+  AuiTextPart,
+} from "../../../ui/bot-activity/types";
 import { QuoteBlock } from "../../../ui/quote";
 import { DirectiveText } from "../../../ui/directive-text";
 import { TooltipIconButton } from "../../../ui/tooltip-icon-button";
@@ -24,7 +30,6 @@ import {
   ComposerPrimitive,
   ErrorPrimitive,
   MessagePrimitive,
-  useAui,
   useAuiState,
 } from "../../../shims/assistant-ui-compat-shim";
 import {
@@ -203,8 +208,8 @@ const FriendlyErrorMessage: FC = () => {
   );
 };
 
-const AssistantStatusLine: FC<{ onStop: () => void; onRetry: () => void }> = ({ onStop, onRetry }) => {
-  return <BotStatusInline onStop={onStop} onRetry={onRetry} />;
+const AssistantStatusLine: FC<{ onRetry: () => void }> = ({ onRetry }) => {
+  return <BotStatusInline onRetry={onRetry} />;
 };
 
 export const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({ className, ...rest }) => {
@@ -517,19 +522,9 @@ export const AssistantMessage: FC = () => {
   const { activeThreadMessages } = useChatHistory();
   const chatMessage = activeThreadMessages?.find((m) => m.id === messageId) as { interrupted?: boolean } | undefined;
 
-  const aui = useAui();
-
   const handleRetryInterrupted = useCallback(() => {
     reloadBtnRef.current?.click();
   }, []);
-
-  const handleStopFromStatus = useCallback(() => {
-    try {
-      aui.thread().cancelRun();
-    } catch {
-      // Runtime not in cancellable state — ignore.
-    }
-  }, [aui]);
 
   const handleRetryFromStatus = useCallback(() => {
     reloadBtnRef.current?.click();
@@ -571,12 +566,38 @@ export const AssistantMessage: FC = () => {
           {/* Status indicator anchored at the TOP of the message bubble so
               it doesn't get pushed down by streaming text — Claude.ai style.
               Idle state renders null, so no extra space when the message is done. */}
-          <AssistantStatusLine onStop={handleStopFromStatus} onRetry={handleRetryFromStatus} />
+          <AssistantStatusLine onRetry={handleRetryFromStatus} />
           <MessagePrimitive.Parts>
             {({ part }) => {
+              // Native reasoning parts (e.g. Gemini thoughts streamed via
+              // the AI SDK) → collapsible thinking block.
+              if (part.type === "reasoning") {
+                const r = part as AuiReasoningPart;
+                return (
+                  <ThinkingBlock
+                    text={r.text}
+                    running={r.status?.type === "running"}
+                  />
+                );
+              }
               if (part.type === "text") {
+                // OpenAI-compat reasoning arrives folded into the text as
+                // <think>…</think> — split it out before rendering. The
+                // markdown layer strips the tags itself (see markdown-text
+                // preprocess), so the answer body renders clean regardless.
+                const textPart = part as AuiTextPart;
+                const split = splitThinkBlocks(textPart.text ?? "");
+                const thinking = (
+                  <ThinkingBlock text={split.thinking} running={split.open} />
+                );
+                const answer = (
+                  <>
+                    {split.thinking && thinking}
+                    <MarkdownText />
+                  </>
+                );
                 if (disable3D) {
-                  return <MarkdownText />;
+                  return answer;
                 }
                 return (
                   <div style={{ position: "relative", isolation: "isolate" }}>
@@ -586,7 +607,7 @@ export const AssistantMessage: FC = () => {
                       smoothing={0.1}
                       cardClassName="max-w-none p-0 bg-transparent shadow-none"
                     >
-                      <MarkdownText />
+                      {answer}
                     </Perspective>
                   </div>
                 );

@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { GlobeIcon, Loader2Icon, LockIcon, SearchIcon } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { GlobeIcon, Loader2Icon, LockIcon, SearchIcon, ShapesIcon, XIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import type { Artifact } from "@/lib/artifacts-api";
 import { listArtifacts } from "@/lib/artifacts-api";
 import { ARTIFACT_TYPE_META } from "./artifact-utils";
 
-const FILTER_TYPES = ["html", "react", "svg", "mermaid", "markdown", "code", "chart", "quiz", "ide"];
-
 /**
  * Artifact library (`/artifacts`) — every artifact the user owns, with search
- * and type filters. Mirrors claude.ai/artifacts.
+ * and type filters. Claude-style layout: centered title, top-right search +
+ * "New artifact" actions, illustrated empty state.
  */
 export function ArtifactLibraryPage() {
   const { t } = useTranslation("artifacts");
@@ -19,7 +18,7 @@ export function ArtifactLibraryPage() {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,40 +41,63 @@ export function ArtifactLibraryPage() {
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
     return artifacts.filter((artifact) => {
-      if (typeFilter && artifact.type !== typeFilter) return false;
       if (query && !artifact.title.toLowerCase().includes(query)) return false;
       return true;
     });
-  }, [artifacts, search, typeFilter]);
+  }, [artifacts, search]);
+
+  // Start a new chat where the user can ask Sigma to build an artifact.
+  const newArtifact = () => navigate("/");
 
   return (
     <div className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-y-auto p-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold">{t("library.title")}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t("library.subtitle")}</p>
+      {/* Claude-style header: centered title, actions pinned right */}
+      <header className="relative mb-8 flex items-center justify-center">
+        <h1 className="text-[28px] font-bold tracking-tight">
+          {t("library.title", { defaultValue: "Artifacts" })}
+        </h1>
+        <div className="absolute end-0 flex items-center gap-2">
+          {searchOpen ? (
+            <div className="relative w-72">
+              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                autoFocus
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder={t("panel.search")}
+                className="h-10 w-full rounded-lg border border-[#2C2825]/50 bg-white pl-9 pr-9 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchOpen(false);
+                  setSearch("");
+                }}
+                aria-label={t("library.clearSearch", { defaultValue: "Close search" })}
+                className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+              >
+                <XIcon className="size-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              aria-label={t("panel.search")}
+              className="flex size-9 items-center justify-center rounded-full border border-border bg-white transition-colors hover:bg-[#F9F6F0]"
+            >
+              <SearchIcon className="size-4 text-[#2C2825]" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={newArtifact}
+            className="rounded-full bg-[#1a1a19] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#3d3a37]"
+          >
+            {t("library.newArtifact", { defaultValue: "New artifact" })}
+          </button>
+        </div>
       </header>
-
-      <div className="mb-5 flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[220px] flex-1 md:max-w-sm">
-          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t("panel.search")}
-            className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm outline-none focus:border-primary/50"
-          />
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <FilterChip active={typeFilter === null} onClick={() => setTypeFilter(null)}>
-            {t("library.all")}
-          </FilterChip>
-          {FILTER_TYPES.map((type) => (
-            <FilterChip key={type} active={typeFilter === type} onClick={() => setTypeFilter(type)}>
-              {ARTIFACT_TYPE_META[type]?.icon} {t(ARTIFACT_TYPE_META[type]?.labelKey ?? "artifacts:type.code")}
-            </FilterChip>
-          ))}
-        </div>
-      </div>
 
       {status === "loading" ? (
         <div className="flex flex-1 items-center justify-center">
@@ -83,10 +105,32 @@ export function ArtifactLibraryPage() {
         </div>
       ) : status === "error" ? (
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">{t("library.loadError")}</div>
+      ) : artifacts.length === 0 ? (
+        /* Claude-style illustrated empty state */
+        <div className="flex flex-1 flex-col items-center justify-center pb-16 text-center">
+          <ShapesIcon className="size-16 text-[#2C2825]" strokeWidth={1.1} />
+          <h2 className="mt-5 text-lg font-semibold text-foreground">
+            {t("library.buildTitle", {
+              defaultValue: "What will you build with artifacts?",
+            })}
+          </h2>
+          <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+            {t("library.buildHint", {
+              defaultValue:
+                "If you can dream it, you can build it. Take apps, games, templates, and tools from thought to reality.",
+            })}
+          </p>
+          <button
+            type="button"
+            onClick={newArtifact}
+            className="mt-6 rounded-xl border border-[#EBE5DF] bg-white px-5 py-2.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-[#F9F6F0]"
+          >
+            {t("library.newArtifact", { defaultValue: "New artifact" })}
+          </button>
+        </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center text-center text-sm text-muted-foreground">
-          <p>{t("library.emptyTitle")}</p>
-          <p className="mt-1 max-w-sm text-xs">{t("library.emptyHint")}</p>
+        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+          {t("library.noMatches", { defaultValue: "No artifacts match your search." })}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 pb-8 sm:grid-cols-2 lg:grid-cols-3" data-testid="artifact-grid">
@@ -125,28 +169,6 @@ export function ArtifactLibraryPage() {
           })}
         </div>
       )}
-
-      <footer className="pb-4">
-        <Link to="/" className="text-sm text-primary hover:underline">
-          ← {t("library.backToChat")}
-        </Link>
-      </footer>
     </div>
-  );
-}
-
-function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-xs transition-colors ${
-        active
-          ? "border-primary/40 bg-primary/15 text-primary"
-          : "border-border bg-background text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      {children}
-    </button>
   );
 }

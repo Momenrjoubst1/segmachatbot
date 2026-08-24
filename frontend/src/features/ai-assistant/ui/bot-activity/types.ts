@@ -128,7 +128,12 @@ export interface StepStreamEvent {
 /** Minimal typing for the AUI parts we read. Avoids importing the AUI types
  *  in this leaf module so the pure derivation stays testable in isolation. */
 export interface AuiTextPart { type: "text"; text: string }
-export interface AuiReasoningPart { type: "reasoning"; text: string }
+export interface AuiReasoningPart {
+  type: "reasoning";
+  text: string;
+  /** assistant-ui part status — "running" while the model streams thoughts. */
+  status?: { type: "running" | "complete" | string };
+}
 export interface AuiToolCallPart {
   type: "tool-call";
   toolCallId: string;

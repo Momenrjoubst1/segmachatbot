@@ -1,7 +1,6 @@
 
 import { useState, type FC } from "react";
 import { PanelLeftClose } from "lucide-react";
-import { BotStatusPulseDot } from "../../../ui/bot-activity/components/BotStatusPulseDot";
 
 /** Shows the Sigma logo normally; on hover it cross-fades into a collapse icon. */
 export const SidebarLogoToggle: FC<{ onToggle?: () => void }> = ({ onToggle }) => {
@@ -61,10 +60,6 @@ export const SidebarLogoToggle: FC<{ onToggle?: () => void }> = ({ onToggle }) =
       >
         Sigma
       </span>
-      {/* Live status dot — sits to the right of the brand text. Reads
-          from the bot activity bridge, so it works even though this
-          component is OUTSIDE the AUI runtime. */}
-      <BotStatusPulseDot size="sm" className="ml-1" />
     </button>
   );
 };

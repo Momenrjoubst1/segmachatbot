@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/dialog";
 import { AnimatedDock } from "@/components/ui/animated-dock";
 import { useAgenticAction } from "../../../../../context/AgenticUIBus";
-import { BotStatusPulseDot } from "../../../ui/bot-activity/components/BotStatusPulseDot";
 
 export interface HeaderProps {
   sidebarCollapsed: boolean;
@@ -63,10 +62,6 @@ export const Header: FC<HeaderProps> = ({
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 px-4">
-      {/* Live status dot — same component used in the sidebar. Reads
-          from the bot activity bridge, so it works outside the AUI
-          runtime. Sits at the very left of the header. */}
-      <BotStatusPulseDot size="sm" className="ml-1" />
       <AnimatedDock
         className="h-10 px-2 pb-1.5 bg-white border border-[#EBE5DF] rounded-xl gap-2 flex items-center justify-center shadow-sm mx-0"
         items={[

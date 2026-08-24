@@ -13,7 +13,6 @@ import type { FC } from "react";
 import { useChatHistory, ChatThread } from "../../../hooks/useChatHistory";
 import type { AcademicCourse } from "../../../hooks/useCourses";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { BotStatusPulseDot } from "./bot-activity/components/BotStatusPulseDot";
 import {
   Dialog,
   DialogContent,
@@ -478,10 +477,6 @@ const ThreadListItem: FC<{
             <span className="flex-1 truncate text-start pointer-events-none">
               {thread.title || "New Chat"}
             </span>
-            {/* Per-thread live status dot — only for the active thread
-                (other threads don't have a live activity feed in this
-                iteration; historical status would need its own cache). */}
-            {isActive && <BotStatusPulseDot />}
           </>
         )}
 

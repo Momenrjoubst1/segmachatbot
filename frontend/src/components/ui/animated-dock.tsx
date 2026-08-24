@@ -42,7 +42,7 @@ export const AnimatedDock = ({ className, items }: AnimatedDockProps) => {
         const content = item.onClick ? (
           <button
             onClick={item.onClick}
-            className="flex items-center justify-center text-primary-foreground bg-transparent border-0 cursor-pointer focus:outline-none"
+            className="flex items-center justify-center text-foreground bg-transparent border-0 cursor-pointer focus:outline-none"
           >
             {item.Icon}
           </button>
@@ -50,7 +50,7 @@ export const AnimatedDock = ({ className, items }: AnimatedDockProps) => {
           <a
             href={item.link}
             target={item.target}
-            className="flex items-center justify-center w-full h-full text-primary-foreground"
+            className="flex items-center justify-center w-full h-full"
           >
             {item.Icon}
           </a>
@@ -58,12 +58,12 @@ export const AnimatedDock = ({ className, items }: AnimatedDockProps) => {
           <Link
             to={item.link}
             target={item.target}
-            className="flex items-center justify-center w-full h-full text-primary-foreground"
+            className="flex items-center justify-center w-full h-full"
           >
             {item.Icon}
           </Link>
         ) : (
-          <div className="flex items-center justify-center w-full h-full text-primary-foreground">
+          <div className="flex items-center justify-center w-full h-full">
             {item.Icon}
           </div>
         );
@@ -137,7 +137,7 @@ export const DockItem = ({ mouseX, children, tooltip, arrowPath }: DockItemProps
     <motion.div
       ref={ref}
       style={{ width }}
-      className="aspect-square w-10 rounded-full bg-primary text-secondary-foreground flex items-center justify-center relative overflow-visible"
+      className="aspect-square w-10 rounded-full bg-transparent text-foreground flex items-center justify-center relative overflow-visible"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >

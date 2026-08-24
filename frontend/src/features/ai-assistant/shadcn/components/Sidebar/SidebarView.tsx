@@ -6,7 +6,7 @@ import { type AcademicCourse } from "../../../../../hooks/useCourses";
 import { UserProfileCard, useUserProfile } from "./UserProfileCard";
 import { NewChatButtonIcon, NewChatButtonFull } from "./NewChatButton";
 import { getUserAvatarUrl } from "@/lib/cn";
-import { LogIn, AlertCircle, SearchIcon } from "lucide-react";
+import { LogIn, AlertCircle, SearchIcon, ShapesIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useChatHistory } from "../../../../../hooks/useChatHistory";
 import { useGuestMode } from "@/context/GuestModeContext";
@@ -171,7 +171,7 @@ export const SidebarView: FC<SidebarViewProps> = ({
         <div className="flex h-full min-w-0 flex-col">
           {/* Header */}
           <div className="flex h-12 shrink-0 items-center justify-between ps-3 pe-2">
-            <span className="text-xl font-semibold tracking-tight text-foreground select-none" style={{ fontFamily: "'Pacifico', cursive" }}>Sigma</span>
+            <span className="text-xl font-semibold tracking-tight text-foreground select-none">Sigma</span>
             <div className="flex items-center gap-0.5">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -216,6 +216,22 @@ export const SidebarView: FC<SidebarViewProps> = ({
               loadThread(null);
               onActiveCourseChange(null);
             }} />
+          </div>
+
+          {/* Artifacts — Claude-style nav item under New Chat */}
+          <div className="shrink-0 px-2 pb-1">
+            <button
+              type="button"
+              onClick={() => navigate("/artifacts")}
+              data-testid="sidebar-artifacts"
+              aria-label="Artifacts"
+              className="flex h-[34px] w-[calc(100%-8px)] items-center gap-2.5 rounded-lg -ms-1 px-2 text-sm text-foreground transition-colors hover:bg-accent"
+            >
+              <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-lg">
+                <ShapesIcon className="size-4 text-[#7A736E]" />
+              </span>
+              <span className="truncate text-start font-medium">Artifacts</span>
+            </button>
           </div>
 
           {/* Scrollable thread list area */}

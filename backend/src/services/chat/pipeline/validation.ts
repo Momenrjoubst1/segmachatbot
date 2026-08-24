@@ -12,6 +12,10 @@ import type { RequestMetrics } from "./types.js";
 export interface ValidationStepResult {
   ok: true;
   selectedModel: string;
+  /** Validated reasoning effort (OpenAI-style), when the client sent one. */
+  selectedEffort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /** Web-search tool toggle from the composer "+" menu (default: true). */
+  webSearchEnabled: boolean;
   userId: string;
   metrics: RequestMetrics;
   messages: Record<string, unknown>[];
@@ -63,6 +67,8 @@ export function validateAndPrepareRequest(req: {
       content: string | Array<{ type: string; text?: string }>;
     }>;
     model?: string;
+    effort?: string;
+    webSearchEnabled?: boolean;
     config?: { modelName?: string };
     data?: { modelName?: string };
     ragEnabled?: boolean;
@@ -95,6 +101,15 @@ export function validateAndPrepareRequest(req: {
     };
   }
 
+  // ---- Effort resolution (schema already enum-validated; keep narrow type) ----
+  const VALID_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+  const selectedEffort = body.effort && (VALID_EFFORTS as readonly string[]).includes(body.effort)
+    ? (body.effort as (typeof VALID_EFFORTS)[number])
+    : undefined;
+
+  // Web-search tool toggle from the composer "+" menu (default: on).
+  const webSearchEnabled = body.webSearchEnabled !== false;
+
   const metrics: RequestMetrics = {
     startTime: Date.now(),
     model: selectedModel,
@@ -113,6 +128,8 @@ export function validateAndPrepareRequest(req: {
   return {
     ok: true,
     selectedModel,
+    selectedEffort,
+    webSearchEnabled,
     userId,
     metrics,
     messages: body.messages as Record<string, unknown>[],

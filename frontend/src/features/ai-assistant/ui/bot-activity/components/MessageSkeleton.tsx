@@ -26,9 +26,17 @@ const RUNNING_STATUSES = new Set([
 ]);
 
 function hasTextContent(parts: AuiPart[]): boolean {
-  return parts.some(
-    (p) => p.type === "text" && (p as Extract<AuiPart, { type: "text" }>).text.length > 0,
-  );
+  return parts.some((p) => {
+    if (p.type === "text") {
+      return ((p as Extract<AuiPart, { type: "text" }>).text?.length ?? 0) > 0;
+    }
+    // Reasoning deltas (thinking stream) count as visible content —
+    // the skeleton should yield as soon as thoughts start arriving.
+    if (p.type === "reasoning") {
+      return ((p as Extract<AuiPart, { type: "reasoning" }>).text?.length ?? 0) > 0;
+    }
+    return false;
+  });
 }
 
 export const MessageSkeleton: FC = () => {

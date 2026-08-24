@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef, type FC, type KeyboardEvent } from "react";
+import { useState, useEffect, useMemo, useRef, type FC, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { TooltipIconButton } from "../../../ui/tooltip-icon-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/cn";
 import {
   AuiIf,
   SuggestionPrimitive,
@@ -17,19 +18,24 @@ import { useSmartAutoScroll } from "@/hooks/useSmartAutoScroll";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import { useTranslation } from "react-i18next";
 import { useTextbooks } from "@/hooks/useTextbooks";
+import {
+  COUNTRY_RESOLVE_GRACE_MS,
+  useIsInJordan,
+} from "../../../hooks/useUserCountry";
 
 // ─── Time-Based Greeting System ────────────────────────────────────────────────────
 
 type TimeBucket = "morning" | "afternoon" | "evening" | "lateNight";
 
-// Get the current hour in the user's actual local timezone (IANA)
+// Get the current hour in the user's actual local timezone (IANA).
+// hourCycle "h23" avoids the legacy "24" midnight quirk of hour12:false.
 function getCurrentLocalHour(): number {
   try {
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const hourStr = new Date().toLocaleString("en-US", {
       timeZone,
       hour: "2-digit",
-      hour12: false,
+      hourCycle: "h23",
     });
     return parseInt(hourStr, 10);
   } catch {
@@ -45,116 +51,223 @@ function getCurrentBucket(): TimeBucket {
   return "lateNight";
 }
 
+// ─── Sticky per-period greeting storage ────────────────────────────────
+//
+// A refresh must NOT reshuffle the greeting: the phrase picked for a time
+// bucket sticks for the rest of the local calendar day (keyed per dialect
+// set), then a fresh one is drawn the next day / next bucket. This keeps
+// the welcome stable across reloads while still rotating through the pool
+// over time.
+
+const greetingStorageKey = (lng: string, bucket: TimeBucket) =>
+  `sigma_greeting:${lng}:${bucket}`;
+
+function localDayString(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+function getStickyGreeting(lng: string, bucket: TimeBucket): string | null {
+  try {
+    const raw = localStorage.getItem(greetingStorageKey(lng, bucket));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { phrase?: unknown; day?: unknown };
+    if (
+      typeof parsed?.phrase !== "string" ||
+      !parsed.phrase ||
+      parsed.day !== localDayString()
+    ) {
+      return null;
+    }
+    return parsed.phrase;
+  } catch {
+    return null;
+  }
+}
+
+function setStickyGreeting(lng: string, bucket: TimeBucket, phrase: string) {
+  try {
+    localStorage.setItem(
+      greetingStorageKey(lng, bucket),
+      JSON.stringify({ phrase, day: localDayString() })
+    );
+  } catch {
+    // Storage unavailable — greeting just reshuffles per open
+  }
+}
+
+function drawPhrase(phrases: string[]): string {
+  if (phrases.length === 0) return "";
+  return phrases[Math.floor(Math.random() * phrases.length)];
+}
+
 // ─── Hook: useStudentGreeting ──────────────────────────────────────────────────────
+//
+// One phrase per time period, stable across page refreshes: picked ONCE
+// per (dialect set, time bucket, day) and persisted, typed out once, left
+// alone. No rotation.
+//
+// Dialect targeting: visitors in Jordan get the Jordanian-dialect phrases
+// (the `ar` bundle); everyone else gets the English ones. The country is
+// resolved via useIsInJordan — UI language and layout stay English/LTR
+// regardless. The pick waits out a short grace window for that lookup so
+// Jordanians don't see English flash first; past it we default to English.
+//
+// Async context upgrades the greeting without ever restarting it:
+//   - Textbook recency gets a short grace window before picking, so
+//     "welcome back / still in the zone" can be factored into the pick
+//     itself; past that deadline we go with a time-based phrase instead of
+//     stalling on a slow network.
+//   - If the profile name arrives while typing and the target grows out of
+//     the displayed prefix ({name} placeholders), the typewriter continues
+//     seamlessly; after finishing, changes swap in silently.
+
+const TYPE_SPEED_MS = 30; // ms per character
+const CONTEXT_GRACE_MS = 1200; // how long to wait for textbook context
 
 interface UseStudentGreetingOptions {
   name?: string;
-  typewriterSpeed?: number; // ms per character
-  rotateInterval?: number; // ms between phrase rotations (0 = no rotation)
 }
 
 function useStudentGreeting(options: UseStudentGreetingOptions = {}) {
-  const { name = "there", typewriterSpeed = 35, rotateInterval = 0 } = options;
-  const { t, i18n } = useTranslation("chat");
-  const { textbooks, isLoading } = useTextbooks();
+  const { name = "there" } = options;
+  const { t } = useTranslation("chat");
+  const { textbooks, isLoading: isLoadingTextbooks } = useTextbooks();
+  const inJordan = useIsInJordan();
 
+  const [target, setTarget] = useState<string | null>(null); // unpicked phrase
   const [displayText, setDisplayText] = useState("");
-  const [currentPhrase, setCurrentPhrase] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const animationFrameRef = useRef<number | null>(null);
-  const indexRef = useRef(0);
-  const lastTimeRef = useRef(0);
-  const phraseRef = useRef("");
+  const displayRef = useRef("");
+  displayRef.current = displayText;
+  const typingRef = useRef(false);
+  const rafRef = useRef<number | null>(null);
+  const pickedRef = useRef(false);
 
-  // Generate a new phrase (with study-aware logic)
-  const generatePhrase = useCallback(() => {
-    // Study-aware greetings based on textbook context
-    if (!isLoading && textbooks.length > 0) {
-      const latestBook = textbooks[0];
-      const lastStudied = new Date(latestBook.updated_at);
-      const hoursSince = (Date.now() - lastStudied.getTime()) / 3600_000;
-
-      if (hoursSince > 48) {
-        // Haven't studied in 2 days
-        return t("greeting.welcomeBack");
-      }
-      if (hoursSince < 2) {
-        // Just studied recently (2 hours threshold)
-        return t("greeting.stillInZone");
-      }
-    }
-
-    // Fallback to time-based
-    const bucket = getCurrentBucket();
-    const phrases = t(`greeting.${bucket}`, { returnObjects: true }) as string[];
-    let phrase = phrases[Math.floor(Math.random() * phrases.length)];
-    if (name && name !== "there") {
-      phrase = phrase.replace("{name}", name);
-    }
-    return phrase;
-  }, [name, t, i18n.language, textbooks, isLoading]);
-
-  // Typewriter animation with requestAnimationFrame
-  const typePhrase = useCallback(
-    (phrase: string) => {
-      setIsTyping(true);
-      setCurrentPhrase(phrase);
-      phraseRef.current = phrase;
-      setDisplayText("");
-      indexRef.current = 0;
-      lastTimeRef.current = 0;
-
-      const animate = (currentTime: number) => {
-        if (lastTimeRef.current === 0) lastTimeRef.current = currentTime;
-        const elapsed = currentTime - lastTimeRef.current;
-
-        if (elapsed >= typewriterSpeed) {
-          if (indexRef.current < phraseRef.current.length) {
-            setDisplayText(phraseRef.current.slice(0, indexRef.current + 1));
-            indexRef.current++;
-            lastTimeRef.current = currentTime;
-            animationFrameRef.current = requestAnimationFrame(animate);
-          } else {
-            setIsTyping(false);
-          }
-        } else {
-          animationFrameRef.current = requestAnimationFrame(animate);
-        }
-      };
-
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      animationFrameRef.current = requestAnimationFrame(animate);
-    },
-    [typewriterSpeed]
-  );
-
-  // Initial phrase + optional rotation
+  // Brief grace period for the textbook fetch, then proceed regardless.
+  const [contextReady, setContextReady] = useState(false);
   useEffect(() => {
-    typePhrase(generatePhrase());
-
-    let rotationTimer: ReturnType<typeof setInterval> | null = null;
-    if (rotateInterval > 0) {
-      rotationTimer = setInterval(() => {
-        typePhrase(generatePhrase());
-      }, rotateInterval);
+    if (!isLoadingTextbooks) {
+      setContextReady(true);
+      return;
     }
+    const timer = setTimeout(() => setContextReady(true), CONTEXT_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [isLoadingTextbooks]);
+
+  // Same idea for the country lookup: Jordanians should get the dialect
+  // phrases from the very first paint of the greeting, so give the IP
+  // lookup a short grace window before defaulting to English.
+  const [geoReady, setGeoReady] = useState(false);
+  useEffect(() => {
+    if (inJordan !== null) {
+      setGeoReady(true);
+      return;
+    }
+    const timer = setTimeout(() => setGeoReady(true), COUNTRY_RESOLVE_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [inJordan]);
+
+  // Pick THE phrase for this open — guarded by pickedRef so StrictMode's
+  // double-invoke or late-arriving data can't repick mid-session.
+  useEffect(() => {
+    if (pickedRef.current || !contextReady || !geoReady) return;
+    pickedRef.current = true;
+
+    // Most recent activity across ALL textbooks — don't trust array order.
+    const lastStudiedMs = textbooks.reduce(
+      (max, book) => Math.max(max, Date.parse(book.updated_at) || 0),
+      0
+    );
+
+    // Jordanian-dialect phrases (`ar` bundle) are Jordan-only.
+    const phraseLng = inJordan === true ? "ar" : "en";
+
+    let phrase: string | null = null;
+    if (lastStudiedMs > 0) {
+      const hoursSince = (Date.now() - lastStudiedMs) / 3600_000;
+      if (hoursSince > 48)
+        phrase = t("greeting.welcomeBack", { lng: phraseLng });
+      else if (hoursSince < 2)
+        phrase = t("greeting.stillInZone", { lng: phraseLng });
+    }
+
+    if (phrase === null) {
+      const bucket = getCurrentBucket();
+      // Refresh-stable: reuse today's already-picked phrase for this
+      // bucket/dialect if we drew one earlier; otherwise draw and persist.
+      const sticky = getStickyGreeting(phraseLng, bucket);
+      if (sticky !== null) {
+        phrase = sticky;
+      } else {
+        const phrases = t(`greeting.${bucket}`, {
+          lng: phraseLng,
+          returnObjects: true,
+        }) as string[];
+        phrase = drawPhrase(Array.isArray(phrases) ? phrases : []);
+        if (phrase) setStickyGreeting(phraseLng, bucket, phrase);
+      }
+    }
+    setTarget(phrase);
+  }, [contextReady, geoReady, inJordan, textbooks, t]);
+
+  // Fill {name} placeholders once the profile name is known.
+  const fullText = useMemo(() => {
+    if (target === null) return "";
+    return target.replace(/\{name\}/g, name);
+  }, [target, name]);
+
+  // Type toward `fullText`:
+  //   - nothing shown yet → start from scratch
+  //   - mid-type and current text is a prefix → continue seamlessly
+  //   - finished earlier → swap silently (never retype)
+  // Honors prefers-reduced-motion by showing the final text immediately.
+  useEffect(() => {
+    if (!fullText) return;
+
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      setDisplayText(fullText);
+      return;
+    }
+
+    const current = displayRef.current;
+    let index: number;
+    if (current === "") {
+      index = 0;
+    } else if (!typingRef.current) {
+      setDisplayText(fullText);
+      return;
+    } else if (fullText.startsWith(current)) {
+      index = current.length;
+    } else {
+      index = 0;
+    }
+
+    typingRef.current = true;
+    let lastTick = 0;
+    const step = (now: number) => {
+      if (now - lastTick >= TYPE_SPEED_MS) {
+        index += 1;
+        setDisplayText(fullText.slice(0, index));
+        lastTick = now;
+      }
+      if (index < fullText.length) {
+        rafRef.current = requestAnimationFrame(step);
+      } else {
+        typingRef.current = false;
+      }
+    };
+    rafRef.current = requestAnimationFrame(step);
 
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      if (rotationTimer) clearInterval(rotationTimer);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      typingRef.current = false;
     };
-  }, [generatePhrase, typePhrase, rotateInterval]);
+  }, [fullText]);
 
-  // Re-type when name changes
-  useEffect(() => {
-    typePhrase(generatePhrase());
-  }, [name, generatePhrase, typePhrase]);
-
-  return { displayText, isTyping, currentPhrase };
+  return { displayText };
 }
 
 // ─── Thread Welcome ────────────────────────────────────────────────────────────────
@@ -164,16 +277,14 @@ export const ThreadWelcome: FC = () => {
   const userName = profile?.name?.split(" ")[0] || "there";
   const [isAnimating, setIsAnimating] = useState(false);
 
-  // Get dynamic greeting with typewriter effect
-  const { displayText } = useStudentGreeting({
-    name: userName,
-    typewriterSpeed: 30,
-    rotateInterval: 12000, // Enable rotation every 12 seconds
-  });
+  // One greeting per chat open — picked from the current time bucket (with
+  // study-aware overrides), typed once, and stays put. No rotation.
+  const { displayText } = useStudentGreeting({ name: userName });
 
   const handleLogoClick = () => {
+    if (isAnimating) return;
     setIsAnimating(true);
-    setTimeout(() => setIsAnimating(false), 2500);
+    setTimeout(() => setIsAnimating(false), 1800);
   };
 
   return (
@@ -181,202 +292,240 @@ export const ThreadWelcome: FC = () => {
       dir="ltr"
       className="fade-in slide-in-from-bottom-1 flex w-full min-w-0 animate-in fill-mode-both duration-200 flex-row items-center justify-center gap-4 select-none"
     >
-      {/* Logo */}
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 100 100"
-        className="size-14 shrink-0 cursor-pointer transition-all duration-300"
+      {/* Logo Container with Interactive Animation */}
+      <div
+        className="group relative shrink-0 cursor-pointer size-14 flex items-center justify-center"
         onClick={handleLogoClick}
-        style={{
-          color: "#BE1E2D",
-          transform: isAnimating ? "scale(1.1)" : "scale(1)",
-          filter: isAnimating
-            ? "drop-shadow(0 8px 16px rgba(190, 30, 45, 0.4))"
-            : "none",
-        }}
+        title="Click me!"
       >
         <style>{`
-          @keyframes drawLine {
-            0% {
-              stroke-dashoffset: 150;
-              opacity: 0;
-            }
-            15% {
-              opacity: 1;
-            }
-            100% {
-              stroke-dashoffset: 0;
-              opacity: 1;
-            }
+          @keyframes logoElasticSpin {
+            0%   { transform: rotate(0deg) scale(1); }
+            15%  { transform: rotate(-14deg) scale(0.92); }
+            35%  { transform: rotate(18deg) scale(1.22); }
+            55%  { transform: rotate(-8deg) scale(1.12); }
+            75%  { transform: rotate(4deg) scale(1.04); }
+            100% { transform: rotate(0deg) scale(1); }
           }
-          @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
+          @keyframes nodePopBounce {
+            0%   { transform: scale(0); opacity: 0; }
+            50%  { transform: scale(1.35); opacity: 1; }
+            75%  { transform: scale(0.85); }
+            100% { transform: scale(1); opacity: 1; }
           }
-          .logo-line-animated {
-            stroke-dasharray: 150;
-            animation: drawLine 0.6s ease-out forwards;
+          @keyframes centerCorePulse {
+            0%   { transform: scale(1); opacity: 1; }
+            30%  { transform: scale(2.2); opacity: 0.8; }
+            60%  { transform: scale(0.8); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
           }
-          .logo-static {
-            animation: fadeIn 0.4s ease-in forwards;
+          @keyframes lineFlowIn {
+            0%   { stroke-dashoffset: 160; opacity: 0; }
+            20%  { opacity: 1; }
+            100% { stroke-dashoffset: 0; opacity: 1; }
           }
-          .logo-center-node {
-            animation: ${isAnimating ? "pulse 0.8s ease-in-out infinite" : "none"};
+          @keyframes auraRingPing {
+            0%   { r: 10; opacity: 0.9; stroke-width: 3.5; }
+            100% { r: 38; opacity: 0;   stroke-width: 0.5; }
           }
-          .logo-line-1 { animation-delay: 0s; }
-          .logo-line-2 { animation-delay: 0.1s; }
-          .logo-line-3 { animation-delay: 0.2s; }
-          .logo-line-4 { animation-delay: 0.3s; }
-          .logo-line-5 { animation-delay: 0.4s; }
-          .logo-line-6 { animation-delay: 0.5s; }
-          .logo-line-7 { animation-delay: 0.6s; }
-          .logo-line-8 { animation-delay: 0.7s; }
+          @keyframes sparkleFly {
+            0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--dx), var(--dy)) scale(0); opacity: 0; }
+          }
+
+          .logo-svg-main {
+            transform-origin: center center;
+            transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+          }
+          .logo-svg-main:hover {
+            transform: scale(1.08) rotate(3deg);
+          }
+          .logo-svg-main.is-active {
+            animation: logoElasticSpin 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          }
+
+          .logo-line-elem {
+            stroke-dasharray: 160;
+            stroke-dashoffset: 0;
+          }
+          .logo-line-elem.is-active {
+            animation: lineFlowIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+          }
+          .line-d-1.is-active { animation-delay: 0.02s; }
+          .line-d-2.is-active { animation-delay: 0.08s; }
+          .line-d-3.is-active { animation-delay: 0.14s; }
+          .line-d-4.is-active { animation-delay: 0.20s; }
+          .line-d-5.is-active { animation-delay: 0.26s; }
+
+          .node-dot {
+            transform-box: fill-box;
+            transform-origin: center;
+          }
+          .node-dot.is-active {
+            animation: nodePopBounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          }
+          .node-d-1.is-active { animation-delay: 0.06s; }
+          .node-d-2.is-active { animation-delay: 0.12s; }
+          .node-d-3.is-active { animation-delay: 0.18s; }
+          .node-d-4.is-active { animation-delay: 0.24s; }
+          .node-d-5.is-active { animation-delay: 0.30s; }
+          .node-d-6.is-active { animation-delay: 0.36s; }
+
+          .center-core-node.is-active {
+            animation: centerCorePulse 0.75s ease-out forwards;
+          }
+
+          .sparkle-dot {
+            opacity: 0;
+            pointer-events: none;
+          }
+          .sparkle-dot.is-active {
+            animation: sparkleFly 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          }
+          .sp-1.is-active { --dx: -22px; --dy: -22px; animation-delay: 0.08s; }
+          .sp-2.is-active { --dx:  22px; --dy: -22px; animation-delay: 0.12s; }
+          .sp-3.is-active { --dx:  24px; --dy:  20px; animation-delay: 0.16s; }
+          .sp-4.is-active { --dx: -20px; --dy:  24px; animation-delay: 0.20s; }
+          .sp-5.is-active { --dx:   0px; --dy: -28px; animation-delay: 0.10s; }
+          .sp-6.is-active { --dx:  28px; --dy:   0px; animation-delay: 0.14s; }
+          .sp-7.is-active { --dx:   0px; --dy:  28px; animation-delay: 0.18s; }
+          .sp-8.is-active { --dx: -28px; --dy:   0px; animation-delay: 0.22s; }
         `}</style>
 
-        {/* Animated lines from center */}
-        <g style={{ opacity: isAnimating ? 1 : 0, transition: "opacity 0.3s" }}>
-          <line
-            x1="50"
-            y1="50"
-            x2="50"
-            y2="23"
-            className="logo-line-animated logo-line-1"
-            stroke="#BE1E2D"
-            strokeWidth="7"
-            strokeLinecap="round"
-          />
-          <line
-            x1="50"
-            y1="50"
-            x2="50"
-            y2="77"
-            className="logo-line-animated logo-line-2"
-            stroke="#BE1E2D"
-            strokeWidth="7"
-            strokeLinecap="round"
-          />
-          <line
-            x1="50"
-            y1="50"
-            x2="26"
-            y2="50"
-            className="logo-line-animated logo-line-3"
-            stroke="#BE1E2D"
-            strokeWidth="7"
-            strokeLinecap="round"
-          />
-          <line
-            x1="50"
-            y1="50"
-            x2="74"
-            y2="50"
-            className="logo-line-animated logo-line-4"
-            stroke="#BE1E2D"
-            strokeWidth="7"
-            strokeLinecap="round"
-          />
-          <line
-            x1="74"
-            y1="50"
-            x2="87"
-            y2="37"
-            className="logo-line-animated logo-line-5"
-            stroke="#BE1E2D"
-            strokeWidth="7"
-            strokeLinecap="round"
-          />
-          <line
-            x1="74"
-            y1="50"
-            x2="87"
-            y2="63"
-            className="logo-line-animated logo-line-6"
-            stroke="#BE1E2D"
-            strokeWidth="7"
-            strokeLinecap="round"
-          />
-          <line
-            x1="50"
-            y1="23"
-            x2="26"
-            y2="50"
-            className="logo-line-animated logo-line-7"
-            stroke="#BE1E2D"
-            strokeWidth="7"
-            strokeLinecap="round"
-          />
-          <line
-            x1="50"
-            y1="77"
-            x2="74"
-            y2="50"
-            className="logo-line-animated logo-line-8"
-            stroke="#BE1E2D"
-            strokeWidth="7"
-            strokeLinecap="round"
-          />
-        </g>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 100 100"
+          className={cn("size-14 logo-svg-main", isAnimating && "is-active")}
+          aria-hidden="true"
+        >
+          {/* Sparkle particle burst */}
+          {isAnimating && (
+            <>
+              <circle cx="50" cy="50" r="3" fill="#BE1E2D" className="sparkle-dot sp-1 is-active" />
+              <circle cx="50" cy="50" r="2.5" fill="#FF5E6D" className="sparkle-dot sp-2 is-active" />
+              <circle cx="50" cy="50" r="3" fill="#BE1E2D" className="sparkle-dot sp-3 is-active" />
+              <circle cx="50" cy="50" r="2" fill="#FFA8A8" className="sparkle-dot sp-4 is-active" />
+              <circle cx="50" cy="50" r="2.5" fill="#BE1E2D" className="sparkle-dot sp-5 is-active" />
+              <circle cx="50" cy="50" r="3" fill="#FF5E6D" className="sparkle-dot sp-6 is-active" />
+              <circle cx="50" cy="50" r="2" fill="#BE1E2D" className="sparkle-dot sp-7 is-active" />
+              <circle cx="50" cy="50" r="2.5" fill="#FFA8A8" className="sparkle-dot sp-8 is-active" />
+            </>
+          )}
 
-        {/* Original static logo */}
-        <g style={{ opacity: isAnimating ? 0 : 1, transition: "opacity 0.4s" }}>
-          <line
-            x1="50"
-            y1="23"
-            x2="50"
-            y2="77"
-            stroke="#BE1E2D"
-            strokeWidth="7"
-            strokeLinecap="round"
-          />
-          <path
-            d="M 50 23 L 26 50 L 50 77"
-            stroke="#BE1E2D"
-            strokeWidth="7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-          />
-          <path
-            d="M 50 23 L 74 50 L 50 77"
-            stroke="#BE1E2D"
-            strokeWidth="7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-          />
-          <line
-            x1="74"
-            y1="50"
-            x2="87"
-            y2="37"
-            stroke="#BE1E2D"
-            strokeWidth="7"
-            strokeLinecap="round"
-          />
-          <line
-            x1="74"
-            y1="50"
-            x2="87"
-            y2="63"
-            stroke="#BE1E2D"
-            strokeWidth="7"
-            strokeLinecap="round"
-          />
-        </g>
+          {/* Logo Main Structure */}
+          <g>
+            {/* Connecting Lines with animated draw effect */}
+            <line
+              x1="50"
+              y1="23"
+              x2="50"
+              y2="77"
+              stroke="#BE1E2D"
+              strokeWidth="7"
+              strokeLinecap="round"
+              className={cn("logo-line-elem line-d-1", isAnimating && "is-active")}
+            />
+            <path
+              d="M 50 23 L 26 50 L 50 77"
+              stroke="#BE1E2D"
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              className={cn("logo-line-elem line-d-2", isAnimating && "is-active")}
+            />
+            <path
+              d="M 50 23 L 74 50 L 50 77"
+              stroke="#BE1E2D"
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              className={cn("logo-line-elem line-d-3", isAnimating && "is-active")}
+            />
+            <line
+              x1="74"
+              y1="50"
+              x2="87"
+              y2="37"
+              stroke="#BE1E2D"
+              strokeWidth="7"
+              strokeLinecap="round"
+              className={cn("logo-line-elem line-d-4", isAnimating && "is-active")}
+            />
+            <line
+              x1="74"
+              y1="50"
+              x2="87"
+              y2="63"
+              stroke="#BE1E2D"
+              strokeWidth="7"
+              strokeLinecap="round"
+              className={cn("logo-line-elem line-d-5", isAnimating && "is-active")}
+            />
 
-        {/* Nodes - always visible */}
-        <circle cx="50" cy="50" r="4" fill="#BE1E2D" className="logo-center-node" />
-        <circle cx="50" cy="23" r="6.5" fill="#BE1E2D" />
-        <circle cx="50" cy="77" r="6.5" fill="#BE1E2D" />
-        <circle cx="26" cy="50" r="7.5" fill="#BE1E2D" />
-        <circle cx="74" cy="50" r="6.5" fill="#BE1E2D" />
-        <circle cx="87" cy="37" r="6.5" fill="#BE1E2D" />
-        <circle cx="87" cy="63" r="6.5" fill="#BE1E2D" />
-      </svg>
+            {/* Outer Nodes with Staggered Elastic Pop */}
+            <circle
+              cx="50"
+              cy="23"
+              r="6.5"
+              fill="#BE1E2D"
+              className={cn("node-dot node-d-1", isAnimating && "is-active")}
+            />
+            <circle
+              cx="50"
+              cy="77"
+              r="6.5"
+              fill="#BE1E2D"
+              className={cn("node-dot node-d-2", isAnimating && "is-active")}
+            />
+            <circle
+              cx="26"
+              cy="50"
+              r="7.5"
+              fill="#BE1E2D"
+              className={cn("node-dot node-d-3", isAnimating && "is-active")}
+            />
+            <circle
+              cx="74"
+              cy="50"
+              r="6.5"
+              fill="#BE1E2D"
+              className={cn("node-dot node-d-4", isAnimating && "is-active")}
+            />
+            <circle
+              cx="87"
+              cy="37"
+              r="6.5"
+              fill="#BE1E2D"
+              className={cn("node-dot node-d-5", isAnimating && "is-active")}
+            />
+            <circle
+              cx="87"
+              cy="63"
+              r="6.5"
+              fill="#BE1E2D"
+              className={cn("node-dot node-d-6", isAnimating && "is-active")}
+            />
+
+            {/* Central Node Core */}
+            <circle
+              cx="50"
+              cy="50"
+              r="4"
+              fill="#BE1E2D"
+              className={cn("node-dot center-core-node", isAnimating && "is-active")}
+            />
+          </g>
+        </svg>
+      </div>
 
       {/* Welcome Text — Dynamic Greeting */}
-      <h1 className="font-semibold text-3xl md:text-4xl break-words text-[#2C2825] relative inline-flex items-end">
-        {displayText || "Loading..."}
+      <h1
+        dir="auto"
+        className="font-semibold text-3xl md:text-4xl break-words text-[#2C2825] relative inline-flex items-end"
+      >
+        {displayText || "\u00a0"}
       </h1>
     </div>
   );
@@ -385,6 +534,10 @@ export const ThreadWelcome: FC = () => {
 // ─── Thread Suggestions ──────────────────────────────────────────────────────────
 
 const ThreadSuggestionItem: FC = () => {
+  const { t } = useTranslation("chat");
+  // Match the pill language: dialect for Jordanians, English otherwise.
+  const inJordan = useIsInJordan();
+
   const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       e.preventDefault();
@@ -406,7 +559,9 @@ const ThreadSuggestionItem: FC = () => {
           variant="outline"
           size="sm"
           className="aui-thread-welcome-suggestion h-9 rounded-full border border-[#EBE5DF] bg-white px-4 text-sm text-[#2C2825] shadow-sm hover:bg-[#F9F6F0] hover:text-[#2C2825] transition-colors"
-          aria-label="Send suggestion"
+          aria-label={t("suggestion.sendAria", {
+            lng: inJordan === true ? "ar" : "en",
+          })}
           onKeyDown={handleKeyDown}
         >
           <SuggestionPrimitive.Title className="aui-thread-welcome-suggestion-text-1" />

@@ -49,12 +49,15 @@ CREATE INDEX IF NOT EXISTS idx_artifact_versions_artifact
 
 -- Keep updated_at fresh on every modification.
 CREATE OR REPLACE FUNCTION set_artifacts_updated_at()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
 BEGIN
   NEW.updated_at = now();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 DROP TRIGGER IF EXISTS trg_artifacts_updated_at ON artifacts;
 CREATE TRIGGER trg_artifacts_updated_at
@@ -64,19 +67,22 @@ CREATE TRIGGER trg_artifacts_updated_at
 -- Cap stored history: keep the 50 most recent versions per artifact so a
 -- chatty editing session cannot grow the table unboundedly.
 CREATE OR REPLACE FUNCTION prune_artifact_versions()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
 BEGIN
-  DELETE FROM artifact_versions
+  DELETE FROM public.artifact_versions
   WHERE artifact_id = NEW.artifact_id
     AND version NOT IN (
-      SELECT version FROM artifact_versions
+      SELECT version FROM public.artifact_versions
       WHERE artifact_id = NEW.artifact_id
       ORDER BY version DESC
       LIMIT 50
     );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 DROP TRIGGER IF EXISTS trg_artifact_versions_prune ON artifact_versions;
 CREATE TRIGGER trg_artifact_versions_prune

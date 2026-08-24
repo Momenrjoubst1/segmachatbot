@@ -105,6 +105,11 @@
   },
   "tokens_one": "{{count}} token",
   "tokens_other": "{{count}} tokens",
+  "thinking": {
+    "active": "Thinking…",
+    "done": "Thought for {{duration}}",
+    "past": "Thoughts"
+  },
   "retry": "Retry",
   "regenerate": "Regenerate",
   "stop": "Stop",

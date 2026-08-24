@@ -22,8 +22,10 @@ import { useBotActivitySnapshot } from "../botActivityBridge";
 import type { BotStatus } from "../types";
 
 const COLOR_FOR: Record<BotStatus, string> = {
-  idle: "bg-muted-foreground/30",
-  queued: "bg-muted-foreground/50",
+  // Invisible while idle/queued — the gray dots bothered the user; the dot
+  // only appears once there is real activity to signal.
+  idle: "bg-transparent",
+  queued: "bg-transparent",
   thinking: "bg-primary",
   tool_running: "bg-primary",
   moderating: "bg-primary",

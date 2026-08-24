@@ -368,12 +368,134 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
   return { provider: "openrouter", modelName: modelId };
 }
 
+/** OpenAI-style reasoning-effort vocabulary accepted from the client. */
+export type ReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
+/**
+ * Map the unified effort to each provider's documented parameter value.
+ * Gated per MODEL (not just provider) so the parameter is only sent where
+ * the target model safely accepts it — unsupported combos return undefined
+ * and the field is omitted entirely (never a 400):
+ *
+ * - openrouter: `reasoning.effort` — accepts the full scale for every model,
+ *   normalizing to the nearest supported level internally.
+ * - azure (OpenAI): `reasoning_effort` low/medium/high/xhigh (no max).
+ * - groq: `reasoning_effort` low/medium/high — GPT-OSS family ONLY.
+ * - baichat (DeepSeek): `reasoning_effort` low/high/max (medium/xhigh → high).
+ * - bigmodel (GLM): `reasoning_effort` on GLM-5.2+ only.
+ * - google: handled separately via thinkingConfig (see mapGoogleThinking).
+ * - All other providers: no effort support → undefined (field omitted).
+ */
+export function mapEffortForProvider(
+  provider: ProviderName,
+  modelName: string,
+  effort: ReasoningEffort,
+): string | undefined {
+  const model = modelName.toLowerCase();
+  switch (provider) {
+    case "openrouter":
+      return effort;
+    case "azure":
+      return effort === "max" ? "xhigh" : effort;
+    case "groq":
+      if (!model.includes("gpt-oss")) return undefined;
+      return effort === "xhigh" || effort === "max" ? "high" : effort;
+    case "baichat":
+      return effort === "medium" || effort === "xhigh" ? "high" : effort;
+    case "bigmodel":
+      if (!model.includes("glm-5.2") && !model.includes("glm-5.3")) {
+        return undefined;
+      }
+      return effort;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Map the unified effort onto Gemini's thinking controls:
+ * - Gemini 3+ → `thinkingLevel` (minimal/low/medium/high).
+ * - Gemini 2.5 → legacy `thinkingBudget` (token buckets).
+ * Returns the keys to spread into providerOptions.google.thinkingConfig,
+ * or an empty object when there is nothing safe to send.
+ */
+export function mapGoogleThinking(
+  modelName: string,
+  effort: ReasoningEffort,
+): { thinkingLevel?: string; thinkingBudget?: number } {
+  const model = modelName.toLowerCase();
+  if (model.includes("gemini-2.5")) {
+    const budget =
+      effort === "low" ? 1024 : effort === "medium" ? 8192 : 24576;
+    return { thinkingBudget: budget };
+  }
+  const level =
+    effort === "low" ? "low" : effort === "medium" ? "medium" : "high";
+  return { thinkingLevel: level };
+}
+
+/**
+ * Fetch wrapper that injects provider-specific reasoning-effort fields into
+ * the outbound JSON body. Only POST requests with string JSON bodies are
+ * touched — media uploads and non-JSON payloads pass through untouched.
+ */
+function createEffortFetch(
+  inner: typeof fetch,
+  provider: ProviderName,
+  effort: ReasoningEffort,
+  modelName?: string,
+): typeof fetch {
+  const mapped = mapEffortForProvider(provider, modelName ?? "", effort);
+  // Unsupported provider/model combo → pass-through, never inject anything.
+  if (mapped === undefined) return inner;
+
+  return async (input, init) => {
+    const method = (
+      init?.method ??
+      (typeof input === "object" && input !== null && "method" in input
+        ? input.method
+        : "POST")
+    ).toUpperCase();
+    if (method !== "POST" || typeof init?.body !== "string") {
+      return inner(input, init);
+    }
+    try {
+      const parsed = JSON.parse(init.body) as Record<string, unknown>;
+      if (provider === "openrouter") {
+        parsed.reasoning = {
+          ...(typeof parsed.reasoning === "object" && parsed.reasoning !== null
+            ? parsed.reasoning
+            : {}),
+          effort: mapped,
+        };
+      } else {
+        parsed.reasoning_effort = mapped;
+        // DeepSeek & GLM gate effort behind thinking mode (enabled by
+        // default — set explicitly so the effort value always applies).
+        if (provider === "baichat" || provider === "bigmodel") {
+          parsed.thinking = { type: "enabled" };
+        }
+      }
+      return inner(input, { ...init, body: JSON.stringify(parsed) });
+    } catch {
+      // Not JSON — pass through.
+      return inner(input, init);
+    }
+  };
+}
+
 export function createProviderClient(
   provider: ProviderName,
-  opts?: { reasoningTap?: boolean },
+  opts?: { reasoningTap?: boolean; effort?: ReasoningEffort; modelName?: string },
 ) {
-  const baseFetch = MEDIA_AWARE_FETCH;
-  // Opt-in SSE tap that folds reasoning deltas into <think>â€¦</think> content.
+  // Reasoning-effort injection: rewrite the JSON body per provider before it
+  // leaves (sits above the media wire so media rewriting still runs first
+  // inside). No-op when no effort was requested or the model doesn't accept it.
+  const baseFetch =
+    opts?.effort
+      ? createEffortFetch(MEDIA_AWARE_FETCH, provider, opts.effort, opts.modelName)
+      : MEDIA_AWARE_FETCH;
+  // Opt-in SSE tap that folds reasoning deltas into <think>�?"</think> content.
   // Enabled by chat pipelines; voice/translate consumers stay untouched.
   const fetchImpl =
     opts?.reasoningTap && REASONING_TAP_DEFAULT_PROVIDERS.has(provider)

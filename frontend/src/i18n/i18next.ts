@@ -135,6 +135,11 @@ i18n
   .use(initReactI18next)
   .init({
     resources,
+    // UI language is HARD-LOCKED to English. The Arabic greeting phrases and
+    // welcome suggestion pills read the `ar` bundle directly via
+    // `t(key, { lng: "ar" })` overrides — nothing in the app should ever
+    // switch the UI language or flip the document to RTL.
+    lng: "en",
     fallbackLng: "en",
     supportedLngs: ["en", "ar"],
     defaultNS: "common",

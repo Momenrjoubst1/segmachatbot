@@ -7,7 +7,7 @@ import { useChatHistory, ChatHistoryProvider } from "../../hooks/useChatHistory"
 import { useCourses, type AcademicCourse } from "../../hooks/useCourses";
 import { useScrollPreservation } from "../../hooks/useScrollPreservation";
 import { useTitle } from "@/context/TitleContext";
-import { useCallback, useEffect, useRef, useLayoutEffect, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useLayoutEffect, useState, useTransition } from "react";
 import { Toaster } from "sonner";
 import { RAGProvider } from "../../context/RAGContext";
 import { TopLoadingBar } from "@/components/ui/TopLoadingBar";
@@ -25,29 +25,60 @@ import { useAssistantState } from "./hooks/useAssistantState";
 import { GuestModeProvider, useGuestMode } from "@/context/GuestModeContext";
 import { SendStateProvider } from "@/context/SendStateContext";
 import { BotActivityReporter } from "./ui/bot-activity/BotActivityReporter";
-import { ChatModelProvider } from "./context/ChatModelContext";
 import { AssistantLayoutProvider } from "./context/AssistantLayoutContext";
 import { AssistantSettingsProvider } from "./context/AssistantSettingsContext";
+import { ChatModelProvider } from "./context/ChatModelContext";
 import { MaterialViewerDialog } from "./ui/material-viewer/MaterialViewerDialog";
+import {
+  COUNTRY_RESOLVE_GRACE_MS,
+  useIsInJordan,
+} from "./hooks/useUserCountry";
 
 
-const WELCOME_SUGGESTIONS = [
-  {
-    title: "How do I register courses?",
-    label: "Help me plan my schedule",
-    prompt: "How can I register for courses this semester and organize my class schedule?",
-  },
-  {
-    title: "About JUST University",
-    label: "Rules and regulations",
-    prompt: "Tell me about the main rules and regulations at Jordan University of Science and Technology",
-  },
-  {
-    title: "Study Organization",
-    label: "How do I organize my notes?",
-    prompt: "How can Sigma AI help me organize my study schedule and summary notes?",
-  },
+/**
+ * Welcome pills under the composer, from the chat namespace (suggestion.*
+ * keys). The pill renders `title` (SuggestionPrimitive.Title); `prompt` is
+ * what actually gets sent when clicked.
+ *
+ * Dialect targeting: visitors in Jordan get the Jordanian-dialect set
+ * (`lng: "ar"`), everyone else gets the English defaults. Pills are held
+ * back briefly until the country lookup settles (or its grace elapses) so
+ * labels never visibly flip after mount. UI language stays English/LTR.
+ */
+const SUGGESTION_KEYS = [
+  ["suggestion.registerCourses", "suggestion.registerCoursesPrompt"],
+  ["suggestion.aboutJust", "suggestion.aboutJustPrompt"],
+  ["suggestion.organizeNotes", "suggestion.organizeNotesPrompt"],
 ] as const;
+
+const useWelcomeSuggestions = () => {
+  const { t } = useTranslation("chat");
+  const inJordan = useIsInJordan();
+
+  const [resolved, setResolved] = useState(inJordan !== null);
+  useEffect(() => {
+    if (inJordan !== null) {
+      setResolved(true);
+      return;
+    }
+    const timer = setTimeout(() => setResolved(true), COUNTRY_RESOLVE_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [inJordan]);
+
+  return useMemo(() => {
+    // Unresolved past the grace window → default (English) set.
+    const lng = resolved ? (inJordan === true ? "ar" : "en") : null;
+    return SUGGESTION_KEYS.map(([titleKey, promptKey]) =>
+      lng === null
+        ? null
+        : {
+            title: t(titleKey, { lng }),
+            label: t(titleKey, { lng }),
+            prompt: t(promptKey, { lng }),
+          }
+    ).filter((s): s is { title: string; label: string; prompt: string } => s !== null);
+  }, [t, inJordan, resolved]);
+};
 
 /**
  * Saves draft text from the AUI composer when the chat key changes.
@@ -190,8 +221,9 @@ const AssistantChatInnerRuntime = ({
 }: Omit<AssistantChatInnerProps, "activeThreadId">) => {
   const { isGuestMode } = useGuestMode();
   const runtime = useRuntime(activeCourse, chatKey);
+  const welcomeSuggestions = useWelcomeSuggestions();
   const aui = useAui({
-    suggestions: Suggestions([...WELCOME_SUGGESTIONS]),
+    suggestions: Suggestions(welcomeSuggestions),
   });
 
   return (
@@ -369,7 +401,8 @@ const AssistantAppContent = () => {
             {/*
               ChatModelProvider lives above the chatKey-keyed remount so the
               user's model choice persists across new chats / thread switches.
-              Required by MicButton's voice fast-path model swap.
+              Without this, picking a model and then starting a new chat would
+              silently reset it to the app default.
             */}
             <ChatModelProvider>
               <motion.div

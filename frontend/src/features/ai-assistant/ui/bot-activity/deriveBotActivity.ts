@@ -81,9 +81,6 @@ export function deriveBotActivity(input: DeriveInput): BotActivity {
   const parts = input.parts ?? [];
   const status = input.status;
   const events = input.streamEvents ?? [];
-  const startTs = input.messageStartTs ?? null;
-
-  if (!status) return { ...IDLE, elapsedMs: startTs ? Math.max(0, now - startTs) : 0 };
 
   // 1. Build steps from explicit stream events (preferred — has labels + results).
   const steps = buildStepsFromEvents(events, now);
@@ -93,6 +90,13 @@ export function deriveBotActivity(input: DeriveInput): BotActivity {
   //    describing the same work are deduped, with the event winning on
   //    labels and results.
   mergeFromParts(steps, parts, now);
+
+  // Start-of-run timestamp: explicit when the caller tracks it, otherwise
+  // inferred from the earliest step so the elapsed timer still works
+  // (`useBotActivity` doesn't track messageStartTs today).
+  const startTs = input.messageStartTs ?? steps[0]?.startedAt ?? null;
+
+  if (!status) return { ...IDLE, steps, elapsedMs: startTs ? Math.max(0, now - startTs) : 0 };
 
   // 3. Token count = sum of text-delta lengths / 4 (rough GPT-style).
   const tokenCount = sumTokenEstimate(parts);

@@ -32,6 +32,10 @@ export const chatMessageSchema = z
     ragEnabled: z.boolean().optional(),
     model: z.string().max(200).optional(),
     modelName: z.string().max(200).optional(),
+    /** Reasoning effort for the selected model (OpenAI-style vocabulary). */
+    effort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+    /** Web-search tool toggle from the composer "+" menu (default: true). */
+    webSearchEnabled: z.boolean().optional(),
     /** Idempotency key generated client-side for new chats (prevents duplicate sessions on 401 retry) */
     clientChatGuid: z.string().uuid().optional(),
     // Light structural check only — accepts BOTH legacy

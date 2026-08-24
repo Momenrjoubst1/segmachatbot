@@ -24,6 +24,7 @@ import {
   modelRouter,
   getGracefulDegradationMessage,
   getProviderAndModel,
+  mapGoogleThinking,
   stripThinkTags,
 } from "../../routes/chat/chat-shared.js";
 import { moderateOutput } from "./moderation.service.js";
@@ -43,6 +44,8 @@ export type { CoreMessage };
 export interface StreamOptions {
   client: ReturnType<typeof createProviderClient>;
   modelName: string;
+  /** Reasoning effort for this request (OpenAI-style), when requested. */
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
   finalMessages: CoreMessage[];
   finalSystemPrompt: string;
   basePersona: string;
@@ -70,10 +73,11 @@ export interface StreamOptions {
 export async function generateAndStreamResponse(
   options: StreamOptions,
 ): Promise<void> {
-  const {
-    client,
-    modelName,
-    finalMessages,
+    const {
+      client,
+      modelName,
+      effort,
+      finalMessages,
     finalSystemPrompt: _finalSystemPrompt,
     basePersona,
     enabledTools,
@@ -124,8 +128,16 @@ export async function generateAndStreamResponse(
     abortSignal: combinedSignal,
     // Surface model reasoning ("thoughts") to the client when the provider
     // supports it (e.g. Gemini thinking). Other providers ignore this key.
+    // When an effort was requested, map it onto Gemini's thinking controls —
+    // OpenAI-compatible providers get their effort via the fetch wrapper in
+    // createProviderClient instead.
     providerOptions: {
-      google: { thinkingConfig: { includeThoughts: true } },
+      google: {
+        thinkingConfig: {
+          includeThoughts: true,
+          ...(effort ? mapGoogleThinking(currentModelName, effort) : {}),
+        },
+      },
     },
     onFinish: async ({
       text,

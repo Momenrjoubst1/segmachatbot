@@ -9,6 +9,35 @@ import { SessionExpiredModal } from "@/components/SessionExpiredModal";
 import { NotFound } from "@/components/ui/ghost-404-page";
 
 import { LoginPage } from "@/components/LoginPage";
+import { GuestModeProvider } from "@/context/GuestModeContext";
+import { ChatHistoryProvider } from "@/hooks/useChatHistory";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { SidebarView } from "@/features/ai-assistant/shadcn/components/Sidebar/SidebarView";
+
+/**
+ * Claude-style artifacts shell: the sidebar stays on the left, the library
+ * page renders in the content area on the right.
+ */
+function ArtifactsLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <GuestModeProvider>
+      <ChatHistoryProvider>
+        <TooltipProvider>
+          <div className="flex h-screen h-[100dvh] w-full overflow-hidden bg-[#FDFBF7] text-foreground">
+            <div className="hidden shrink-0 md:block">
+              <SidebarView
+                courses={[]}
+                activeCourse={null}
+                onActiveCourseChange={() => {}}
+              />
+            </div>
+            <div className="min-w-0 flex-1 overflow-hidden">{children}</div>
+          </div>
+        </TooltipProvider>
+      </ChatHistoryProvider>
+    </GuestModeProvider>
+  );
+}
 
 const AssistantApp = lazy(() => import("@/features/ai-assistant/AssistantApp").then(m => ({ default: m.AssistantApp })));
 const ArtifactPage = lazy(() => import("@/features/artifacts/ArtifactPage").then(m => ({ default: m.ArtifactPage })));
@@ -73,7 +102,9 @@ function AppContent() {
           element={
             <ErrorBoundary componentName="ArtifactLibraryPage">
               <Suspense fallback={<RouteFallback />}>
-                <ArtifactLibraryPage />
+                <ArtifactsLayout>
+                  <ArtifactLibraryPage />
+                </ArtifactsLayout>
               </Suspense>
             </ErrorBoundary>
           }

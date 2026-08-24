@@ -95,6 +95,7 @@ export function ArtifactViewer({ artifact, onChanged, onDeleted, readOnly = fals
       const updated = await api.updateArtifact(artifact.id, { content: draftContent });
       toast.success(t("artifacts:saved"));
       setDraftContent(null);
+      setVersions(null); // history changed — force refetch on next open
       onChanged?.(updated);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common:error"));
@@ -135,6 +136,7 @@ export function ArtifactViewer({ artifact, onChanged, onDeleted, readOnly = fals
       const updated = await api.revertToVersion(artifact.id, version);
       toast.success(t("artifacts:revertedTo", { version }));
       setVersionsOpen(false);
+      setVersions(null); // a new version was just created — refetch next time
       onChanged?.(updated);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common:error"));

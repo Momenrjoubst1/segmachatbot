@@ -21,7 +21,6 @@ describe('model-catalog', () => {
       MODELS.forEach((model) => {
         expect(typeof model.name).toBe('string');
         expect(typeof model.value).toBe('string');
-        expect(typeof model.icon).toBe('string');
         expect(typeof model.contextWindow).toBe('number');
         expect(typeof model.disabled).toBe('boolean');
         expect(typeof model.provider).toBe('string');

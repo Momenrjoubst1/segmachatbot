@@ -1,17 +1,22 @@
 
 import {
-  ComposerAddAttachment,
   ComposerAttachments,
 } from "../../../ui/attachment";
+import { ComposerPlusMenu } from "../../../ui/composer-plus-menu";
 import { MicButton } from "../../../ui/MicButton";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ComposerTriggerPopover } from "../../../ui/composer-trigger-popover";
 import { ComposerQuotePreview, SelectionToolbar } from "../../../ui/quote";
+import {
+  ModelSelector,
+  type ModelOption,
+} from "../../../ui/model-selector";
 
 import {
   ComposerPrimitive,
   useAuiState,
+  unstable_useComposerInput,
   useUnstableMentionAdapter,
   useUnstableSlashCommandAdapter,
 } from "../../../shims/assistant-ui-compat-shim";
@@ -25,11 +30,50 @@ import { LexicalComposerInput } from "@assistant-ui/react-lexical";
 import { type FC, useEffect, useCallback, useMemo } from "react";
 import { DirectiveChip } from "./MessageComponents";
 import { useGuestMode } from "@/context/GuestModeContext";
+import { useChatModel } from "../../../context/ChatModelContext";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useSendState } from "@/context/SendStateContext";
 import { ComposerStatus } from "../../../ui/bot-activity/components/ComposerStatus";
 import { PROMPT_TEMPLATES } from "../../../config/prompt-templates";
+import {
+  MODELS,
+  MODEL_TAGLINES,
+  MODEL_EFFORT_WIRE,
+  getModelEffortLevels,
+  type KnownModelId,
+  type ModelEffortLevel,
+} from "../../../model-catalog";
+
+/**
+ * Provider ids → human labels, used as the fallback description under
+ * models that don't have a curated tagline in MODEL_TAGLINES.
+ */
+const PROVIDER_LABELS: Record<string, string> = {
+  openrouter: "OpenRouter",
+  baichat: "B.AI",
+  bigmodel: "BigModel",
+  google: "Google",
+  azure: "Azure OpenAI",
+  github: "GitHub",
+  groq: "Groq",
+  fireworks: "Fireworks",
+  novita: "Novita.ai",
+  nvidia: "NVIDIA NIM",
+  cerebras: "Cerebras",
+};
+
+/**
+ * Map the frontend MODELS catalog to the ModelSelector's ModelOption shape.
+ * Kept module-level so the array reference is stable across renders.
+ */
+const MODEL_OPTIONS: ModelOption[] = MODELS.map((m) => ({
+  id: m.value,
+  name: m.name,
+  disabled: m.disabled,
+  description: MODEL_TAGLINES[m.value] ?? PROVIDER_LABELS[m.provider],
+  efforts: getModelEffortLevels(m.value),
+}));
 
 /**
  * Discrete send-button state machine:
@@ -41,6 +85,12 @@ const ComposerAction: FC<{ disabled?: boolean }> = ({ disabled }) => {
   const { t } = useTranslation();
   const { sendState } = useSendState();
   const isRunning = useAuiState((s) => s.thread.isRunning);
+  const { model, setModel, setEffort } = useChatModel();
+  const input = unstable_useComposerInput();
+
+  // Claude-style swap: as soon as the user types, the voice-mode button
+  // hides and the send button takes its place. Empty box → voice mode.
+  const hasText = (input?.value ?? "").trim().length > 0;
 
   // Fallback: if the runtime says we're not running but our state is stale,
   // snap back to idle. This catches edge cases where the stream ends
@@ -49,26 +99,47 @@ const ComposerAction: FC<{ disabled?: boolean }> = ({ disabled }) => {
 
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
+      {/* ── left group: "+" menu (attachments / screenshot / web search) ── */}
       <div className="flex items-center gap-0.5">
-        <MicButton />
-        <ComposerAddAttachment />
+        <ComposerPlusMenu />
       </div>
-      <div className="composer-send-group relative flex items-center gap-1.5">
+
+      {/* ── right group: [Model] [Mic] [VoiceMode | Send] ─────── */}
+      <div className="composer-send-group relative flex items-center gap-0.5">
+        <span className="inline-flex">
+          <ModelSelector
+            models={MODEL_OPTIONS}
+            value={model}
+            onValueChange={(v) => setModel(v as KnownModelId)}
+            onEffortChange={(label) =>
+              setEffort(
+                label
+                  ? MODEL_EFFORT_WIRE[label as ModelEffortLevel]
+                  : undefined,
+              )
+            }
+            size="sm"
+            featuredCount={4}
+            showEffort
+            aria-label={t("composer.modelPicker", { defaultValue: "Choose model" })}
+          />
+        </span>
+        <MicButton hideLiveWhenText={hasText} />
 
         {/* ── live status indicator: tokens + elapsed ──────────
             Shown only while submitting or streaming. Sits to the LEFT
             of the action button so the visual hierarchy reads:
-            "[Attach] ........ [X tokens · Y.Ys] [Stop]". */}
+            "[Model] [Mic] [X tokens · Y.Ys] [Stop]". */}
         <ComposerStatus active={effectiveState !== "idle"} />
 
-        {/* ── idle: send button ─────────────────────────────────── */}
-        {effectiveState === "idle" && (
+        {/* ── idle + text: send button (Claude-style filled) ───── */}
+        {effectiveState === "idle" && hasText && (
           <ComposerPrimitive.Send asChild>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  className="state-layer aui-composer-send inline-flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-[#A03C3C] disabled:pointer-events-none disabled:opacity-50"
+                  className="state-layer aui-composer-send inline-flex size-10 items-center justify-center rounded-full bg-[#D97757] text-white shadow-sm transition-colors hover:bg-[#C4633F] disabled:pointer-events-none disabled:opacity-50"
                   aria-label={t("composerSend")}
                   disabled={disabled}
                 >
@@ -236,7 +307,7 @@ export const ThreadComposer: FC = () => {
         <ComposerPrimitive.AttachmentDropzone asChild>
           <div
             data-slot="aui_composer-shell"
-            className="relative flex w-full flex-col gap-2 rounded-3xl border border-[#EBE5DF] bg-white p-2.5 text-[#2C2825] shadow-sm transition-[shadow,background-color] hover:bg-[#F9F6F0] focus-within:bg-white focus-within:border-[#2C2825]/60 focus-within:ring-2 focus-within:ring-[#2C2825]/10 data-[dragging=true]:border-[#2C2825]/60 data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50"
+            className="relative flex w-full flex-col gap-2 rounded-3xl border border-[#EBE5DF] dark:border-neutral-700 bg-white dark:bg-neutral-900 p-2.5 text-[#2C2825] dark:text-neutral-100 shadow-sm transition-[shadow,background-color] hover:bg-[#F9F6F0] dark:hover:bg-neutral-800/60 focus-within:bg-white dark:focus-within:bg-neutral-900 focus-within:shadow-md focus-within:border-[#E0D8CE] dark:focus-within:border-neutral-600 data-[dragging=true]:border-neutral-400 data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50"
             style={{ marginBottom: "var(--composer-keyboard-offset, 0px)" }}
           >
             {/* Audio-reactive visuals live inside the VoiceOverlay (Claude-style) */}

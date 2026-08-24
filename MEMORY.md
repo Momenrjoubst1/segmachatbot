@@ -36,6 +36,23 @@ Primary chat model: `stealth/ox-alpha` via OpenRouter; NVIDIA NIM backup.
 Embeddings: NVIDIA NIM 1024-dim primary. Loose UIMessage validator restored
 (400 messages.0.content bug) — do not re-tighten without a compat shim.
 
+## Reasoning / thinking display (as of 2026-08-23)
+
+Two paths feed the collapsible ThinkingBlock UI:
+1. **Gemini direct**: `providerOptions.google.thinkingConfig.includeThoughts: true`
+   (set in response-generator + guest routes) → native AI SDK `reasoning-*`
+   parts → assistant-ui reasoning part → ThinkingBlock.
+2. **OpenAI-compat providers** (baichat/nvidia/openrouter/bigmodel/novita):
+   @ai-sdk/openai chat DROPS `delta.reasoning_content`. Opt-in
+   `createProviderClient(p, { reasoningTap: true })` wraps fetch, folds
+   reasoning deltas into content as `<think>…</think>`; frontend splits via
+   `thinkTags.ts` and strips in markdown via MarkdownTextPrimitive
+   `preprocess={stripThinkTags}` (raw tags WOULD render as literal text
+   otherwise — no rehype-raw installed). Backend strips tags before
+   moderation/grounding/save/cache (`stripThinkTags` in chat-shared).
+   Voice/TTS intentionally NOT tapped. Do not remove either half — tap and
+   splitter must ship together.
+
 ## Conventions
 
 - i18n flat dotted keys per locale file (`ar/chat.json`, `en/chat.json`).

@@ -105,6 +105,11 @@
   },
   "tokens_one": "كلمة واحدة",
   "tokens_other": "{{count}} كلمات",
+  "thinking": {
+    "active": "يفكّر…",
+    "done": "فكّر لمدة {{duration}}",
+    "past": "الأفكار"
+  },
   "retry": "إعادة المحاولة",
   "regenerate": "إعادة التوليد",
   "stop": "إيقاف",

@@ -19,6 +19,8 @@ import {
 } from "../../../context/AgenticUIBus";
 import { getAssistantAuthHeaders } from "@/lib/auth";
 import { useGuestMode } from "@/context/GuestModeContext";
+import { useChatModelRef, useChatEffortRef } from "../context/ChatModelContext";
+import { isWebSearchEnabled } from "./composer-plus-menu";
 import { createUploadAttachmentAdapter, createTextSnippetAdapter } from "./adapters/chat-file-attachments";
 import i18n from "@/i18n/i18next";
 
@@ -431,6 +433,11 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
   const { activeThreadId, activeThreadMessages, setActiveThreadId, refreshThreads, saveDraft: _saveDraft, getDraft, clearDraft, markLastAssistantInterrupted } = useChatHistory();
   const { ragEnabled } = useRAGContext();
   const { isGuestMode, refreshGuestStatus, setGuestQuota } = useGuestMode();
+  // Live ref to the user-selected model. We use the ref (not state) inside
+  // customFetch so the closure always reads the current value without
+  // forcing the callback to be re-created on every model switch.
+  const modelRef = useChatModelRef();
+  const effortRef = useChatEffortRef();
   const threadCreatedRef = useRef(false);
 
   // Key: use the caller-supplied chatKey (which includes the new-chat counter)
@@ -546,6 +553,11 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
           try {
             const parsed: unknown = JSON.parse(body);
             const transformed = transformToGuestBody(parsed as { messages?: GuestBodyMessage[] });
+            // Forward the user-selected model so guest mode also honors it
+            // when the backend guest endpoint is configured to accept it.
+            (transformed as { model?: string }).model = modelRef.current;
+            (transformed as { model?: string; effort?: string }).effort =
+              effortRef.current;
             body = JSON.stringify(transformed);
           } catch (e) {
             console.error("[guest customFetch] Failed to transform body:", e);
@@ -553,6 +565,9 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
         } else if (body && typeof body === "object") {
           try {
             const transformed = transformToGuestBody(body as { messages?: GuestBodyMessage[] });
+            (transformed as { model?: string }).model = modelRef.current;
+            (transformed as { model?: string; effort?: string }).effort =
+              effortRef.current;
             body = JSON.stringify(transformed);
           } catch (e) {
             console.error("[guest customFetch] Failed to transform object body:", e);
@@ -582,6 +597,23 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
             // (client-side, so oversized phone photos never hit the wire).
             const isChatSend = typeof input === "string" && input.includes("/api/chat");
             if (isChatSend) {
+              // Inject the user-selected model. Read from the ref so the
+              // currently selected value reaches the backend even if the
+              // user switched models between when the send was queued and
+              // when this fetch actually runs. Backend validation rejects
+              // unknown models and falls back to its default (see backend
+              // chat pipeline validation.ts).
+              parsed.model = modelRef.current;
+
+              // Reasoning effort for the selected model (undefined when the
+              // model has no effort support — backend treats absent as default).
+              if (effortRef.current) {
+                parsed.effort = effortRef.current;
+              }
+
+              // Web-search tool toggle from the "+" menu (default: on).
+              parsed.webSearchEnabled = isWebSearchEnabled();
+
               const { downscaleUIMessageImages } = await import("@/lib/image-downscale");
               const { body: transformed, droppedCount } = await downscaleUIMessageImages(parsed);
               Object.assign(parsed, transformed as Record<string, unknown>);
@@ -781,7 +813,8 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
 
       return res;
     },
-    [isGuestMode, activeThreadId, activeCourse, chatKey, setActiveThreadId, refreshThreads, ragEnabled, clearDraft, markLastAssistantInterrupted, navigate, setGuestQuota],
+    [isGuestMode, activeThreadId, activeCourse, chatKey, setActiveThreadId, refreshThreads, ragEnabled, clearDraft,
+markLastAssistantInterrupted, navigate, setGuestQuota, modelRef, effortRef],
   );
 
   const transport = useMemo(
