@@ -42,16 +42,52 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
     /** Offset (in source samples) of the next output window start. */
     this.nextWindowStart = 0;
 
+    // Output batch: decimated samples accumulate here until a full frame
+    // is ready (~frameMs worth of audio at the wire rate). One message per
+    // render quantum (~2.7 ms) meant ~375 main-thread wakeups per second
+    // for no latency benefit — the endpointer needs only ~10 Hz loudness.
+    this.frameMs = 64;
+    this.frameSamples = Math.max(
+      1,
+      Math.round((this.targetRate * this.frameMs) / 1000),
+    );
+    this.outBatch = new Int16Array(this.batchCapacity());
+    this.outLen = 0;
+
     this.port.onmessage = (e) => {
       const msg = e.data || {};
       if (msg.type === "start") {
         this.targetRate = msg.targetRate || 16000;
         this.configure(sampleRate, this.targetRate);
+        this.frameSamples = Math.max(
+          1,
+          Math.round((this.targetRate * this.frameMs) / 1000),
+        );
+        this.outBatch = new Int16Array(this.batchCapacity());
+        this.outLen = 0;
         this.enabled = true;
       } else if (msg.type === "stop") {
+        // Flush whatever is pending so the transcript never loses a tail,
+        // then halt.
+        if (this.outLen > 0) {
+          const tail = this.outBatch.subarray(0, this.outLen).slice();
+          try {
+            this.port.postMessage({ type: "frame", buffer: tail }, [tail.buffer]);
+          } catch { /* port closing */ }
+          this.outLen = 0;
+        }
         this.enabled = false;
       }
     };
+  }
+
+  batchCapacity() {
+    // Full frame + worst-case quantum overshoot (128 src samples / ratio).
+    return (
+      Math.ceil((this.targetRate * this.frameMs) / 1000) +
+      Math.ceil(128 / this.ratio) +
+      8
+    );
   }
 
   configure(nativeRate, targetRate) {
@@ -143,9 +179,21 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
 
     if (produced === 0) return true;
 
-    // Transfer ownership — zero-copy handoff to main thread
-    const frame = produced === out.length ? out : out.subarray(0, produced).slice();
-    this.port.postMessage({ type: "frame", buffer: frame }, [frame.buffer]);
+    // ---- Batch into outgoing frames ----------------------------------------
+    // Capacity headroom (batchCapacity) guarantees the batch can hold a full
+    // frame plus everything one quantum produces, so no overflow is possible
+    // between posts and no sample is ever dropped.
+    for (let i = 0; i < produced; i++) {
+      this.outBatch[this.outLen++] = out[i];
+      if (this.outLen >= this.frameSamples) {
+        // Transfer ownership — zero-copy handoff to main thread
+        const frame = this.outBatch.subarray(0, this.outLen).slice();
+        try {
+          this.port.postMessage({ type: "frame", buffer: frame }, [frame.buffer]);
+        } catch { /* port closing */ }
+        this.outLen = 0;
+      }
+    }
     return true;
   }
 }

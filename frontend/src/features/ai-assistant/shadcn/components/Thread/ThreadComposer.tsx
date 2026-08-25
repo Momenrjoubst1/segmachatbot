@@ -4,6 +4,7 @@ import {
 } from "../../../ui/attachment";
 import { ComposerPlusMenu } from "../../../ui/composer-plus-menu";
 import { MicButton } from "../../../ui/MicButton";
+import { VoiceDebugOverlay, VOICE_DEBUG_PARAM } from "../../../ui/VoiceDebugOverlay";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ComposerTriggerPopover } from "../../../ui/composer-trigger-popover";
@@ -125,6 +126,9 @@ const ComposerAction: FC<{ disabled?: boolean }> = ({ disabled }) => {
           />
         </span>
         <MicButton hideLiveWhenText={hasText} />
+        {/* ?voiceDebug=1 — always-on voice diagnostics (mounts even when
+            MicButton hides itself for guests, exposing the hide reason). */}
+        {VOICE_DEBUG_PARAM.enabled && <VoiceDebugOverlay />}
 
         {/* ── live status indicator: tokens + elapsed ──────────
             Shown only while submitting or streaming. Sits to the LEFT

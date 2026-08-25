@@ -2,7 +2,7 @@
  * Web Audio API Sound Effects Manager for Voice Mode.
  *
  * - Pre-loads and decodes 'voice-start.mp3' into memory for zero-latency instant playback.
- * - Start Sound: Plays voice-start.mp3 directly at normal speed (playbackRate = 1.0, volume = 0.25).
+ * - Start Sound: Plays voice-start.mp3 directly at normal speed (playbackRate = 1.0, volume = 0.65).
  * - Stop Sound: Programmatically derives a descending, low-pitch deactivation sound from the same
  *   audio buffer (playbackRate = 0.72 + lowpass filter).
  * - Manages rapid toggling and overlapping audio with smooth gain crossfades.

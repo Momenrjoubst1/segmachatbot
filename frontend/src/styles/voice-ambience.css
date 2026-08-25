@@ -19,6 +19,16 @@
  * no layout-triggering properties anywhere.
  */
 
+/* Token DEFINITIONS. These were previously only documented, never declared —
+   every rgb(var(--voice-listen-rgb)) without a fallback resolved to nothing,
+   leaving panel dots/labels uncolored. Declared once here on :root. */
+:root {
+  --voice-listen-rgb: 14 165 233; /* sky-500 */
+  --voice-speak-rgb: 139 92 246;  /* violet-500 */
+  --voice-think-rgb: 148 163 184; /* slate-400, desaturated */
+  --va-border: 148 163 184;
+}
+
 .voice-ambience {
   /* state identity (overridden per data-voice-state below) */
   --va-rgb: var(--voice-listen-rgb, 14 165 233);

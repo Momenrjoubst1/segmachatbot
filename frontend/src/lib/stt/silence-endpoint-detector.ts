@@ -7,9 +7,8 @@
  *  - Never endpoint before the user has actually spoken (pre-speech silence
  *    must not trigger a send).
  *  - Hysteresis: speech opens above `speechStartRms` and only counts as
- *    finished below `speechHoldRms` (avoids flicker on plosives/breath).
- *  - Hangover: brief dips under threshold do not restart the silence timer
- *    until `hangoverMs` passes.
+ *    finished below `speechHoldRms` (avoids flicker on plosives/breath —
+ *    this IS the hangover; a separate hangover timer would self-perpetuate).
  *  - Semantic extension: when the partial transcript ends mid-clause
  *    (conjunction/preposition/dangling colon), require extra silence before
  *    firing — users pause to think mid-sentence.
@@ -27,8 +26,6 @@ export interface EndpointDecision {
 export interface EndpointConfig {
   /** Base silence required after last voiced sample (ms). */
   silenceMs: number;
-  /** Voiced samples within this window keep the utterance alive (ms). */
-  hangoverMs: number;
   /** RMS needed to open the speech gate. */
   speechStartRms: number;
   /** RMS below which we consider the speaker paused (hysteresis). */
@@ -53,7 +50,6 @@ export const DEFAULT_ENDPOINT_CONFIG: EndpointConfig = {
   // after ~500-700ms of silence. 600ms + the Arabic-aware incomplete guard
   // feels near-instant without clipping mid-clause pauses.
   silenceMs: 600,
-  hangoverMs: 250,
   speechStartRms: 350,
   speechHoldRms: 220,
   zcrNoiseMax: 0.35,

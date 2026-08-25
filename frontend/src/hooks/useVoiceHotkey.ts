@@ -16,17 +16,6 @@ import { useEffect, useRef } from "react";
 interface UseVoiceHotkeyOptions {
   /** Called when the activation shortcut is pressed in a valid context. */
   onToggle: () => void;
-  /**
-   * Optional override. Default: Ctrl+Shift+V (Cmd+Shift+V on macOS).
-   * Pass an object like { key: " ", ctrl: false, shift: false, alt: false }
-   * to bind Space (or any other combo).
-   */
-  combo?: { key: string; ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean };
-  /**
-   * When true, the hotkey fires even when a text input is focused.
-   * Default false (suppressed in inputs) so it doesn't hijack typing.
-   */
-  fireInInputs?: boolean;
 }
 
 function isTextEditable(el: EventTarget | null): boolean {
@@ -37,37 +26,17 @@ function isTextEditable(el: EventTarget | null): boolean {
   return false;
 }
 
-export function useVoiceHotkey({
-  onToggle,
-  combo,
-  fireInInputs = false,
-}: UseVoiceHotkeyOptions): void {
+export function useVoiceHotkey({ onToggle }: UseVoiceHotkeyOptions): void {
   const ref = useRef(onToggle);
   ref.current = onToggle;
-  const comboRef = useRef(combo);
-  comboRef.current = combo;
-  const fireInInputsRef = useRef(fireInInputs);
-  fireInInputsRef.current = fireInInputs;
 
   useEffect(() => {
     const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
     const handler = (e: KeyboardEvent) => {
-      const c = comboRef.current ?? {
-        key: "v",
-        ctrl: !isMac,
-        meta: isMac,
-        shift: true,
-      };
-      if (e.key.toLowerCase() !== c.key.toLowerCase()) return;
-      if (Boolean(c.ctrl) !== (e.ctrlKey || (isMac && e.metaKey))) {
-        // Either user wants Ctrl OR user wants Cmd (Mac).
-        // Allow Ctrl on non-Mac or Meta on Mac. If the combo wants meta only,
-        // accept either meta or ctrl on Mac to be permissive.
-        if (!(isMac && c.meta && (e.metaKey || e.ctrlKey))) return;
-      }
-      if (Boolean(c.shift) !== e.shiftKey) return;
-      if (Boolean(c.alt) !== e.altKey) return;
-      if (!fireInInputsRef.current && isTextEditable(e.target)) return;
+      if (e.key.toLowerCase() !== "v") return;
+      if (!(isMac ? e.metaKey || e.ctrlKey : e.ctrlKey)) return;
+      if (!e.shiftKey || e.altKey) return;
+      if (isTextEditable(e.target)) return;
       e.preventDefault();
       e.stopPropagation();
       ref.current();

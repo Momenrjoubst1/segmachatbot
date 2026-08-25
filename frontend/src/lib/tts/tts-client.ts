@@ -19,7 +19,7 @@ export class TtsError extends Error {
 
 export async function synthesizeChunk(
   text: string,
-  voiceId: string,
+  personaId: string,
   signal?: AbortSignal,
 ): Promise<ArrayBuffer> {
   let res: Response;
@@ -27,7 +27,7 @@ export async function synthesizeChunk(
     res = await authFetch(`${BACKEND_URL}/api/tts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voiceId }),
+      body: JSON.stringify({ text, personaId }),
       signal,
     });
   } catch (err) {
