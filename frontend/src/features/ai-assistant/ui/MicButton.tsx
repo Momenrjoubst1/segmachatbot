@@ -6,8 +6,6 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 import { useGuestMode } from "@/context/GuestModeContext";
 import { unstable_useComposerInput } from "../shims/assistant-ui-compat-shim";
-import { useChatModel } from "../context/ChatModelContext";
-import type { KnownModelId } from "../model-catalog";
 import { useDictation } from "@/hooks/useDictation";
 import { useSpeakToChat } from "@/hooks/useSpeakToChat";
 import { useVoiceHotkey } from "@/hooks/useVoiceHotkey";
@@ -15,7 +13,10 @@ import { voiceDebugBus } from "@/lib/stt/voice-debug-bus";
 import { voiceSoundEffects } from "@/lib/audio/voice-sound-effects";
 import { MicrophoneMenu } from "./MicrophoneMenu";
 
-const VOICE_FAST_MODEL = "gemini-2.5-flash";
+  // Voice mode runs on WHATEVER model the user has selected — no forced
+  // swap. The old auto-switch to a single fast model burned through one
+  // provider's free quota and blocked every other model from voice use.
+
 
 interface MicButtonProps {
   className?: string;
@@ -137,30 +138,6 @@ export const MicButton: FC<MicButtonProps> = ({
   }, [s2cActive, s2c, dictRecording, stopDict]);
 
   useVoiceHotkey({ onToggle: toggleLiveVoice });
-
-  const { modelRef, effortRef, setModel, setEffort } = useChatModel();
-  const savedModelRef = useRef<KnownModelId | null>(null);
-  const savedEffortRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (s2cActive && savedModelRef.current === null) {
-      savedModelRef.current = modelRef.current;
-      savedEffortRef.current = effortRef.current;
-      if (modelRef.current !== VOICE_FAST_MODEL) {
-        setModel(VOICE_FAST_MODEL);
-        setEffort("low");
-        toast.info(t("voice.flash_model"));
-      }
-    } else if (!s2cActive && savedModelRef.current !== null) {
-      const restore = savedModelRef.current;
-      const restoreEffort = savedEffortRef.current;
-      savedModelRef.current = null;
-      savedEffortRef.current = undefined;
-      if (modelRef.current === VOICE_FAST_MODEL) {
-        setModel(restore);
-        setEffort(restoreEffort);
-      }
-    }
-  }, [s2cActive, modelRef, effortRef, setModel, setEffort, t]);
 
   const hideLive = hideLiveWhenText && !s2cActive;
 
