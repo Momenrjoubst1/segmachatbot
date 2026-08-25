@@ -289,5 +289,7 @@
   "voice.sample_1": "اشرح لي نظرية فيثاغورس",
   "voice.sample_2": "ساعدني أكتب مقال عن البيئة",
   "voice.sample_3": "لخّص لي هذا الدرس",
-  "voice.type_followup": "…أو اكتب سؤالك هنا"
+  "voice.type_followup": "…أو اكتب سؤالك هنا",
+  "voice.speaking_bar": "سيجما بيتكلم…",
+  "voice.stop_speaking": "إيقاف الصوت"
 }

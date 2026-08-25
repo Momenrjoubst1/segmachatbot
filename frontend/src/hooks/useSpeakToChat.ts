@@ -38,6 +38,11 @@ import {
   TtsError,
 } from "@/lib/tts/tts-client";
 import { ElevenLabsStreamingTts } from "@/lib/tts/elevenlabs-streaming";
+import { voiceKaraoke } from "@/lib/tts/voice-karaoke";
+import {
+  voiceAmbience,
+  type AmbienceState,
+} from "@/features/ai-assistant/ui/voice/ambience-controller";
 
 export type SpeakToChatState =
   | "off"
@@ -46,6 +51,16 @@ export type SpeakToChatState =
   | "sending"
   | "thinking"
   | "speaking";
+
+/** Session state → orb/waveform ambience state (see ambience-controller). */
+const AMBIENCE_OF_STATE: Record<SpeakToChatState, AmbienceState> = {
+  off: "off",
+  connecting: "idle",
+  listening: "listening",
+  sending: "thinking",
+  thinking: "thinking",
+  speaking: "speaking",
+};
 
 export interface UseSpeakToChatOptions {
   /** Writes the given text into the composer input. */
@@ -87,9 +102,19 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
   const detectorRef = useRef<SilenceEndpointDetector | null>(null);
   const playerRef = useRef<AudioQueuePlayer | null>(null);
   const splitterRef = useRef<StreamingSentenceSplitter | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  /**
+   * ALL in-flight HTTP-fallback TTS fetches. Concurrent by design: aborting
+   * the previous sentence when a new one starts (the old single-ref
+   * behavior) dropped its audio whenever the fallback + slow network
+   * coincided. Barge-in/stop aborts the whole set.
+   */
+  const httpFetchesRef = useRef<Set<AbortController>>(new Set());
   /** Streaming TTS client (ElevenLabs WebSocket). Created per session. */
   const ttsStreamRef = useRef<ElevenLabsStreamingTts | null>(null);
+  /** Stops the 10 Hz karaoke playhead interval. */
+  const karaokeTickStopRef = useRef<(() => void) | null>(null);
+  /** Turn-relative second where the next audio chunk's timings begin. */
+  const chunkTimingOffsetRef = useRef(0);
 
   const turnTextRef = useRef("");
   const lastSentTextRef = useRef("");
@@ -128,6 +153,10 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     setState((s) => (s === "listening" || s === "sending" ? "thinking" : s));
 
     if (suppressSpeechRef.current) return;
+    // Karaoke: seed the bridge with the full (streaming) reply text so the
+    // message bubble can split into words before timings arrive.
+    if (!voiceKaraoke.isActive) voiceKaraoke.startTurn(text);
+    else voiceKaraoke.updateText(text);
     const splitter = splitterRef.current;
     if (!splitter) return;
     for (const sentence of splitter.push(delta)) void speakSentenceRef.current(sentence);
@@ -153,8 +182,7 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     // HTTP fallback — kept for environments without an ElevenLabs key.
     void (async () => {
       const ac = new AbortController();
-      abortRef.current?.abort();
-      abortRef.current = ac;
+      httpFetchesRef.current.add(ac);
       try {
         const audio = await synthesizeChunk(
           sentence,
@@ -168,6 +196,8 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
           optsRef.current.onNotice?.("tts_unavailable");
         }
         // aborted / network blips: skip silently — text still flows
+      } finally {
+        httpFetchesRef.current.delete(ac);
       }
     })();
   }, []);
@@ -231,6 +261,10 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       echoStreakRef.current = 0; // a real user turn happened — echo suspicion clears
       turnTextRef.current = "";
       setInterimText("");
+      // New spoken turn begins — reset the karaoke timing accumulator so
+      // chunk-relative alignment maps onto a fresh turn timeline.
+      chunkTimingOffsetRef.current = 0;
+      voiceKaraoke.endTurn();
       voiceDebugBus.event("s2c_send", text.slice(0, 60));
       // THE parity move: the transcript rides the real composer form, so the
       // message travels the exact send path a typed message would take.
@@ -309,6 +343,10 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     });
     controllerRef.current = controller;
     await controller.start();
+    // Feed the orb/waveform: mic loudness drives the visuals while listening.
+    const ctx = controller.audioContextRef;
+    const stream = controller.mediaStreamRef;
+    if (ctx && stream) voiceAmbience.attachMic(ctx, stream);
   }, []);
   startMicRef.current = startMic;
 
@@ -321,7 +359,8 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
         if (!bargeFirstLoudTsRef.current) bargeFirstLoudTsRef.current = now;
         else if (now - bargeFirstLoudTsRef.current >= BARGE_IN_SUSTAIN_MS) {
           bargeFirstLoudTsRef.current = 0;
-          abortRef.current?.abort();
+          for (const ac of httpFetchesRef.current) ac.abort();
+          httpFetchesRef.current.clear();
           playerRef.current?.stopAll();
           // Echo heuristic: a barge that fires almost immediately after the
           // bot starts talking, with nothing the user said in between, is
@@ -366,6 +405,9 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     playerRef.current = new AudioQueuePlayer((speaking) => {
       if (!speaking) {
         speakStartedAtRef.current = 0;
+        voiceKaraoke.endTurn();
+        karaokeTickStopRef.current?.();
+        karaokeTickStopRef.current = null;
         if (stateRef.current === "speaking") {
           // Queue drained — hand the floor back to the user
           suppressSpeechRef.current = false;
@@ -375,8 +417,20 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       } else {
         if (!speakStartedAtRef.current) speakStartedAtRef.current = Date.now();
         setState((s) => (s === "thinking" || s === "listening" ? "speaking" : s));
+        // ~10 Hz playhead → karaoke highlight sync.
+        if (!karaokeTickStopRef.current) {
+          const id = window.setInterval(() => {
+            const player = playerRef.current;
+            if (player?.speaking) voiceKaraoke.tick(player.playbackSeconds);
+          }, 100);
+          karaokeTickStopRef.current = () => window.clearInterval(id);
+        }
       }
     });
+    // Bot playback loudness drives the orb while speaking. Eager tap: the
+    // audio graph exists before the first chunk so the probe never misses.
+    const agentTap = playerRef.current.getAnalyserTap();
+    if (agentTap) voiceAmbience.attachAgent(agentTap);
 
     // Open the ElevenLabs streaming TTS WebSocket (non-blocking: a connect
     // failure is silent — speakSentence() falls back to the HTTP route).
@@ -388,6 +442,15 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
           // The player's enqueue() decodes asynchronously so it never blocks
           // the WS callback.
           playerRef.current?.enqueue(chunk.slice(0)).catch(() => undefined);
+        },
+        onAlignment: (words) => {
+          // Word timestamps are chunk-relative; offset them to turn-relative
+          // using the queue position at enqueue time (same order as audio).
+          const offset = chunkTimingOffsetRef.current;
+          voiceKaraoke.pushTimings(words, offset);
+          // Approximate the NEXT chunk's start from this chunk's last end.
+          const last = words[words.length - 1];
+          if (last) chunkTimingOffsetRef.current = offset + last.end;
         },
         onError: (err) => {
           voiceDebugBus.event("tts_stream_error", err.message);
@@ -428,12 +491,14 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
 
   const stop = useCallback((): void => {
     stoppingRef.current = true;
-    abortRef.current?.abort();
+    for (const ac of httpFetchesRef.current) ac.abort();
+    httpFetchesRef.current.clear();
     controllerRef.current?.stop().catch(() => undefined);
     playerRef.current?.stopAll();
     ttsStreamRef.current?.endStream();
     ttsStreamRef.current?.close();
     ttsStreamRef.current = null;
+    voiceAmbience.reset();
     teardownRef.current();
     setInterimText("");
     setState("off");
@@ -455,9 +520,11 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
 
   useEffect(() => {
     return () => {
-      abortRef.current?.abort();
+      for (const ac of httpFetchesRef.current) ac.abort();
+      httpFetchesRef.current.clear();
       controllerRef.current?.stop().catch(() => undefined);
       playerRef.current?.destroy();
+      voiceAmbience.reset();
     };
   }, []);
 
@@ -486,10 +553,12 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     [state],
   );
 
-  // Debug overlay (?voiceDebug=1) mirrors the state machine for diagnosis.
+  // Debug overlay (?voiceDebug=1) mirrors the state machine for diagnosis;
+  // the ambience controller rides the same signal to gate its probes.
   useEffect(() => {
     voiceDebugBus.event("s2c_state", state);
     voiceDebugBus.setState(state === "off" ? "idle" : `s2c:${state}`);
+    voiceAmbience.setState(AMBIENCE_OF_STATE[state]);
   }, [state]);
 
   return { state, busy, muted, setMuted, start, stop, setPersona, personaId, interimText };

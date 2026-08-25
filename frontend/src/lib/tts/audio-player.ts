@@ -12,6 +12,8 @@
 interface QueueItem {
   encoded: ArrayBuffer;
   resolve: (played: boolean) => void;
+  /** Turn-relative second at which this chunk starts (for karaoke sync). */
+  startOffsetSec?: number;
 }
 
 export class AudioQueuePlayer {
@@ -21,11 +23,31 @@ export class AudioQueuePlayer {
   private stopped = false;
   private currentSource: AudioBufferSourceNode | null = null;
   private gain: GainNode | null = null;
+  /** Last requested volume — barge-in fade restores THIS, not literal 1. */
+  private volume = 1;
+  /** Turn-relative playback position of the currently-playing chunk. */
+  private currentStartSec = 0;
+  private currentChunkStartCtxTime = 0;
+  /** Accumulated duration of all chunks played this turn. */
+  private turnOffsetSec = 0;
 
   constructor(private onSpeakingChange?: (speaking: boolean) => void) {}
 
   get speaking(): boolean {
     return this.playing;
+  }
+
+  /**
+   * Turn-relative seconds of audio actually played so far. Driven by the
+   * AudioContext clock (sample-accurate), resets on stopAll().
+   */
+  get playbackSeconds(): number {
+    if (!this.ctx) return this.turnOffsetSec;
+    const within =
+      this.playing && this.currentSource
+        ? this.ctx.currentTime - this.currentChunkStartCtxTime
+        : 0;
+    return this.currentStartSec + Math.max(0, within);
   }
 
   get queuedCount(): number {
@@ -96,13 +118,24 @@ export class AudioQueuePlayer {
     const wasPlaying = this.playing;
     this.playing = true;
     this.currentSource = src;
+    this.currentStartSec = item.startOffsetSec ?? this.turnOffsetSec;
+    this.currentChunkStartCtxTime = ctx.currentTime;
     if (!wasPlaying) this.onSpeakingChange?.(true);
 
     let settled = false;
     const done = (played: boolean) => {
       if (settled) return;
       settled = true;
-      if (this.currentSource === src) this.currentSource = null;
+      if (this.currentSource === src) {
+        this.currentSource = null;
+        // Advance the turn offset past the finished chunk.
+        const played =
+          this.ctx && this.currentChunkStartCtxTime
+            ? this.ctx.currentTime - this.currentChunkStartCtxTime
+            : 0;
+        this.turnOffsetSec =
+          this.currentStartSec + Math.max(0, played);
+      }
       item.resolve(played);
       // Chain after a microtask so stopAll() during onended still wins.
       setTimeout(() => void this.drain(), 0);
@@ -117,8 +150,35 @@ export class AudioQueuePlayer {
   }
 
   setVolume(v: number): void {
+    // Remember the request even before the graph exists — the barge-in fade
+    // restores THIS value, not literal 1 (which clobbered user volume).
+    this.volume = v;
     if (this.gain && this.ctx) {
       this.gain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02);
+    }
+  }
+
+  /**
+   * Output node visualizers can tap (post-gain). Creates the audio graph
+   * eagerly if needed; does NOT resume a suspended context (playback's
+   * ensureCtx() handles that on the first real chunk).
+   */
+  getAnalyserTap(): GainNode | null {
+    try {
+      if (!this.ctx) {
+        const Ctor =
+          window.AudioContext ??
+          (window as unknown as { webkitAudioContext: typeof AudioContext })
+            .webkitAudioContext;
+        this.ctx = new Ctor();
+      }
+      if (!this.gain) {
+        this.gain = this.ctx.createGain();
+        this.gain.connect(this.ctx.destination);
+      }
+      return this.gain;
+    } catch {
+      return null;
     }
   }
 
@@ -131,6 +191,8 @@ export class AudioQueuePlayer {
    */
   stopAll(): void {
     this.stopped = true;
+    this.turnOffsetSec = 0;
+    this.currentStartSec = 0;
 
     const ctx = this.ctx;
     const gain = this.gain;
@@ -148,7 +210,7 @@ export class AudioQueuePlayer {
         if (gain && ctx) {
           try {
             gain.gain.cancelScheduledValues(ctx.currentTime);
-            gain.gain.setValueAtTime(1, ctx.currentTime);
+            gain.gain.setValueAtTime(this.volume, ctx.currentTime);
           } catch { /* noop */ }
         }
       }, 30);

@@ -289,5 +289,7 @@
   "voice.sample_1": "Explain the Pythagorean theorem to me",
   "voice.sample_2": "Help me write an essay about the environment",
   "voice.sample_3": "Summarize this lesson for me",
-  "voice.type_followup": "…or type your question here"
+  "voice.type_followup": "…or type your question here",
+  "voice.speaking_bar": "Sigma is speaking…",
+  "voice.stop_speaking": "Stop speaking"
 }

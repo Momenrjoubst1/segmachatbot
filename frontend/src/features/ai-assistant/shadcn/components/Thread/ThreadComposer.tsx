@@ -310,7 +310,7 @@ export const ThreadComposer: FC = () => {
             className="relative flex w-full flex-col gap-2 rounded-3xl border border-[#EBE5DF] dark:border-neutral-700 bg-white dark:bg-neutral-900 p-2.5 text-[#2C2825] dark:text-neutral-100 shadow-sm transition-[shadow,background-color] hover:bg-[#F9F6F0] dark:hover:bg-neutral-800/60 focus-within:bg-white dark:focus-within:bg-neutral-900 focus-within:shadow-md focus-within:border-[#E0D8CE] dark:focus-within:border-neutral-600 data-[dragging=true]:border-neutral-400 data-[dragging=true]:border-dashed data-[dragging=true]:bg-accent/50"
             style={{ marginBottom: "var(--composer-keyboard-offset, 0px)" }}
           >
-            {/* Audio-reactive visuals live inside the VoiceOverlay (Claude-style) */}
+            {/* Inline voice visuals: SpeakingBar chip + karaoke in messages */}
             <ComposerQuotePreview />
             <ComposerAttachments />
             <div dir="auto" className="contents">

@@ -29,6 +29,7 @@ import {
 import { MarkdownText } from "../../ui/markdown-text";
 import { MessageTiming } from "../../ui/message-timing";
 import { SourcesPanel } from "./SourcesPanel";
+import { KaraokeGate, SpeakingPulse } from "./KaraokeText";
 import { TooltipIconButton } from "../../ui/tooltip-icon-button";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import type { ChatMessage } from "@/context/ChatHistoryContext";
@@ -157,10 +158,21 @@ export const AssistantMessage: FC = () => {
 
         <MessagePrimitive.Parts>
           {({ part }) => {
-            if (part.type === "text") return <MarkdownText />;
+            if (part.type === "text") {
+              // While the bot speaks THIS reply aloud, words highlight in
+              // sync with TTS (karaoke); otherwise render markdown normally.
+              return (
+                <KaraokeGate>
+                  <MarkdownText />
+                </KaraokeGate>
+              );
+            }
             return null;
           }}
         </MessagePrimitive.Parts>
+
+        {/* Tiny breathing dot while this reply is being spoken */}
+        <SpeakingPulse />
 
         {/* Stream interrupted error banner */}
         {chatMessage?.interrupted && (

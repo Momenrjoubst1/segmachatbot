@@ -81,6 +81,14 @@ export class DictationController {
   private mediaStream: MediaStream | null = null;
   private sessionTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /** Live audio pieces for visualizers (ambience controller). Null when off. */
+  get audioContextRef(): AudioContext | null {
+    return this.audioCtx;
+  }
+  get mediaStreamRef(): MediaStream | null {
+    return this.mediaStream;
+  }
+
   private finalSegments: string[] = [];
   private interimText = "";
 

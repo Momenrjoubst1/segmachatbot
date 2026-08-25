@@ -19,9 +19,11 @@
  * Reliability:
  *   - One upstream + one downstream socket — failures surface as `closed`
  *     events with close codes the caller maps to user-visible toasts.
- *   - Frames are sent in order, queued while the socket is reconnecting.
- *   - Reconnect: NOT supported in v1 (caller is expected to destroy+recreate
- *     the client on `closed` to surface a clean failure path).
+ *   - Transient closes auto-reconnect (up to MAX_RECONNECT_ATTEMPTS with
+ *     exponential backoff); fatal gates (4401/4003/4400) surface as errors.
+ *   - Text pushed while the socket is NOT open is DROPPED — callers must
+ *     gate on `streamState === "open"` (useSpeakToChat falls back to the
+ *     HTTP route for those sentences).
  */
 
 import { BACKEND_URL } from "@/lib/config";
@@ -55,11 +57,23 @@ export interface TtsStreamConfig {
   autoMode?: boolean;
 }
 
+export interface WordTiming {
+  word: string;
+  start: number;
+  end: number;
+}
+
 export interface TtsStreamHandlers {
   onAudio?: (chunk: ArrayBuffer) => void;
   onReady?: (info: { voiceId: string; model: string }) => void;
   onClosed?: (info: { code: number; reason: string }) => void;
   onError?: (err: { message: string; code?: number }) => void;
+  /**
+   * Word-level timestamps for karaoke highlighting. Times are seconds from
+   * the start of THIS chunk's audio; the consumer accumulates an offset per
+   * enqueued chunk to get thread-relative times.
+   */
+  onAlignment?: (words: WordTiming[]) => void;
 }
 
 const KEEPALIVE_INTERVAL_MS = 15_000;
@@ -106,9 +120,8 @@ export class ElevenLabsStreamingTts {
    */
   pushText(text: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      // The connection is not ready; the client will pick this up on reconnect
-      // if we add that in the future. For v1 we drop — the caller should
-      // have awaited connect() before pushing.
+      // Not ready → dropped. The caller gates on streamState === "open" and
+      // routes those sentences to the HTTP fallback instead.
       return;
     }
     try {
@@ -241,6 +254,7 @@ export class ElevenLabsStreamingTts {
           try {
             const evt = JSON.parse(ev.data) as {
               type?: string;
+              words?: WordTiming[];
               voiceId?: string;
               model?: string;
               message?: string;
@@ -250,6 +264,8 @@ export class ElevenLabsStreamingTts {
                 voiceId: evt.voiceId ?? this.config.voiceId,
                 model: evt.model ?? this.config.model ?? "",
               });
+            } else if (evt.type === "alignment" && Array.isArray(evt.words)) {
+              this.handlers.onAlignment?.(evt.words);
             } else if (evt.type === "error") {
               this.lastError = { message: evt.message ?? "upstream_error" };
               this.handlers.onError?.(this.lastError);
