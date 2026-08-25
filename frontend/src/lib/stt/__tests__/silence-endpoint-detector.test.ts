@@ -119,6 +119,46 @@ describe("SilenceEndpointDetector", () => {
     c.advance(5000);
     expect(d.feed(3).endpoint).toBe(false);
   });
+
+  it("fires EARLY on a positive semantic verdict (semantic_complete)", () => {
+    const c = makeClock();
+    const d = new SilenceEndpointDetector(undefined, c.now);
+    for (let i = 0; i < 40; i++) { c.advance(50); d.feed(900); }
+    // Model says complete → endpoint at ~320ms of silence, well under the
+    // 600ms pure-silence requirement.
+    let fired: ReturnType<SilenceEndpointDetector["feed"]> | null = null;
+    for (let i = 1; i <= 12 && !fired?.endpoint; i++) {
+      c.advance(50);
+      fired = d.feed(10, false, undefined, { complete: true });
+    }
+    expect(fired?.endpoint).toBe(true);
+    expect(fired?.reason).toBe("semantic_complete");
+    expect((fired as { reason?: string }).reason === "silence").toBe(false);
+  });
+
+  it("does NOT fire early when the verdict says incomplete", () => {
+    const c = makeClock();
+    const d = new SilenceEndpointDetector(undefined, c.now);
+    for (let i = 0; i < 40; i++) { c.advance(50); d.feed(900); }
+    let fired = false;
+    for (let i = 1; i <= 9 && !fired; i++) {
+      c.advance(50); // up to 450ms silence — under both thresholds
+      fired = d.feed(10, false, undefined, { complete: false }).endpoint;
+    }
+    expect(fired).toBe(false);
+  });
+
+  it("ignores a stale/absent semantic verdict (falls back to silenceMs)", () => {
+    const c = makeClock();
+    const d = new SilenceEndpointDetector(undefined, c.now);
+    for (let i = 0; i < 40; i++) { c.advance(50); d.feed(900); }
+    let fired = false;
+    for (let i = 1; i <= 8 && !fired; i++) {
+      c.advance(50); // 400ms of silence with NO verdict passed
+      fired = d.feed(10).endpoint;
+    }
+    expect(fired).toBe(false); // must not early-fire without a verdict
+  });
 });
 
 describe("isLikelyIncomplete", () => {

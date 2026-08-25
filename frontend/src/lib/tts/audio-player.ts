@@ -25,6 +25,12 @@ export class AudioQueuePlayer {
   private gain: GainNode | null = null;
   /** Last requested volume — barge-in fade restores THIS, not literal 1. */
   private volume = 1;
+  /**
+   * Bumped by every stopAll(). Async work started before a stop (a chunk
+   * still inside decodeAudioData) must not resurrect playback after the
+   * stopped flag auto-re-arms — it checks the epoch it captured.
+   */
+  private epoch = 0;
   /** Turn-relative playback position of the currently-playing chunk. */
   private currentStartSec = 0;
   private currentChunkStartCtxTime = 0;
@@ -91,6 +97,7 @@ export class AudioQueuePlayer {
   }
 
   private async playItem(item: QueueItem): Promise<void> {
+    const epochAtStart = this.epoch;
     let decoded: AudioBuffer | null = null;
     try {
       const ctx = await this.ensureCtx();
@@ -100,7 +107,7 @@ export class AudioQueuePlayer {
       void this.drain();
       return;
     }
-    if (this.stopped || !decoded) {
+    if (!decoded || this.stopped || epochAtStart !== this.epoch) {
       item.resolve(false);
       void this.drain();
       return;
@@ -191,6 +198,7 @@ export class AudioQueuePlayer {
    */
   stopAll(): void {
     this.stopped = true;
+    this.epoch += 1;
     this.turnOffsetSec = 0;
     this.currentStartSec = 0;
 

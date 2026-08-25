@@ -19,7 +19,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAuiState } from "@assistant-ui/react";
+import { useAuiState, useAui } from "@assistant-ui/react";
 
 import { voiceDebugBus } from "@/lib/stt/voice-debug-bus";
 import {
@@ -29,7 +29,9 @@ import {
 import {
   SilenceEndpointDetector,
   isLikelyIncomplete,
+  type SemanticVerdict,
 } from "@/lib/stt/silence-endpoint-detector";
+import { judgeTurnComplete } from "@/lib/stt/turn-detection-client";
 import { AudioQueuePlayer } from "@/lib/tts/audio-player";
 import { StreamingSentenceSplitter } from "@/lib/tts/sentence-splitter";
 import {
@@ -118,6 +120,11 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
 
   const turnTextRef = useRef("");
   const lastSentTextRef = useRef("");
+  // ---- Semantic endpointing (backend turn detector) -------------------------
+  /** Latest verdict, keyed by the EXACT transcript it judged (staleness). */
+  const remoteVerdictRef = useRef<{ text: string; verdict: SemanticVerdict } | null>(null);
+  const semanticTimerRef = useRef<number | null>(null);
+  const semanticGenRef = useRef(0);
   const suppressSpeechRef = useRef(false); // after barge-in until next send
   const bargeFirstLoudTsRef = useRef(0);
   const speakStartedAtRef = useRef(0);
@@ -132,6 +139,17 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
   // ---- Assistant reply watching -------------------------------------------
   const messages = useAuiState((s) => s.thread.messages);
   const seenMsgRef = useRef<{ id: string; len: number }>({ id: "", len: 0 });
+
+  // Claude-style truncate: a barge-in cancels the in-flight generation via
+  // the runtime (same path the composer's Stop button takes), so the reply
+  // stops growing and the unheard tail never lands in history or TTS.
+  const aui = useAui();
+  const cancelActiveRunRef = useRef<() => void>(() => {});
+  cancelActiveRunRef.current = () => {
+    try {
+      aui.thread().cancelRun();
+    } catch { /* no active run — nothing to cancel */ }
+  };
 
   useEffect(() => {
     if (state === "off") return;
@@ -162,6 +180,30 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     for (const sentence of splitter.push(delta)) void speakSentenceRef.current(sentence);
   }, [messages, state]);
 
+  // ---- Semantic endpointing queries ----------------------------------------
+  // One backend call per speech pause: debounce trailing speech, then ask
+  // whether the partial is a complete thought. A "complete" verdict lets the
+  // detector hand the turn over EARLY (~320ms of silence); "incomplete"
+  // extends the wait so thinking-pauses don't get clipped.
+  useEffect(() => {
+    if (state !== "listening") return;
+    const genAtSchedule = ++semanticGenRef.current;
+    if (semanticTimerRef.current) window.clearTimeout(semanticTimerRef.current);
+    if (!interimText.trim()) return;
+    semanticTimerRef.current = window.setTimeout(() => {
+      void judgeTurnComplete(interimText)
+        .then((verdict) => {
+          if (genAtSchedule !== semanticGenRef.current) return; // stale response
+          remoteVerdictRef.current = { text: interimText, verdict };
+          voiceDebugBus.event(
+            "turn_verdict",
+            `${verdict.source}:${verdict.complete ? "done" : "cont"}${verdict.probability != null ? `:${verdict.probability.toFixed(2)}` : ""}`,
+          );
+        })
+        .catch(() => undefined); // failure → silence timers decide alone
+    }, 180);
+  }, [interimText, state]);
+
   // ---- Speech synthesis + playback ----------------------------------------
   // WebSocket streaming path (ElevenLabs Flash v2.5, sub-100ms TTFB) when
   // the session has an open TTS stream; otherwise fall back to the HTTP
@@ -189,6 +231,7 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
           personaIdRef.current,
           ac.signal,
         );
+        if (suppressSpeechRef.current) return; // barge-in landed mid-fetch
         await player.enqueue(audio.slice(0));
       } catch (err) {
         if (err instanceof TtsError && err.kind === "unavailable") {
@@ -255,9 +298,12 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     if (words >= 2 && text !== lastSentTextRef.current) {
       lastSentTextRef.current = text;
       suppressSpeechRef.current = false;
-      splitterRef.current = new StreamingSentenceSplitter();
+      // eagerFirstChunk: speak the first clause while the first sentence is
+      // still generating — first audio lands ~1-2s earlier on long answers.
+      splitterRef.current = new StreamingSentenceSplitter({ eagerFirstChunk: true });
       seenMsgRef.current = { id: "", len: 0 };
       detectorRef.current?.reset();
+      remoteVerdictRef.current = null; // fresh turn → stale verdict must not fire
       echoStreakRef.current = 0; // a real user turn happened — echo suspicion clears
       turnTextRef.current = "";
       setInterimText("");
@@ -362,6 +408,16 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
           for (const ac of httpFetchesRef.current) ac.abort();
           httpFetchesRef.current.clear();
           playerRef.current?.stopAll();
+          // The interrupted assistant turn is DEAD for speech. Its message
+          // usually keeps streaming deltas and ElevenLabs keeps emitting
+          // chunks flushed before the cut — without this flag both resurrect
+          // the bot's voice over the user mid-interruption. Cleared by
+          // endTurn() when the user's next turn actually sends.
+          suppressSpeechRef.current = true;
+          // Stop the generation itself (truncate): the runtime aborts the
+          // chat request, the backend sees the disconnect and persists only
+          // what was actually generated — context stays truthful.
+          cancelActiveRunRef.current();
           // Echo heuristic: a barge that fires almost immediately after the
           // bot starts talking, with nothing the user said in between, is
           // usually our own audio looping back where AEC is weak. Three in
@@ -386,10 +442,19 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       return;
     }
     if (st !== "listening" || mutedRef.current) return;
+    const turnText = turnTextRef.current;
+    const localIncomplete = isLikelyIncomplete(turnText);
+    // Trust the model verdict only while it matches the CURRENT transcript —
+    // anything older is stale and falls back to the local heuristic.
+    const remote = remoteVerdictRef.current;
+    const verdictFresh = !!remote && remote.text === turnText;
+    const semanticContinuation =
+      localIncomplete || (verdictFresh ? !remote.verdict.complete : false);
     const decision = detectorRef.current?.feed(
       rms,
-      isLikelyIncomplete(turnTextRef.current),
+      semanticContinuation,
       zcr,
+      verdictFresh ? remote.verdict : null,
     );
     if (decision?.endpoint) void endTurnRef.current();
   }, []);
@@ -438,6 +503,9 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       { voiceId: personaIdRef.current, autoMode: true },
       {
         onAudio: (chunk) => {
+          // Post-barge-in tail: chunks for text flushed before the interrupt
+          // keep arriving on the open socket — drop them, don't resurrect.
+          if (suppressSpeechRef.current) return;
           // Forward the MP3 chunk straight to the existing player queue.
           // The player's enqueue() decodes asynchronously so it never blocks
           // the WS callback.
@@ -468,10 +536,11 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       }
     });
 
-    splitterRef.current = new StreamingSentenceSplitter();
+    splitterRef.current = new StreamingSentenceSplitter({ eagerFirstChunk: true });
     turnTextRef.current = "";
     lastSentTextRef.current = "";
     suppressSpeechRef.current = false;
+    remoteVerdictRef.current = null;
     seenMsgRef.current = { id: "", len: 0 };
     setState("connecting");
     try {
@@ -512,6 +581,11 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     playerRef.current = null;
     splitterRef.current = null;
     turnTextRef.current = "";
+    remoteVerdictRef.current = null;
+    if (semanticTimerRef.current) {
+      window.clearTimeout(semanticTimerRef.current);
+      semanticTimerRef.current = null;
+    }
     halfDuplexRef.current = false;
     echoStreakRef.current = 0;
     speakStartedAtRef.current = 0;
@@ -524,6 +598,7 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       httpFetchesRef.current.clear();
       controllerRef.current?.stop().catch(() => undefined);
       playerRef.current?.destroy();
+      if (semanticTimerRef.current) window.clearTimeout(semanticTimerRef.current);
       voiceAmbience.reset();
     };
   }, []);

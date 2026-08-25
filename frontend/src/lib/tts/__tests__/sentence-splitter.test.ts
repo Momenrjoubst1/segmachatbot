@@ -62,4 +62,41 @@ describe("StreamingSentenceSplitter", () => {
     s.push("جملة مكتملة. وبقيت هذه");
     expect(s.flush()).toContain("وبقيت هذه");
   });
+
+  it("eagerFirstChunk: emits the first clause before the sentence closes", () => {
+    const s = new StreamingSentenceSplitter({ eagerFirstChunk: true });
+    const clause =
+      "بكل تأكيد، سأشرح لك نظرية فيثاغورس بالتفصيل"; // >40 chars, no sentence ender
+    expect(s.push(clause)).toEqual([]); // no clause boundary yet
+    // Arabic comma arrives mid-sentence — first chunk may close here.
+    const got = s.push(" مع أمثلة، وبعدها ننتقل للتطبيق");
+    expect(got.length).toBe(1);
+    expect(got[0]).toContain("بكل تأكيد");
+    expect(got[0].endsWith("،")).toBe(true);
+    // After the eager cut, strict sentence boundaries resume: the remainder
+    // ("وبعدها ننتقل للتطبيق") merges with the next completed sentence.
+    expect(s.push(" ونبدأ بمثال بسيط.")).toEqual([
+      "وبعدها ننتقل للتطبيق ونبدأ بمثال بسيط.",
+    ]);
+  });
+
+  it("eagerFirstChunk keeps short prefixes buffered (no tiny fragments)", () => {
+    const s = new StreamingSentenceSplitter({ eagerFirstChunk: true });
+    expect(s.push("طيب،")).toEqual([]); // boundary too early → wait
+    const got = s.push(
+      "خلينا نبدأ من الأساسيات أولاً، قبل ما ندخل بالتفاصيل العميقة",
+    );
+    // The eventual eager chunk INCLUDES the short prefix and crosses 40 chars.
+    if (got.length) {
+      expect(got[0]).toContain("طيب");
+      expect(got[0].length).toBeGreaterThanOrEqual(40);
+    }
+  });
+
+  it("default mode never splits at commas", () => {
+    const s = new StreamingSentenceSplitter();
+    const got = s.push("جملة طويلة جدًا هنا، وفاصلة بالوسط، وبلا نقطة بعد");
+    expect(got).toEqual([]);
+    expect(s.flush()).toContain("وبلا نقطة بعد");
+  });
 });

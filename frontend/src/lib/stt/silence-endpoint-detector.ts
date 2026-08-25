@@ -16,11 +16,20 @@
  *    length (never let a noisy room hold the turn hostage).
  */
 
-export type EndpointReason = "silence" | "semantic_silence" | "max_utterance";
+export type EndpointReason =
+  | "silence"
+  | "semantic_silence"
+  | "semantic_complete"
+  | "max_utterance";
 
 export interface EndpointDecision {
   endpoint: boolean;
   reason?: EndpointReason;
+}
+
+/** Latest semantic verdict for the live transcript, when one exists. */
+export interface SemanticVerdict {
+  complete: boolean;
 }
 
 export interface EndpointConfig {
@@ -43,6 +52,12 @@ export interface EndpointConfig {
   minUtteranceMs: number;
   /** Force-send once an utterance runs this long (ms). */
   maxUtteranceMs: number;
+  /**
+   * Silence needed to trust a POSITIVE semantic verdict ("user finished").
+   * Shorter than `silenceMs` — this is what makes confirmed-complete turns
+   * hand over FASTER than pure silence ever could.
+   */
+  semanticConfirmMs: number;
 }
 
 export const DEFAULT_ENDPOINT_CONFIG: EndpointConfig = {
@@ -56,6 +71,7 @@ export const DEFAULT_ENDPOINT_CONFIG: EndpointConfig = {
   semanticExtendMs: 350,
   minUtteranceMs: 700,
   maxUtteranceMs: 60_000,
+  semanticConfirmMs: 320,
 };
 
 export class SilenceEndpointDetector {
@@ -92,8 +108,17 @@ export class SilenceEndpointDetector {
    *        unfinished clause ("...و", "...that", trailing comma/colon).
    * @param zcr Zero-crossing rate in [0,1] — optional noise discriminator.
    *        Loud frames with very high ZCR (hiss/fans) do not open the gate.
+   * @param semantic Latest model verdict for the live transcript, when one
+   *        exists. `complete: true` enables the EARLY endpoint at
+   *        `semanticConfirmMs` — faster than any silence timer. Absent/null
+   *        (no verdict yet, stale, or engine off) keeps pure-silence timing.
    */
-  feed(rms: number, semanticContinuation = false, zcr?: number): EndpointDecision {
+  feed(
+    rms: number,
+    semanticContinuation = false,
+    zcr?: number,
+    semantic?: SemanticVerdict | null,
+  ): EndpointDecision {
     const t = this.now();
 
     if (!this.speechStarted) {
@@ -128,6 +153,18 @@ export class SilenceEndpointDetector {
     const silenceFor = t - this.lastVoicedTs;
     const required =
       this.cfg.silenceMs + (semanticContinuation ? this.cfg.semanticExtendMs : 0);
+
+    // Early hand-over: the semantic engine CONFIRMED the utterance is
+    // complete, so a short quiet stretch is enough — this is the whole point
+    // of model-based endpointing (Claude/Grok-class turn latency).
+    if (
+      semantic?.complete &&
+      !semanticContinuation &&
+      silenceFor >= this.cfg.semanticConfirmMs &&
+      utteranceLen >= this.cfg.minUtteranceMs
+    ) {
+      return { endpoint: true, reason: "semantic_complete" };
+    }
 
     if (
       silenceFor >= required &&
