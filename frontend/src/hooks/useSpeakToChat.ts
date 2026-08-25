@@ -131,6 +131,8 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
   const stateEnteredAtRef = useRef(Date.now());
   const lastReplyDeltaAtRef = useRef(0);
   const reopeningMicRef = useRef(false);
+  /** One "TTS unavailable" toast per session, not per sentence. */
+  const ttsUnavailableNoticedRef = useRef(false);
   const suppressSpeechRef = useRef(false); // after barge-in until next send
   const bargeFirstLoudTsRef = useRef(0);
   const speakStartedAtRef = useRef(0);
@@ -170,7 +172,13 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       seenMsgRef.current = { id: lastAssistant.id, len: text.length };
       if (text) {
         lastReplyDeltaAtRef.current = Date.now();
-        setState((s) => (s === "sending" ? "thinking" : s));
+        // TTS-dead mode (quota/payment outage): replies are text-only, so do
+        // NOT climb into "thinking" — staying in "listening" keeps
+        // endpointing alive and the conversation keeps flowing voice-in /
+        // text-out instead of wedging until the watchdog.
+        if (!suppressSpeechRef.current) {
+          setState((s) => (s === "sending" ? "thinking" : s));
+        }
       }
       return;
     }
@@ -178,7 +186,9 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     if (!delta) return;
     seenMsgRef.current.len = text.length;
     lastReplyDeltaAtRef.current = Date.now();
-    setState((s) => (s === "listening" || s === "sending" ? "thinking" : s));
+    if (!suppressSpeechRef.current) {
+      setState((s) => (s === "listening" || s === "sending" ? "thinking" : s));
+    }
 
     if (suppressSpeechRef.current) return;
     // Karaoke: seed the bridge with the full (streaming) reply text so the
@@ -246,7 +256,13 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       } catch (err) {
         if (err instanceof TtsError && err.kind === "unavailable") {
           suppressSpeechRef.current = true;
-          optsRef.current.onNotice?.("tts_unavailable");
+          // One notice per SESSION, not per sentence — an exhausted ElevenLabs
+          // quota used to spam a toast for every streamed sentence.
+          if (!ttsUnavailableNoticedRef.current) {
+            ttsUnavailableNoticedRef.current = true;
+            voiceDebugBus.event("tts_unavailable", "suppressing speech this session");
+            optsRef.current.onNotice?.("tts_unavailable");
+          }
         }
         // aborted / network blips: skip silently — text still flows
       } finally {
@@ -351,7 +367,15 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
           return;
         }
         endTurnInFlightRef.current = false;
-        setState((s) => (s === "sending" ? "thinking" : s));
+        // TTS-dead mode: skip "thinking" (nothing will ever play) and keep
+        // the listening floor so the user can speak the next turn instantly.
+        setState((s) =>
+          s === "sending"
+            ? suppressSpeechRef.current
+              ? "listening"
+              : "thinking"
+            : s,
+        );
       }, 120);
       // The mic/session keeps running — the next turn starts instantly with
       // zero reconnect gap while the bot thinks/speaks.
