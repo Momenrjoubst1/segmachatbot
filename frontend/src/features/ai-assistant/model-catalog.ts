@@ -208,13 +208,6 @@ export const MODELS = [
     provider: "openrouter" as const,
   },
   {
-    name: "Nemotron 3.5 Lightning (Free)",
-    value: "nvidia/nemotron-3.5-lightning:free",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "openrouter" as const,
-  },
-  {
     name: "Nemotron 3 Super 49B (Free)",
     value: "nvidia/nemotron-3-super-49b-a49b:free",
     disabled: false,
@@ -240,13 +233,6 @@ export const MODELS = [
     value: "nvidia/nemotron-nano-12b-2-vl:free",
     disabled: false,
     contextWindow: 1_000_000,
-    provider: "openrouter" as const,
-  },
-  {
-    name: "Gemma 4 26B A4B IT (Free)",
-    value: "google/gemma-4-26b-a4b-it:free",
-    disabled: false,
-    contextWindow: 262_144,
     provider: "openrouter" as const,
   },
   {
