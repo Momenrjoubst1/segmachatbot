@@ -401,8 +401,26 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     if (reopeningMicRef.current) return; // a reopen is already in flight
     reopeningMicRef.current = true;
     try {
-      await startMicRef.current();
-    } catch {
+      // Transient STT failures must SELF-HEAL, not kill hands-free mode:
+      // retry with backoff and only drop to "off" after all attempts fail.
+      // Every failure reason lands in the debug bus — a recurrence names
+      // its culprit instead of dying silently.
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await startMicRef.current();
+          voiceDebugBus.event("s2c_reopened", `attempt ${attempt}`);
+          return;
+        } catch (err) {
+          voiceDebugBus.event(
+            "s2c_reopen_failed",
+            `attempt ${attempt}: ${String((err as Error)?.message ?? err).slice(0, 140)}`,
+          );
+          if (attempt < 3) {
+            await new Promise((r) => setTimeout(r, 400 * attempt));
+          }
+        }
+      }
+      optsRef.current.onError?.("ws");
       teardownRef.current();
       setState("off");
     } finally {
@@ -417,9 +435,10 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
         (halfDuplexRef.current && stateRef.current === "speaking"),
       onStateChange: (s: DictationState) => {
         if (s === "error" && stateRef.current !== "off") {
-          optsRef.current.onError?.("ws");
-          teardownRef.current();
-          setState("off");
+          // Same recovery ladder as a dropped socket — never hard-off here.
+          // The failed controller already cleaned itself up internally.
+          controllerRef.current = null;
+          void reopenMicRef.current();
           return;
         }
         // Session cap auto-stopped capture mid-conversation (relay 4028 or
@@ -653,6 +672,11 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
 
   function teardown() {
     stoppingRef.current = true;
+    // HARD RULE: never orphan a live controller. Dropping the ref without
+    // stopping it leaves mic + socket running as a ghost — UI shows voice
+    // "off" while dictation keeps filling the composer with text that can
+    // never be sent (the exact auto-dead session users reported).
+    controllerRef.current?.abort();
     controllerRef.current = null;
     detectorRef.current = null;
     playerRef.current?.destroy();
