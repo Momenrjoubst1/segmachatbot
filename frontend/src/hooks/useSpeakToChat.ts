@@ -291,6 +291,8 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
   const endTurn = useCallback(async () => {
     const controller = controllerRef.current;
     if (!controller || stoppingRef.current) return;
+    if (endTurnInFlightRef.current) return; // detector + flush + watchdog race
+    endTurnInFlightRef.current = true;
     setState("sending");
 
     // Finalize NOW: Deepgram emits the is_final transcript in ~100-200ms
@@ -303,7 +305,10 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     try {
       await controller.finalize(1200);
     } catch { /* fall back to whatever interim we hold */ }
-    if (stoppingRef.current) return;
+    if (stoppingRef.current) {
+      endTurnInFlightRef.current = false;
+      return;
+    }
 
     const text =
       controller.getTranscriptSince(baseCount).trim() || turnTextRef.current.trim();
@@ -341,9 +346,11 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
           // Real composer missing from the DOM — leave the text visible for
           // a manual send instead of wedging the whole session in "sending".
           voiceDebugBus.event("s2c_submit_failed", "");
+          endTurnInFlightRef.current = false;
           setState("listening");
           return;
         }
+        endTurnInFlightRef.current = false;
         setState((s) => (s === "sending" ? "thinking" : s));
       }, 120);
       // The mic/session keeps running — the next turn starts instantly with
@@ -355,11 +362,42 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       setInterimText("");
       detectorRef.current?.reset();
       optsRef.current.writeToComposer("");
+      endTurnInFlightRef.current = false;
       setState("listening");
     }
   }, []);
   const endTurnRef = useRef(endTurn);
   endTurnRef.current = endTurn;
+
+  /** True while an endTurn is between "started" and "floor handed over". */
+  const endTurnInFlightRef = useRef(false);
+
+  /**
+   * Flush a turn the user FINISHED while the floor was elsewhere. Endpointing
+   * only runs in "listening", so speech during the bot's thinking/speaking
+   * transcribed into the composer but its ending moment passed unobserved —
+   * the words sat there forever ("I talk and nothing sends"). When the floor
+   * comes back, whatever is already fully spoken goes out immediately.
+   * (After a barge-in we deliberately DON'T call this: the user is actively
+   * mid-utterance and the detector owns that turn.)
+   */
+  const maybeFlushPendingTurnRef = useRef<() => void>(() => {});
+  maybeFlushPendingTurnRef.current = () => {
+    const controller = controllerRef.current;
+    if (!controller || stoppingRef.current || endTurnInFlightRef.current) return;
+    const pending = controller.getTranscript().trim();
+    const words = pending ? pending.split(/\s+/).length : 0;
+    if (words >= 2 && pending !== lastSentTextRef.current) {
+      voiceDebugBus.event("s2c_pending_flush", pending.slice(0, 60));
+      void endTurnRef.current();
+    } else if (words === 0) {
+      // Nothing real was said — clear any gated-period crumbs from the box.
+      controller.resetTranscriptForNextTurn();
+      turnTextRef.current = "";
+      setInterimText("");
+      optsRef.current.writeToComposer("");
+    }
+  };
 
   // ---- Floor watchdog -------------------------------------------------------
   // Claude-style recovery: the mic floor must NEVER stay trapped in a
@@ -390,6 +428,8 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       suppressSpeechRef.current = false;
       detectorRef.current?.reset();
       setState("listening");
+      // Whatever the user finished saying while we were stuck goes out now.
+      maybeFlushPendingTurnRef.current();
     }, 1000);
     return () => window.clearInterval(id);
   }, [state]);
@@ -575,6 +615,10 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
           suppressSpeechRef.current = false;
           detectorRef.current?.reset();
           setState("listening");
+          // The user may have FINISHED a whole sentence while the bot was
+          // talking or thinking (endpointing sleeps outside "listening") —
+          // send it now instead of leaving it stuck in the composer.
+          maybeFlushPendingTurnRef.current();
         }
       } else {
         if (!speakStartedAtRef.current) speakStartedAtRef.current = Date.now();
