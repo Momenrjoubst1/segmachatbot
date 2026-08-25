@@ -109,7 +109,6 @@ function handleSttUpgrade(req: import("http").IncomingMessage, socket: Duplex, h
     let negotiatedRate = 16000;
     const ensureSession = (): SttRelaySession =>
       session ??= new SttRelaySession(auth.userId, clientWs, negotiatedRate, {
-        onText: () => { /* forwarded inside relay */ },
         onClose: () => cleanupActive(auth.userId),
       });
 

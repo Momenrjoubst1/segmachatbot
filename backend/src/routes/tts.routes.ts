@@ -23,7 +23,9 @@ router.get("/voices", (req: Request, res: Response) => {
 
 /**
  * Synthesize one text chunk to MP3 for a persona.
- * Body: { text: string, voiceId?: string }
+ * Body: { text: string, personaId?: string } — the legacy field name
+ * `voiceId` is accepted as an alias (it always held a PERSONA id here;
+ * raw ElevenLabs ids belong on the /ws/tts-stream relay).
  * Response: audio/mpeg (or 503 JSON when the upstream service is down —
  * clients degrade gracefully to text-only chat).
  */
@@ -37,7 +39,11 @@ router.post("/", async (req: Request, res: Response) => {
   const rawText =
     typeof req.body?.text === "string" ? req.body.text : "";
   const voiceId =
-    typeof req.body?.voiceId === "string" ? req.body.voiceId : undefined;
+    typeof req.body?.personaId === "string"
+      ? req.body.personaId
+      : typeof req.body?.voiceId === "string"
+        ? req.body.voiceId
+        : undefined;
 
   if (!sanitizeForSpeech(rawText)) {
     res.status(400).json({ error: "text is required" });

@@ -92,7 +92,10 @@ export const VOICE_PERSONAS: VoicePersona[] = [
     locale: "ar-SA",
     gender: "male",
     rate: "-4%",
-    elevenLabsVoiceId: ELEVENLABS_VOICES.primary || undefined,
+    // Male personas take the alternate (Adam) voice so switching personas
+    // is actually audible on the ElevenLabs path — the primary env voice
+    // is female, and pointing every persona at it made them sound alike.
+    elevenLabsVoiceId: ELEVENLABS_VOICES.alt || undefined,
     language: "ar",
   },
   {
@@ -118,7 +121,8 @@ export const VOICE_PERSONAS: VoicePersona[] = [
     locale: "ar-SY",
     gender: "male",
     rate: "+0%",
-    elevenLabsVoiceId: ELEVENLABS_VOICES.primary || undefined,
+    // See hakeem above — male personas ride the alternate voice.
+    elevenLabsVoiceId: ELEVENLABS_VOICES.alt || undefined,
     language: "ar",
   },
 
@@ -167,6 +171,25 @@ export function resolveElevenLabsVoiceId(
   if (persona.elevenLabsVoiceId) return persona.elevenLabsVoiceId;
   const envDefault = process.env.ELEVENLABS_VOICE_ID?.trim();
   return envDefault || null;
+}
+
+/**
+ * Resolve whatever the client sends as `voiceId` to a concrete ElevenLabs
+ * voice id for the /ws/tts-stream relay. Accepts BOTH:
+ *   - a persona id ("sana", "hakeem", …) — what the frontend picker sends;
+ *   - a raw ElevenLabs voice id — passed through untouched.
+ *
+ * Before this existed the relay forwarded persona ids verbatim to ElevenLabs,
+ * which rejects them as invalid voice ids — every WS session silently fell
+ * back to the Edge HTTP route.
+ */
+export function resolveRelayVoiceInput(
+  raw: string | undefined | null,
+): string | null {
+  const v = raw?.trim() ?? "";
+  if (!v) return resolveElevenLabsVoiceId(null);
+  if (isValidPersonaId(v)) return resolveElevenLabsVoiceId(v);
+  return v;
 }
 
 /** Public shape served to clients (no internal fields). */

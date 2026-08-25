@@ -62,7 +62,6 @@ export const DAILY_MINUTES_LIMIT = parseInt(
 );
 
 export interface RelaySessionEvents {
-  onText(type: "partial" | "final", text: string): void;
   onClose(code: number, reason: string): void;
 }
 
@@ -256,7 +255,8 @@ export class SttRelaySession {
           }
           return;
         }
-        events.onText(msg.is_final ? "final" : "partial", transcript);
+        // Transcripts go straight to the client — the onText event hook was
+        // a redundant notification nobody consumed.
         if (!this.closed && this.clientWs.readyState === WebSocket.OPEN) {
           this.clientWs.send(JSON.stringify({ type: msg.is_final ? "final" : "partial", text: transcript }));
         }

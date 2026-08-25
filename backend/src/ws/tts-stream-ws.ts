@@ -29,6 +29,7 @@ import type { Duplex } from "stream";
 import { WebSocketServer, WebSocket } from "ws";
 import { createLogger } from "../utils/logger.js";
 import { verifyToken } from "./stt-ws.js";
+import { resolveRelayVoiceInput } from "../config/voice-personas.js";
 
 const log = createLogger("tts-stream-ws");
 
@@ -100,8 +101,12 @@ function handleTtsUpgrade(
     const apiKey = process.env.ELEVENLABS_API_KEY!.trim();
 
     let configSeen = false;
+    // Persona id OR raw ElevenLabs id → concrete voice id (or null when
+    // nothing is configured).
+    const resolvedVoice =
+      resolveRelayVoiceInput(queryVoice || DEFAULT_VOICE) ?? "";
     let relayCfg: RelayConfig = {
-      voiceId: queryVoice || DEFAULT_VOICE,
+      voiceId: resolvedVoice,
       model: queryModel || DEFAULT_MODEL,
       chunkSchedule: DEFAULT_CHUNK_SCHEDULE,
       outputFormat: DEFAULT_OUTPUT_FORMAT,
@@ -113,7 +118,7 @@ function handleTtsUpgrade(
           type: "error",
           message: "no_voice_id",
           detail:
-            "Provide ELEVENLABS_VOICE_ID in env or pass ?voiceId=<id> in the URL.",
+            "Provide ELEVENLABS_VOICE_ID in env or pass ?voiceId=<persona-id|elevenlabs-id> in the URL.",
         }),
       );
       clientWs.close(4400, "no_voice_id");
@@ -285,7 +290,10 @@ function handleTtsUpgrade(
           };
           if (cfg.type === "config") {
             configSeen = true;
-            if (typeof cfg.voiceId === "string" && cfg.voiceId) relayCfg.voiceId = cfg.voiceId;
+            if (typeof cfg.voiceId === "string" && cfg.voiceId) {
+              relayCfg.voiceId =
+                resolveRelayVoiceInput(cfg.voiceId) ?? relayCfg.voiceId;
+            }
             if (typeof cfg.model === "string" && cfg.model) relayCfg.model = cfg.model;
             if (Array.isArray(cfg.chunkSchedule) && cfg.chunkSchedule.length) {
               relayCfg.chunkSchedule = cfg.chunkSchedule.filter(
