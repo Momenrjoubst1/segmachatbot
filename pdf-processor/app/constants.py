@@ -4,6 +4,7 @@ All magic numbers centralized here with env var overrides
 """
 
 import os
+import re
 
 # ==========================================
 # Chunking Constants
@@ -76,3 +77,21 @@ HEADER_ZONE = 0.085
 FOOTER_ZONE = 0.915
 FOOTNOTE_ZONE = 0.88
 CAPTION_MAX_DIST = 90.0
+
+# ==========================================
+# Script detection & bidi helpers (used by extraction/figures)
+# ==========================================
+# Any Arabic character across the standard Arabic blocks, including the
+# Presentation Forms A/B ranges that PDFs embed when fonts pre-shape glyphs.
+ARABIC_RE = re.compile(
+    "[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]"
+)
+# Arabic Presentation Forms only (pre-shaped glyph code points).
+ARABIC_PRESENTATION_RE = re.compile("[ﭐ-﷿ﹰ-﻿]")
+# Basic Latin + Latin-1 Supplement + Latin Extended-A/B letters.
+LATIN_RE = re.compile("[A-Za-zÀ-ɏ]")
+# A run of LTR characters (latin letters, digits, common separators) — used
+# when isolating direction-sensitive tokens inside RTL lines.
+LTR_TOKEN_RE = re.compile("[A-Za-z0-9][A-Za-z0-9_.+-]*")
+# Captions shorter than this are treated as layout noise, not real captions.
+MIN_CAPTION_LENGTH = 4

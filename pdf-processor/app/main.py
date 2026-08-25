@@ -19,7 +19,6 @@ from .constants import (
     VERTICAL_GAP_THRESHOLD,
     FONT_SIZE_TOLERANCE,
     MAX_PDF_PAGES,
-    SENTENCE_END,
 )
 from .extraction import extract_page
 from .figures import pair_figures
