@@ -27,6 +27,16 @@ const sttAuxLimiter = rateLimit({
 });
 
 /**
+ * Grant-endpoint health. When Deepgram rejects token minting (403/402 =
+ * plan/scope policy on this API key), stop ADVERTISING direct mode and
+ * stop hammering the endpoint every session start; the relay keeps serving
+ * STT unchanged. Policy failures cool down long, transient ones briefly.
+ */
+const grantHealth = { downUntil: 0 };
+const GRANT_POLICY_COOLDOWN_MS = 10 * 60_000;
+const GRANT_ERROR_COOLDOWN_MS = 60_000;
+
+/**
  * Capability probe for the dictation mic button.
  * 200 {enabled:false} when DEEPGRAM_API_KEY is missing — clients hide the
  * button instead of opening a doomed WebSocket.
@@ -40,6 +50,8 @@ router.get("/status", (req: Request, res: Response) => {
   const userId = req.user?.id;
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
   const enabled = isSttEnabled();
+  const directHealthy =
+    enabled && !!process.env.DEEPGRAM_API_KEY && Date.now() >= grantHealth.downUntil;
   res.json({
     enabled,
     provider: "deepgram",
@@ -48,9 +60,7 @@ router.get("/status", (req: Request, res: Response) => {
     // Direct-mode fields are only meaningful when enabled; listenQuery is
     // everything except sample_rate, which the client appends after it
     // knows its AudioContext's true post-decimation rate.
-    ...(enabled && process.env.DEEPGRAM_API_KEY
-      ? { direct: true, listenQuery: buildListenQuery() }
-      : {}),
+    ...(directHealthy ? { direct: true, listenQuery: buildListenQuery() } : {}),
   });
 });
 
@@ -95,19 +105,28 @@ router.get("/token", sttAuxLimiter, async (req: Request, res: Response) => {
     });
     if (!grantRes.ok) {
       await redis.del(`stt:active:${userId}`).catch(() => {});
-      log.warn("Deepgram grant failed", { status: grantRes.status });
+      const policy = grantRes.status === 403 || grantRes.status === 402;
+      const cooldown = policy ? GRANT_POLICY_COOLDOWN_MS : GRANT_ERROR_COOLDOWN_MS;
+      grantHealth.downUntil = Date.now() + cooldown;
+      log.warn("Deepgram grant failed — direct mode paused", {
+        status: grantRes.status,
+        pauseMinutes: cooldown / 60_000,
+      });
       res.status(502).json({ error: "grant_failed" });
       return;
     }
     const grant = (await grantRes.json()) as { token?: string };
     if (!grant.token) {
       await redis.del(`stt:active:${userId}`).catch(() => {});
+      grantHealth.downUntil = Date.now() + GRANT_ERROR_COOLDOWN_MS;
       res.status(502).json({ error: "grant_empty" });
       return;
     }
+    grantHealth.downUntil = 0; // healthy again — re-advertise direct
     res.json({ token: grant.token });
   } catch (err) {
     await redis.del(`stt:active:${userId}`).catch(() => {});
+    grantHealth.downUntil = Date.now() + GRANT_ERROR_COOLDOWN_MS;
     log.warn("Deepgram grant request threw", { error: (err as Error)?.message });
     res.status(502).json({ error: "grant_failed" });
   }

@@ -78,15 +78,26 @@ export async function fetchSttStatus(): Promise<{
  * were enforced server-side at grant time; a failed fetch just means the
  * caller falls back to the backend relay.
  */
+/** Client-side cooldown after a failed token fetch — stop retrying the
+ *  doomed endpoint every session start; the relay path serves instead. */
+let sttTokenCooldownUntil = 0;
+
 async function fetchSttEphemeralToken(): Promise<string | null> {
+  if (Date.now() < sttTokenCooldownUntil) return null;
   try {
     const mod = await import("@/lib/auth");
     const cfg = await import("@/lib/config");
     const res = await mod.authFetch(cfg.BACKEND_URL + "/api/stt/token");
-    if (!res.ok) return null;
+    if (!res.ok) {
+      sttTokenCooldownUntil = Date.now() + 5 * 60_000;
+      return null;
+    }
     const data = (await res.json()) as { token?: string };
-    return data.token ?? null;
+    const token = data.token ?? null;
+    if (!token) sttTokenCooldownUntil = Date.now() + 60_000;
+    return token;
   } catch {
+    sttTokenCooldownUntil = Date.now() + 60_000;
     return null;
   }
 }
