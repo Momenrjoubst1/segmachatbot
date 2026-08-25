@@ -83,15 +83,22 @@ export const MicButton: FC<MicButtonProps> = ({
     if (dictRecording) baseRef.current = input?.value ?? "";
   }, [dictRecording, input]);
 
-  const submitComposerForm = useCallback(() => {
+  const submitComposerForm = useCallback((): boolean => {
     const form =
       document.querySelector<HTMLFormElement>("form.aui-composer-root") ??
       document.querySelector<HTMLFormElement>('[data-slot="aui_composer-shell"] form');
-    if (form) form.requestSubmit();
-    else
-      document
-        .querySelector<HTMLButtonElement>(".aui-composer-send")
-        ?.click();
+    if (form) {
+      form.requestSubmit();
+      return true;
+    }
+    const sendButton = document.querySelector<HTMLButtonElement>(".aui-composer-send");
+    if (sendButton) {
+      sendButton.click();
+      return true;
+    }
+    // Nothing to submit into — the caller must know, or a voice turn would
+    // wedge forever in "sending".
+    return false;
   }, []);
 
   const handleS2cNotice = useCallback(

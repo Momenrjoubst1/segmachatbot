@@ -67,8 +67,9 @@ const AMBIENCE_OF_STATE: Record<SpeakToChatState, AmbienceState> = {
 export interface UseSpeakToChatOptions {
   /** Writes the given text into the composer input. */
   writeToComposer: (text: string) => void;
-  /** Programmatically submits the composer form (the REAL send path). */
-  submitComposer: () => void;
+  /** Programmatically submits the composer form (the REAL send path).
+   *  Returns false when the real composer could not be found. */
+  submitComposer: () => boolean | void;
   /** Non-fatal notices worth a toast. */
   onNotice?: (notice: "tts_unavailable" | "half_duplex") => void;
   /** Fatal start failures (mic denied, ws down…). Session drops to off. */
@@ -125,6 +126,11 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
   const remoteVerdictRef = useRef<{ text: string; verdict: SemanticVerdict } | null>(null);
   const semanticTimerRef = useRef<number | null>(null);
   const semanticGenRef = useRef(0);
+  // Floor-watchdog bookkeeping: when the current transitional state began,
+  // and the last time the assistant reply produced any text.
+  const stateEnteredAtRef = useRef(Date.now());
+  const lastReplyDeltaAtRef = useRef(0);
+  const reopeningMicRef = useRef(false);
   const suppressSpeechRef = useRef(false); // after barge-in until next send
   const bargeFirstLoudTsRef = useRef(0);
   const speakStartedAtRef = useRef(0);
@@ -162,12 +168,16 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     if (seenMsgRef.current.id !== lastAssistant.id) {
       // New assistant turn — seed with current text (avoid replaying history)
       seenMsgRef.current = { id: lastAssistant.id, len: text.length };
-      if (text) setState((s) => (s === "sending" ? "thinking" : s));
+      if (text) {
+        lastReplyDeltaAtRef.current = Date.now();
+        setState((s) => (s === "sending" ? "thinking" : s));
+      }
       return;
     }
     const delta = text.slice(seenMsgRef.current.len);
     if (!delta) return;
     seenMsgRef.current.len = text.length;
+    lastReplyDeltaAtRef.current = Date.now();
     setState((s) => (s === "listening" || s === "sending" ? "thinking" : s));
 
     if (suppressSpeechRef.current) return;
@@ -287,11 +297,16 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     // instead of waiting out its own 800ms endpointing. The session STAYS
     // OPEN — killing it here (the old behavior) destroyed the final
     // in-flight, so every turn arrived empty and was discarded forever.
-    let text = turnTextRef.current.trim();
+    // Turn-scoped snapshot FIRST: finals locked before this turn belong to
+    // EARLIER messages — one socket serves the whole hands-free session.
+    const baseCount = controller.finalSegmentCount;
     try {
-      text = (await controller.finalize(1200)).trim();
-    } catch { /* keep what we have */ }
+      await controller.finalize(1200);
+    } catch { /* fall back to whatever interim we hold */ }
     if (stoppingRef.current) return;
+
+    const text =
+      controller.getTranscriptSince(baseCount).trim() || turnTextRef.current.trim();
 
     const words = text ? text.split(/\s+/).length : 0;
 
@@ -305,6 +320,7 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       detectorRef.current?.reset();
       remoteVerdictRef.current = null; // fresh turn → stale verdict must not fire
       echoStreakRef.current = 0; // a real user turn happened — echo suspicion clears
+      controller.resetTranscriptForNextTurn(); // consumed — scope next turn cleanly
       turnTextRef.current = "";
       setInterimText("");
       // New spoken turn begins — reset the karaoke timing accumulator so
@@ -320,13 +336,21 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       optsRef.current.writeToComposer(text);
       window.setTimeout(() => {
         if (stoppingRef.current) return;
-        optsRef.current.submitComposer();
+        const submitted = optsRef.current.submitComposer();
+        if (submitted === false) {
+          // Real composer missing from the DOM — leave the text visible for
+          // a manual send instead of wedging the whole session in "sending".
+          voiceDebugBus.event("s2c_submit_failed", "");
+          setState("listening");
+          return;
+        }
         setState((s) => (s === "sending" ? "thinking" : s));
       }, 120);
       // The mic/session keeps running — the next turn starts instantly with
       // zero reconnect gap while the bot thinks/speaks.
     } else {
       // Blip/noise or duplicate — discard and keep listening
+      controller.resetTranscriptForNextTurn();
       turnTextRef.current = "";
       setInterimText("");
       detectorRef.current?.reset();
@@ -337,15 +361,52 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
   const endTurnRef = useRef(endTurn);
   endTurnRef.current = endTurn;
 
+  // ---- Floor watchdog -------------------------------------------------------
+  // Claude-style recovery: the mic floor must NEVER stay trapped in a
+  // transitional state. A submit that silently no-ops, a reply that streams
+  // no speakable audio (TTS outage / code-only answer), or a zombie playback
+  // would otherwise wedge the session in sending/thinking/speaking forever —
+  // words keep appearing in the composer while endpointing is dead, so the
+  // user can talk but nothing ever sends. Expire the state, restore listening.
+  useEffect(() => {
+    if (state !== "sending" && state !== "thinking" && state !== "speaking") return;
+    stateEnteredAtRef.current = Date.now();
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      const entered = stateEnteredAtRef.current;
+      // "thinking" makes progress on every streamed delta — measure from the
+      // latest one so genuinely-long generations aren't cut off.
+      const progress =
+        state === "thinking"
+          ? Math.max(entered, lastReplyDeltaAtRef.current || entered)
+          : entered;
+      const budget =
+        state === "sending" ? 8_000 : state === "thinking" ? 45_000 : 120_000;
+      if (now - progress <= budget) return;
+      voiceDebugBus.event(
+        "s2c_watchdog",
+        `${state} stalled ${Math.round((now - progress) / 1000)}s`,
+      );
+      suppressSpeechRef.current = false;
+      detectorRef.current?.reset();
+      setState("listening");
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [state]);
+
   // ---- Mic management ------------------------------------------------------
   const startMicRef = useRef<() => Promise<void>>(async () => {});
 
   const reopenMicRef = useRef(async (): Promise<void> => {
+    if (reopeningMicRef.current) return; // a reopen is already in flight
+    reopeningMicRef.current = true;
     try {
       await startMicRef.current();
     } catch {
       teardownRef.current();
       setState("off");
+    } finally {
+      reopeningMicRef.current = false;
     }
   });
 
@@ -361,9 +422,17 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
           setState("off");
           return;
         }
-        // Relay's per-session cap auto-stopped capture mid-conversation —
-        // reopen so long listening stretches never silently go deaf.
-        if (s === "idle" && stateRef.current === "listening" && !stoppingRef.current) {
+        // Session cap auto-stopped capture mid-conversation (relay 4028 or
+        // the client timer). This can land in ANY sub-state — thinking or
+        // speaking included — and skipping the reopen there killed the whole
+        // hands-free session after a message or two. Reopen whenever the
+        // session itself is still alive.
+        if (
+          s === "idle" &&
+          !stoppingRef.current &&
+          stateRef.current !== "off" &&
+          stateRef.current !== "connecting"
+        ) {
           void reopenMicRef.current();
         }
       },

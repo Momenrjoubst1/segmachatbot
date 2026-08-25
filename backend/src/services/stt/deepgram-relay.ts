@@ -61,8 +61,11 @@ function buildListenUrl(sampleRate: number): string {
   );
 }
 
+// Hands-free sessions run until the USER stops them; the cap exists to
+// recycle sockets/billing windows, not to end conversations. The client
+// reopens transparently on 4028, so longer caps just mean fewer renewals.
 const MAX_SESSION_MS =
-  parseInt(process.env.STT_MAX_SESSION_SECONDS || "120", 10) * 1000;
+  parseInt(process.env.STT_MAX_SESSION_SECONDS || "300", 10) * 1000;
 export const DAILY_MINUTES_LIMIT = parseInt(
   process.env.STT_DAILY_MINUTES_LIMIT || "30",
   10,

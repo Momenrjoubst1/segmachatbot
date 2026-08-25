@@ -45,7 +45,8 @@ interface RelayServerMessage {
   seconds?: number;
 }
 
-const MAX_SESSION_MS = 120000;
+/** Client-side mirror of the relay's STT_MAX_SESSION_SECONDS (300s). */
+const MAX_SESSION_MS = 300_000;
 
 export class DictationError extends Error {
   code: string;
@@ -143,6 +144,33 @@ export class DictationController {
     return this.interimText
       ? [finals, this.interimText].filter(Boolean).join(" ")
       : finals;
+  }
+
+  /** How many utterances are locked in — snapshot this at turn start. */
+  get finalSegmentCount(): number {
+    return this.finalSegments.length;
+  }
+
+  /**
+   * Transcript belonging to the CURRENT turn only: finals captured after
+   * `sinceCount` plus the live interim. The live session keeps its socket
+   * (and its accumulated finals) across turns, so without slicing, turn N
+   * would resend everything said in turns 1..N-1.
+   */
+  getTranscriptSince(sinceCount: number): string {
+    const newer = this.finalSegments.slice(Math.max(0, sinceCount)).join(" ").trim();
+    return this.interimText
+      ? [newer, this.interimText].filter(Boolean).join(" ")
+      : newer;
+  }
+
+  /**
+   * Turn boundary: drop consumed finals so display + next-turn slicing stay
+   * scoped to what hasn't been sent yet. The rolling interim is KEPT — it
+   * belongs to audio recorded after the send.
+   */
+  resetTranscriptForNextTurn(): void {
+    this.finalSegments = [];
   }
 
   async start(): Promise<void> {
