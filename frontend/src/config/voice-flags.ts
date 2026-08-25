@@ -10,3 +10,10 @@
  * (speech-to-speech), which will plug in as a separate surface.
  */
 export const VOICE_STACK_ENABLED = false;
+
+/**
+ * ElevenLabs Conversational AI agent (speech-to-speech) — the NEW voice
+ * surface. Requires the backend /api/voice/agent/session route and an env
+ * key with convai permissions (agent minted in the ElevenLabs dashboard).
+ */
+export const AGENT_VOICE_ENABLED = true;
