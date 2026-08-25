@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { useGuestMode } from "@/context/GuestModeContext";
 import { unstable_useComposerInput } from "../shims/assistant-ui-compat-shim";
 import { useDictation } from "@/hooks/useDictation";
+import { VOICE_STACK_ENABLED } from "@/config/voice-flags";
 import { useSpeakToChat } from "@/hooks/useSpeakToChat";
 import { useVoiceHotkey } from "@/hooks/useVoiceHotkey";
 import { voiceDebugBus } from "@/lib/stt/voice-debug-bus";
@@ -127,6 +128,7 @@ export const MicButton: FC<MicButtonProps> = ({
   const s2cActive = s2c.state !== "off";
 
   const toggleLiveVoice = useCallback(() => {
+    if (!VOICE_STACK_ENABLED) return; // detached — hotkey must stay inert too
     if (s2cActive) {
       voiceSoundEffects.playDeactivate();
       s2c.stop();
@@ -147,6 +149,10 @@ export const MicButton: FC<MicButtonProps> = ({
   const primaryState = s2cActive ? s2cPanelState : "off";
   const primaryBusy =
     primaryState === "connecting" || primaryState === "thinking";
+
+  // Voice stack detached: render nothing (all hooks above still run, so the
+  // component tree stays valid and flipping the flag restores everything).
+  if (!VOICE_STACK_ENABLED) return null;
 
   return (
     <>
