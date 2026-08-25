@@ -173,23 +173,30 @@ export const MODELS = [
   // 5. OpenRouter Models (Free Tier via OPENROUTER_API_KEY)
   // ==========================================
   {
-    name: "Gemini 2.0 Flash (Free)",
-    value: "google/gemini-2.0-flash-exp:free",
+    name: "Nemotron 3.5 Lightning (Free)",
+    value: "nvidia/nemotron-3.5-lightning:free",
     disabled: false,
     contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
   {
-    name: "Qwen 2.5 72B (Free)",
-    value: "qwen/qwen-2.5-72b-instruct:free",
+    name: "Gemma 4 31B (Free)",
+    value: "google/gemma-4-31b-it:free",
     disabled: false,
-    contextWindow: 1_000_000,
+    contextWindow: 262_144,
     provider: "openrouter" as const,
   },
   {
-    name: "Claude 3.5 Haiku (Free)",
+    name: "Gemma 4 26B A4B (Free)",
+    value: "google/gemma-4-26b-a4b-it:free",
+    disabled: false,
+    contextWindow: 262_144,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "Claude 3.5 Haiku",
     value: "anthropic/claude-3.5-haiku",
-    disabled: false,
+    disabled: true,
     contextWindow: 1_000_000,
     provider: "openrouter" as const,
   },
@@ -201,8 +208,8 @@ export const MODELS = [
     provider: "openrouter" as const,
   },
   {
-    name: "Nemotron 3.5 Lightning 30B (Free)",
-    value: "nvidia/nemotron-3.5-lightning-30b-a3b:free",
+    name: "Nemotron 3.5 Lightning (Free)",
+    value: "nvidia/nemotron-3.5-lightning:free",
     disabled: false,
     contextWindow: 1_000_000,
     provider: "openrouter" as const,
@@ -236,10 +243,10 @@ export const MODELS = [
     provider: "openrouter" as const,
   },
   {
-    name: "Gemma 4 26B (Free)",
-    value: "google/gemma-4-26b-a4b:free",
+    name: "Gemma 4 26B A4B IT (Free)",
+    value: "google/gemma-4-26b-a4b-it:free",
     disabled: false,
-    contextWindow: 1_000_000,
+    contextWindow: 262_144,
     provider: "openrouter" as const,
   },
   {
@@ -411,7 +418,7 @@ export const MODEL_EFFORT_LEVELS: Partial<
 > = {
   // OpenRouter
   "stealth/ox-alpha": ["Low", "Medium", "High"],
-  "google/gemini-2.0-flash-exp:free": ["Low", "Medium", "High"],
+  "google/gemma-4-31b-it:free": ["Low", "Medium", "High"],
   "openai/gpt-oss-20b:free": ["Low", "Medium", "High"],
 
   // Baichat (DeepSeek)

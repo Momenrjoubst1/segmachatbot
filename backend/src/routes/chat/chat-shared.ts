@@ -237,16 +237,16 @@ export const ALLOWED_MODELS = [
   "openai/gpt-oss-20b",
   "meta-llama/llama-4-scout-17b-16e-instruct",
   // OpenRouter Free
-  "google/gemini-2.0-flash-exp:free",
-  "qwen/qwen-2.5-72b-instruct:free",
+  "google/gemma-4-31b-it:free",
+  "google/gemma-4-26b-a4b-it:free",
   "anthropic/claude-3.5-haiku",
   "nvidia/nemotron-3-ultra-550b-a55b:free",
-  "nvidia/nemotron-3.5-lightning-30b-a3b:free",
+  "nvidia/nemotron-3.5-lightning:free",
   "nvidia/nemotron-3-super-49b-a49b:free",
   "nvidia/nemotron-3-nano-30b-a3b:free",
   "nvidia/nemotron-nano-9b-v2:free",
   "nvidia/nemotron-nano-12b-2-vl:free",
-  "google/gemma-4-26b-a4b:free",
+  "google/gemma-4-26b-a4b-it:free",
   "openai/gpt-oss-20b:free",
   "poolside/laguna-s-2.1:free",
   "poolside/laguna-xs-2.1:free",
@@ -282,6 +282,11 @@ function pickFirstAvailableProvider(
 }
 
 export function getProviderAndModel(modelId: string): { provider: ProviderName; modelName: string } {
+  // OpenRouter ":free" ids are OpenRouter-exclusive — never let an
+  // "nvidia/..."-style free id misroute to the NVIDIA NIM direct provider.
+  if (modelId.endsWith(":free")) {
+    return { provider: "openrouter", modelName: modelId };
+  }
   // DeepSeek V4 Flash via B.AI platform
   if (modelId === "deepseek-v4-flash") {
     return { provider: "baichat", modelName: "deepseek-v4-flash" };

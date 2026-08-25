@@ -150,7 +150,7 @@ router.post(
       chain.push({ type: "llm", provider: "github", model: "openai/gpt-4o-mini" });
     }
     if (process.env.OPENROUTER_API_KEY) {
-      chain.push({ type: "llm", provider: "openrouter", model: "qwen/qwen-2.5-72b-instruct:free" });
+      chain.push({ type: "llm", provider: "openrouter", model: "nvidia/nemotron-3.5-lightning:free" });
     }
 
     if (chain.length === 0) {
