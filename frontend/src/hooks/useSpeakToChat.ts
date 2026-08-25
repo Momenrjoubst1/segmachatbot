@@ -367,18 +367,27 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
           void reopenMicRef.current();
         }
       },
-      onInterim: (t) => {
-        turnTextRef.current = t;
-        setInterimText(t);
-        // Live words IN THE COMPOSER — the user watches the box fill as they
-        // speak (their explicit requirement; matches dictation UX).
-        optsRef.current.writeToComposer(t);
-        voiceDebugBus.event("s2c_interim", t.slice(0, 60));
+      onInterim: () => {
+        // COMPOSED display: locked-in finals + the live interim. Deepgram
+        // interims cover ONLY their own utterance, so writing them raw made
+        // earlier segments vanish whenever server-side endpointing split a
+        // mid-thought pause; appending finals onto their identical interim
+        // flashed duplicates. getTranscript() folds both sides cleanly —
+        // same append-only model Claude-style captions use.
+        const composed = controllerRef.current?.getTranscript() ?? "";
+        turnTextRef.current = composed;
+        setInterimText(composed);
+        optsRef.current.writeToComposer(composed);
+        voiceDebugBus.event("s2c_interim", composed.slice(0, 60));
       },
-      onFinalSegment: (seg) => {
-        turnTextRef.current = (turnTextRef.current + " " + seg).trim();
-        setInterimText(turnTextRef.current);
-        optsRef.current.writeToComposer(turnTextRef.current);
+      onFinalSegment: () => {
+        // The controller already folded this segment into its finals before
+        // emitting — re-read the composition instead of appending here
+        // (appending onto the matching interim duplicated it visually).
+        const composed = controllerRef.current?.getTranscript() ?? "";
+        turnTextRef.current = composed;
+        setInterimText(composed);
+        optsRef.current.writeToComposer(composed);
       },
       onRms: (rms, zcr) => handleRmsRef.current(rms, zcr),
       // Full relay visibility in the ?voiceDebug=1 overlay: ready/partial/
