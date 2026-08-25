@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import {
   judgeUtterance,
   getTurnDetectorStatus,
@@ -15,7 +15,11 @@ const router = Router();
 const turnLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
-  keyGenerator: (req: Request) => req.user?.id ?? req.ip ?? "unknown",
+  keyGenerator: (req: Request) => {
+    const userId = req.user?.id;
+    if (userId) return userId;
+    return ipKeyGenerator(req.ip || "unknown");
+  },
 });
 
 /**
