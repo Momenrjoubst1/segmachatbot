@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { createLogger } from "../utils/logger.js";
+import { ensureThreadOwnership } from "./chat/chat-shared.js";
 import {
   judgeUtterance,
   getTurnDetectorStatus,
@@ -88,6 +89,43 @@ router.post("/agent/session", turnLimiter, async (req: Request, res: Response) =
     log.warn("Agent signed-url request threw", { error: (err as Error)?.message });
     res.status(502).json({ error: "agent_session_failed" });
   }
+});
+
+/**
+ * POST /api/voice/agent/turn — persist one ElevenLabs-agent voice turn into
+ * the thread (user utterance + the agent's spoken reply). The agent's own
+ * LLM is the brain (user choice), so this ONLY records history — the chat
+ * pipeline is never invoked.
+ */
+router.post("/agent/turn", turnLimiter, async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const threadId = typeof req.body?.threadId === "string" ? req.body.threadId : "";
+  const userText = typeof req.body?.userText === "string" ? req.body.userText.trim() : "";
+  const agentText = typeof req.body?.agentText === "string" ? req.body.agentText.trim() : "";
+  if (!threadId || (!userText && !agentText)) {
+    res.status(400).json({ error: "threadId and at least one of userText/agentText required" });
+    return;
+  }
+
+  const ownership = await ensureThreadOwnership(req, threadId);
+  if ("error" in ownership) {
+    res.status(ownership.status ?? 500).json({ error: ownership.error });
+    return;
+  }
+
+  const rows = [
+    ...(userText ? [{ session_id: threadId, role: "user", content: userText }] : []),
+    ...(agentText ? [{ session_id: threadId, role: "assistant", content: agentText, model: "elevenlabs-agent" }] : []),
+  ];
+  const { error } = await ownership.supabase.from("chat_messages").insert(rows);
+  if (error) {
+    log.warn("Agent turn persist failed", { error: error.message });
+    res.status(500).json({ error: "persist_failed" });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 export default router;
