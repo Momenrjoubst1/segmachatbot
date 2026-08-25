@@ -55,15 +55,38 @@ export class DictationError extends Error {
   }
 }
 
-export async function fetchSttStatus(): Promise<{ enabled: boolean }> {
+export async function fetchSttStatus(): Promise<{
+  enabled: boolean;
+  direct?: boolean;
+  listenQuery?: string;
+  model?: string;
+}> {
   try {
     const mod = await import("@/lib/auth");
     const cfg = await import("@/lib/config");
     const res = await mod.authFetch(cfg.BACKEND_URL + "/api/stt/status");
     if (!res.ok) return { enabled: false };
-    return (await res.json()) as { enabled: boolean };
+    return (await res.json()) as { enabled: boolean; direct?: boolean; listenQuery?: string };
   } catch {
     return { enabled: false };
+  }
+}
+
+/**
+ * Ephemeral Deepgram grant token for the DIRECT streaming path. All limits
+ * were enforced server-side at grant time; a failed fetch just means the
+ * caller falls back to the backend relay.
+ */
+async function fetchSttEphemeralToken(): Promise<string | null> {
+  try {
+    const mod = await import("@/lib/auth");
+    const cfg = await import("@/lib/config");
+    const res = await mod.authFetch(cfg.BACKEND_URL + "/api/stt/token");
+    if (!res.ok) return null;
+    const data = (await res.json()) as { token?: string };
+    return data.token ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -91,6 +114,12 @@ export class DictationController {
 
   private finalSegments: string[] = [];
   private interimText = "";
+
+  /** True while streaming browser→Deepgram directly (no backend relay). */
+  private directMode = false;
+  private sessionStartedAt = 0;
+  private usageReported = false;
+  private lastKeepAliveSentAt = 0;
 
   private readyResolve: (() => void) | null = null;
   private readyReject: ((e: DictationError) => void) | null = null;
@@ -142,47 +171,94 @@ export class DictationController {
         },
       });
 
-      // 2. Authenticated WebSocket to the relay
+      // 2a. Prefer the DIRECT browser→Deepgram stream: an ephemeral grant
+      // token skips both relay hops, so interim words trail live speech by
+      // roughly half the round-trip. ANY failure here falls back to the
+      // backend relay below — same features, two extra network legs.
+      let direct: { listenQuery: string; token: string } | null = null;
+      try {
+        const st = await fetchSttStatus();
+        if (st.enabled && st.direct && st.listenQuery) {
+          const grantToken = await fetchSttEphemeralToken();
+          if (grantToken) direct = { listenQuery: st.listenQuery, token: grantToken };
+        }
+      } catch { /* relay fallback */ }
+
       const [{ BACKEND_URL }] = await Promise.all([
         import("@/lib/config"),
         import("@/lib/supabaseClient"),
       ]);
-      const token = await getAccessToken();
-      if (!token) throw new DictationError("auth", "Not authenticated");
-
       const wsBase = BACKEND_URL.replace(/^http/, "ws").replace(/\/+$/, "");
-      const ws = new WebSocket(wsBase + "/ws/stt?token=" + encodeURIComponent(token));
-      ws.binaryType = "arraybuffer";
-      this.ws = ws;
 
-      ws.onmessage = (ev) => this.handleServerMessage(ev.data);
-      ws.onerror = () => {
-        if (this.readyReject) {
-          this.readyReject(new DictationError("ws", "STT connection failed"));
-        }
-      };
-      ws.onclose = (ev) => this.handleClose(ev);
+      let ws: WebSocket;
+      if (direct) {
+        this.directMode = true;
+        // The AudioContext must exist FIRST: its true post-decimation rate is
+        // part of the Deepgram URL (mislabeled rates transcribe to nothing).
+        this.audioCtx = new AudioContext();
 
-      // 3. Wait for relay "ready" before wiring audio
+        // Browser WebSockets cannot set Authorization headers — Deepgram's
+        // documented browser auth rides the subprotocol instead.
+        ws = new WebSocket(
+          `wss://api.deepgram.com/v1/listen?${direct.listenQuery}&sample_rate=${this.wireRate()}`,
+          ["token", direct.token],
+        );
+        ws.binaryType = "arraybuffer";
+        this.ws = ws;
+        ws.onmessage = (ev) => this.handleDeepgramMessage(ev.data);
+        ws.onerror = () => {
+          if (this.readyReject && !this.readyResolveDone) {
+            this.readyReject(new DictationError("ws", "Direct STT connection failed"));
+          }
+        };
+        ws.onclose = (ev) => this.handleClose(ev);
+        const connectTimeout = setTimeout(() => {
+          try { ws.close(4000, "connect_timeout"); } catch { /* noop */ }
+        }, 10_000);
+        ws.onopen = () => {
+          clearTimeout(connectTimeout);
+          this.readyResolveDone = true;
+          this.callbacks.onEvent?.({ kind: "relay_ready", detail: "direct" });
+          this.readyResolve?.();
+        };
+      } else {
+        // 2b. Authenticated WebSocket to the backend relay
+        const token = await getAccessToken();
+        if (!token) throw new DictationError("auth", "Not authenticated");
+
+        ws = new WebSocket(wsBase + "/ws/stt?token=" + encodeURIComponent(token));
+        ws.binaryType = "arraybuffer";
+        this.ws = ws;
+
+        ws.onmessage = (ev) => this.handleServerMessage(ev.data);
+        ws.onerror = () => {
+          if (this.readyReject) {
+            this.readyReject(new DictationError("ws", "STT connection failed"));
+          }
+        };
+        ws.onclose = (ev) => this.handleClose(ev);
+      }
+
+      // 3. Ready gate: relay sends {type:"ready"}; direct opens the socket.
       await ready;
 
-      const ctx = new AudioContext();
+      const ctx = this.audioCtx ?? new AudioContext();
       this.audioCtx = ctx;
 
-      // Label the stream with the TRUE post-decimation rate. The worklet
-      // downsamples to 16 kHz when the context runs faster, but narrowband
-      // mics (Bluetooth HFP: 8/16 kHz) pass through at their native rate —
-      // mislabeled audio is time-stretched at Deepgram and transcribes to
-      // nothing. Must arrive before the first binary frame.
-      const nativeRate = ctx.sampleRate;
-      const outputRate = nativeRate >= 16000 ? 16000 : Math.round(nativeRate);
-      const trackLabel = this.mediaStream?.getAudioTracks()[0]?.label ?? "unknown-device";
-      this.callbacks.onEvent?.({
-        kind: "mic_config",
-        detail: `${trackLabel} native=${nativeRate} -> wire=${outputRate}`,
-      });
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "config", sampleRate: outputRate }));
+      if (!direct) {
+        // Label the stream with the TRUE post-decimation rate (see comment
+        // above — mislabeled narrowband mics transcribe to nothing). Direct
+        // mode already baked the rate into its URL.
+        const nativeRate = ctx.sampleRate;
+        const outputRate = nativeRate >= 16000 ? 16000 : Math.round(nativeRate);
+        const trackLabel = this.mediaStream?.getAudioTracks()[0]?.label ?? "unknown-device";
+        this.callbacks.onEvent?.({
+          kind: "mic_config",
+          detail: `${trackLabel} native=${nativeRate} -> wire=${outputRate}`,
+        });
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "config", sampleRate: outputRate }));
+        }
       }
 
       await ctx.audioWorklet.addModule("/worklets/pcm-capture-worklet.js");
@@ -195,7 +271,20 @@ export class DictationController {
         const msg = e.data;
         if (msg.type === "frame" && msg.buffer) {
           this.callbacks.onEvent?.({ kind: "frame" });
-          if (this.callbacks.gateFrame?.()) return;
+          if (this.callbacks.gateFrame?.()) {
+            // Gated frames (mute / half-duplex) starve the DIRECT socket and
+            // Deepgram drops idle streams — KeepAlive keeps it warm with
+            // zero audio leaving the device.
+            if (
+              this.directMode &&
+              ws.readyState === WebSocket.OPEN &&
+              Date.now() - this.lastKeepAliveSentAt > 5000
+            ) {
+              this.lastKeepAliveSentAt = Date.now();
+              try { ws.send(JSON.stringify({ type: "KeepAlive" })); } catch { /* noop */ }
+            }
+            return;
+          }
           if (this.callbacks.onRms && ws.readyState === WebSocket.OPEN) {
             const buf = msg.buffer;
             let sum = 0;
@@ -228,6 +317,8 @@ export class DictationController {
         void this.stop();
       }, MAX_SESSION_MS);
 
+      this.sessionStartedAt = Date.now();
+      this.usageReported = false;
       this.setState("recording");
     } catch (err) {
       const e =
@@ -319,7 +410,9 @@ export class DictationController {
       this.stopResolve = resolve;
     });
     try {
-      this.ws?.send(JSON.stringify({ type: "stop" }));
+      this.ws?.send(
+        JSON.stringify(this.directMode ? { type: "CloseStream" } : { type: "stop" }),
+      );
     } catch { /* close handler resolves instead */ }
 
     // Safety timeout so a dead socket can't hang the UI
@@ -372,7 +465,66 @@ export class DictationController {
     this.setState("idle");
   }
 
+  /**
+   * Parse a RAW Deepgram Results frame (direct browser→Deepgram mode — the
+   * relay normally compiles these into {partial|final} for us).
+   */
+  private handleDeepgramMessage(raw: unknown): void {
+    let msg: {
+      type?: string;
+      is_final?: boolean;
+      channel?: { alternatives?: Array<{ transcript?: string }> };
+    };
+    try {
+      msg = JSON.parse(String(raw));
+    } catch { return; }
+    if (msg.type !== "Results") return;
+    const text = msg.channel?.alternatives?.[0]?.transcript?.trim() ?? "";
+    if (!text) return;
+    if (msg.is_final) {
+      this.finalSegments.push(text);
+      this.interimText = "";
+      this.callbacks.onFinalSegment?.(text);
+      // A finalize() request completes on the first final that lands.
+      this.finalizeResolve?.();
+    } else {
+      this.interimText = text;
+      this.callbacks.onInterim?.(text);
+    }
+  }
+
+  /** True post-decimation wire rate (16k cap, never upsampling narrowband). */
+  private wireRate(): number {
+    const ctx = this.audioCtx;
+    if (!ctx) return 16000;
+    const native = ctx.sampleRate;
+    return native >= 16000 ? 16000 : Math.round(native);
+  }
+
+  /**
+   * Direct sessions bypass the relay, so nothing meters their lifetime
+   * server-side — report elapsed seconds ONCE per session, best-effort and
+   * clamped again server-side. Also frees the concurrency slot.
+   */
+  private reportUsageOnce(): void {
+    if (!this.directMode || !this.sessionStartedAt || this.usageReported) return;
+    this.usageReported = true;
+    const seconds = Math.max(0, Math.round((Date.now() - this.sessionStartedAt) / 1000));
+    void (async () => {
+      try {
+        const mod = await import("@/lib/auth");
+        const cfg = await import("@/lib/config");
+        await mod.authFetch(cfg.BACKEND_URL + "/api/stt/usage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ seconds }),
+        });
+      } catch { /* best-effort */ }
+    })();
+  }
+
   private teardownAudio(): void {
+    this.reportUsageOnce();
     if (this.sessionTimer) clearTimeout(this.sessionTimer);
     this.sessionTimer = null;
     try { this.worklet?.port.postMessage({ type: "stop" }); } catch { /* noop */ }

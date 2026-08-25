@@ -27,8 +27,21 @@ const log = createLogger("stt-relay");
  * `language=ar` covers MSA + dialects; English utterances still transcribe
  * acceptably under the ar model. Override via env if that ever changes.
  */
-const STT_MODEL = process.env.STT_DEEPGRAM_MODEL?.trim() || "nova-3";
-const STT_LANGUAGE = process.env.STT_DEEPGRAM_LANGUAGE?.trim() || "ar";
+export const STT_MODEL = process.env.STT_DEEPGRAM_MODEL?.trim() || "nova-3";
+export const STT_LANGUAGE = process.env.STT_DEEPGRAM_LANGUAGE?.trim() || "ar";
+
+/** Query shared by the relay and the direct browser→Deepgram path. */
+export function buildListenQuery(): string {
+  return (
+    `model=${encodeURIComponent(STT_MODEL)}` +
+    `&language=${encodeURIComponent(STT_LANGUAGE)}` +
+    "&smart_format=true&punctuate=true" +
+    // interim_results: words stream to the composer WHILE the user speaks —
+    // without it Deepgram stays silent until its own endpointing fires.
+    "&interim_results=true" +
+    "&endpointing=800&encoding=linear16&channels=1"
+  );
+}
 
 /**
  * The stream MUST be labeled with the audio's TRUE rate. The browser
@@ -44,13 +57,7 @@ function buildListenUrl(sampleRate: number): string {
     : 16_000;
   return (
     "wss://api.deepgram.com/v1/listen" +
-    `?model=${encodeURIComponent(STT_MODEL)}&language=${encodeURIComponent(STT_LANGUAGE)}` +
-    "&smart_format=true&punctuate=true" +
-    // interim_results: words stream to the composer WHILE the user speaks —
-    // without it Deepgram stays silent until its own endpointing fires.
-    "&interim_results=true" +
-    "&endpointing=800&encoding=linear16" +
-    `&sample_rate=${rate}&channels=1`
+    `?${buildListenQuery()}&sample_rate=${rate}`
   );
 }
 
@@ -72,7 +79,7 @@ function todayKey(userId: string): string {
 }
 
 /** Seconds already used today (best-effort; Redis failure = allow). */
-async function getUsedSecondsToday(userId: string): Promise<number> {
+export async function getUsedSecondsToday(userId: string): Promise<number> {
   try {
     const v = await redis.get(todayKey(userId));
     return v ? parseInt(v, 10) : 0;
@@ -81,7 +88,8 @@ async function getUsedSecondsToday(userId: string): Promise<number> {
   }
 }
 
-async function addUsedSeconds(userId: string, seconds: number): Promise<void> {
+/** Record direct-session usage reported by the client (best-effort). */
+export async function addUsedSeconds(userId: string, seconds: number): Promise<void> {
   try {
     const key = todayKey(userId);
     const used = await getUsedSecondsToday(userId);
