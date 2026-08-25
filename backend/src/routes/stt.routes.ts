@@ -112,6 +112,9 @@ router.get("/token", sttAuxLimiter, async (req: Request, res: Response) => {
         status: grantRes.status,
         pauseMinutes: cooldown / 60_000,
       });
+      // Known-policy refusal: answer 200 with no token so browsers don't
+      // paint network-error noise for a fully expected fallback path.
+      if (policy) { res.json({ token: null }); return; }
       res.status(502).json({ error: "grant_failed" });
       return;
     }
@@ -119,7 +122,7 @@ router.get("/token", sttAuxLimiter, async (req: Request, res: Response) => {
     if (!grant.token) {
       await redis.del(`stt:active:${userId}`).catch(() => {});
       grantHealth.downUntil = Date.now() + GRANT_ERROR_COOLDOWN_MS;
-      res.status(502).json({ error: "grant_empty" });
+      res.json({ token: null });
       return;
     }
     grantHealth.downUntil = 0; // healthy again — re-advertise direct
