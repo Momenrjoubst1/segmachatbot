@@ -18,6 +18,7 @@
 
 import fs from "fs";
 import path from "path";
+import { Readable } from "stream";
 import { fileURLToPath } from "url";
 
 const REPO = "onnx-community/turn-detector-ONNX";
@@ -49,11 +50,13 @@ async function fetchTo(remoteFile, destFile) {
   await fs.promises.mkdir(path.dirname(destFile), { recursive: true });
   const tmp = destFile + ".part";
   const out = fs.createWriteStream(tmp);
+  // fetch() returns a WHATWG stream — wrap it for .pipe()
+  const nodeStream = Readable.fromWeb(res.body);
   await new Promise((resolve, reject) => {
-    res.body.pipe(out);
-    res.body.on("error", reject);
-    out.on("finish", resolve);
+    nodeStream.on("error", reject);
     out.on("error", reject);
+    out.on("finish", resolve);
+    nodeStream.pipe(out);
   });
   await fs.promises.rename(tmp, destFile);
   const { size } = fs.statSync(destFile);
