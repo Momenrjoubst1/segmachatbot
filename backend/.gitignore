@@ -9,3 +9,6 @@ dist/
 coverage/
 backend-dev.log
 backend-dev-error.log
+
+# Turn-detector ONNX weights (fetched via scripts/download-turn-model.mjs)
+models/
