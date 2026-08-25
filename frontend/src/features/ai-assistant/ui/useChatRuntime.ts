@@ -498,6 +498,17 @@ export const useRuntime = (activeCourse: AcademicCourse | null, draftKey?: strin
       const controller = new AbortController();
       abortRef.current = () => controller.abort();
 
+      // Bridge runtime cancellation onto the REAL network request. The
+      // transport passes its own abort signal in init.signal (Stop button,
+      // cancelRun, voice barge-in) — without forwarding it here, cancelRun
+      // only stops rendering while the socket and the backend generation
+      // behind it run to completion.
+      const upstreamSignal = init.signal;
+      if (upstreamSignal) {
+        if (upstreamSignal.aborted) controller.abort();
+        else upstreamSignal.addEventListener("abort", () => controller.abort(), { once: true });
+      }
+
       // Dispatch submitting state — user clicked send
       sendStateBridge.setSubmitting();
 

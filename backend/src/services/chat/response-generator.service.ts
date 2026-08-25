@@ -99,10 +99,64 @@ export async function generateAndStreamResponse(
   const timeoutAbort = AbortSignal.timeout(120_000);
   const combinedSignal = AbortSignal.any([clientAbort.signal, timeoutAbort]);
   let clientDisconnected = false;
+  /** Set once onFinish ran — its path owns persistence for completed replies. */
+  let streamCompleted = false;
+  /**
+   * Visible text streamed so far. When the client cuts the connection
+   * mid-reply (Stop button, voice barge-in, tab close), this partial IS
+   * everything that was said — persisting it keeps the next turn's context
+   * truthful instead of amnesiac (the aborted stream never reaches onFinish).
+   */
+  let partialVisibleText = "";
+
+  /**
+   * Persist the truncated reply. Claude-style truncate semantics: the model
+   * said exactly these words before the cut, so they belong in history —
+   * nothing more, nothing less. Skips titling/memory/semantic-cache on
+   * purpose: a truncated answer must never poison the response cache.
+   */
+  const persistInterruptedPartial = async (): Promise<void> => {
+    if (streamCompleted) return;
+    const partial = stripThinkTags(partialVisibleText).trim();
+    if (!activeThreadId || partial.length < 2) return;
+    try {
+      let safePartial = partial;
+      try {
+        safePartial = await moderateOutput(partial, userId || "", activeThreadId);
+      } catch (modErr) {
+        log.warn("Interrupted-partial moderation failed — saving unmoderated", {
+          error: (modErr as Error)?.message,
+        });
+      }
+      const { supabase } = await import("../rag/rag-supabase-client.js");
+      const { error: astErr } = await supabase
+        .from("chat_messages")
+        .insert([
+          {
+            session_id: activeThreadId,
+            role: "assistant",
+            content: safePartial,
+            model: currentModelName,
+          },
+        ]);
+      if (astErr) {
+        log.error("Error saving interrupted assistant message", { error: astErr.message });
+      } else {
+        log.info("Persisted interrupted partial reply", {
+          session_id: activeThreadId,
+          chars: safePartial.length,
+        });
+      }
+    } catch (err) {
+      log.error("persistInterruptedPartial failed", { error: (err as Error)?.message });
+    }
+  };
 
   res.on("close", () => {
+    if (streamCompleted) return; // normal end-of-stream teardown
     clientDisconnected = true;
     clientAbort.abort();
+    void persistInterruptedPartial();
   });
 
   const MULTI_AGENT_ENABLED = process.env.MULTI_AGENT_ENABLED === "true";
@@ -139,6 +193,14 @@ export async function generateAndStreamResponse(
         },
       },
     },
+    // Accumulate visible text for interrupted-partial persistence. Only
+    // text deltas count — reasoning deltas are invisible to the user.
+    onChunk: ({ chunk }) => {
+      const c = chunk as { type?: string; text?: unknown };
+      if ((c.type === "text-delta" || c.type === "text") && typeof c.text === "string") {
+        partialVisibleText += c.text;
+      }
+    },
     onFinish: async ({
       text,
       usage,
@@ -148,6 +210,7 @@ export async function generateAndStreamResponse(
       usage?: { promptTokens?: number; completionTokens?: number; totalTokens?: number };
       finishReason?: string;
     }) => {
+      streamCompleted = true;
       reqMetrics.totalTimeMs = Date.now() - (reqMetrics.startTime as number);
 
       // Reasoning tap: <think>…</think> blocks are UI-only — strip them before
@@ -351,6 +414,7 @@ export async function generateAndStreamResponse(
           maxOutputTokens: getModelMaxOutputTokens(secondModelName),
           abortSignal: combinedSignal,
           onFinish: streamOptions.onFinish,
+          onChunk: streamOptions.onChunk,
           providerOptions: streamOptions.providerOptions,
         });
 
