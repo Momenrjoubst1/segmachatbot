@@ -45,6 +45,24 @@ jobs:
           RATE_LIMIT_STORE: redis
           REDIS_URL: redis://localhost:6380
 
+      - name: Audit production dependencies
+        working-directory: backend
+        # Gate on any NEW high not in the accepted set. adm-zip/sharp (and
+        # their dependents) arrive via @huggingface/transformers with no
+        # upstream fix — accepted risk, see DEEP_CODE_REVIEW resolution log.
+        run: |
+          npm audit --omit=dev --json > audit.json || true
+          node -e "
+            const v = require('./audit.json').vulnerabilities || {};
+            const accepted = new Set(['@huggingface/transformers','onnxruntime-node','adm-zip','sharp']);
+            const bad = Object.entries(v).filter(([k, x]) => x.severity === 'high' && !accepted.has(k)).map(([k]) => k);
+            if (bad.length) { console.error('NEW high-severity vulnerabilities:', bad.join(', ')); process.exit(1); }
+            console.log('audit ok — accepted highs:', [...accepted].filter(k => v[k]).join(', '));
+          "
+          rm -f audit.json
+
+  frontend-test:
+
   frontend-test:
     runs-on: ubuntu-latest
     steps:
