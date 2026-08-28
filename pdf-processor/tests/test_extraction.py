@@ -18,7 +18,7 @@ from app.extraction import (
     extract_page,
     normalize_arabic_visual_text,
 )
-from app.models import BBox, TextBlock
+from app.models import BBox, ExtractedImage, TextBlock, VectorCluster
 
 
 # ── normalize_arabic_visual_text ──────────────────────────────────────────────
@@ -499,9 +499,14 @@ class TestExtractPage:
     @patch("app.extraction._extract_images", return_value=[])
     @patch("app.extraction._extract_text_blocks")
     def test_content_element_count(self, mock_tb, mock_img, mock_vec, mock_bg):
-        mock_tb.return_value = [MagicMock(), MagicMock()]
-        mock_img.return_value = [MagicMock()]
-        mock_vec.return_value = ([MagicMock()], None)
+        # Real models — PageExtraction validates its fields, so bare
+        # MagicMocks crash later passes (e.g. x-center sorting).
+        mock_tb.return_value = [
+            TextBlock(text="a", bbox=BBox(x0=0, y0=0, x1=100, y1=10), font_size=10.0, font_name="F", is_bold=False, is_italic=False),
+            TextBlock(text="b", bbox=BBox(x0=200, y0=0, x1=300, y1=10), font_size=10.0, font_name="F", is_bold=False, is_italic=False),
+        ]
+        mock_img.return_value = [ExtractedImage(index=0, bbox=BBox(x0=0, y0=0, x1=50, y1=50), width=50, height=50, base64="")]
+        mock_vec.return_value = ([VectorCluster(bbox=BBox(x0=0, y0=0, x1=40, y1=40))], None)
         page = MagicMock()
         page.rect = MagicMock(width=612, height=792)
         result = extract_page(page, page_number=1)

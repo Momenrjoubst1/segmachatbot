@@ -44,17 +44,27 @@ def classify_page(extraction: PageExtraction, is_first_page: bool) -> PageClassi
         image_area += iw * ih
     image_ratio = image_area / page_area if page_area > 0 else 0.0
 
-    if total_chars < BLANK_CHAR_THRESHOLD:
-        return PageClassification(page_number=extraction.page_number, page_type="blank")
-
+    # Cover precedes the blank check: a first page carrying a large title is
+    # a cover even when the title is shorter than BLANK_CHAR_THRESHOLD.
     if is_first_page:
         max_font = max((b.font_size for b in extraction.text_blocks), default=0)
         if max_font >= COVER_FONT_SIZE_THRESHOLD:
             return PageClassification(page_number=extraction.page_number, page_type="cover")
 
+    # Blank only when there is neither text nor imagery — pages dominated by
+    # figures fall through to the figure/table checks below.
+    if total_chars < BLANK_CHAR_THRESHOLD and total_images == 0:
+        return PageClassification(page_number=extraction.page_number, page_type="blank")
+
     text_lower = " ".join(b.text.lower() for b in extraction.text_blocks)
 
-    # TOC detection
+    # Index detection first: it requires an index-specific keyword, so it can
+    # never swallow generic TOC pages — but Arabic indexes ("فهرس المؤلفين")
+    # would otherwise be caught earlier by the "فهرس" TOC keyword substring.
+    if _is_index_page(extraction):
+        return PageClassification(page_number=extraction.page_number, page_type="index")
+
+    # TOC detection (keyword-driven)
     for kw in TOC_KEYWORDS:
         if kw in text_lower:
             return PageClassification(page_number=extraction.page_number, page_type="toc")
@@ -65,10 +75,6 @@ def classify_page(extraction: PageExtraction, is_first_page: bool) -> PageClassi
             toc_like_lines += 1
     if toc_like_lines >= 3:
         return PageClassification(page_number=extraction.page_number, page_type="toc")
-
-    # Index detection
-    if _is_index_page(extraction):
-        return PageClassification(page_number=extraction.page_number, page_type="index")
 
     if image_ratio > 0.60 and total_chars < 200:
         return PageClassification(page_number=extraction.page_number, page_type="figure_only")

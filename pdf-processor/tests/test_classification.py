@@ -127,7 +127,7 @@ class TestClassifyPage:
         assert result.page_type == "toc"
 
     def test_index_page(self):
-        blocks = []
+        blocks = [_make_block("Index")]
         for letter in "ABCDEFGHIJKLM":
             blocks.append(_make_block(f"{letter}uthor .................. {ord(letter) - 64}"))
         ext = _make_extraction(text_blocks=blocks, page_number=50)
@@ -205,7 +205,7 @@ class TestIsIndexPage:
         assert _is_index_page(ext) is False
 
     def test_real_index_page(self):
-        blocks = []
+        blocks = [_make_block("Author Index")]
         for letter in "ABCDEFGHIJ":
             blocks.append(_make_block(f"{letter}uthor topic .................. {ord(letter) - 64}"))
         ext = _make_extraction(text_blocks=blocks)

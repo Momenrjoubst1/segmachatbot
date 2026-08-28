@@ -54,7 +54,9 @@ def detect_script(text: str) -> str:
 
 
 def _int_color_to_hex(color: int) -> str:
-    """PyMuPDF span colors are 32-bit sRGB ints."""
+    """PyMuPDF span colors are 32-bit sRGB ints (RRGGBBAA when alpha present)."""
+    if color > 0xFFFFFF:
+        color >>= 8  # drop the trailing alpha byte
     return f"#{color & 0xFFFFFF:06x}"
 
 

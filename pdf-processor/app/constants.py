@@ -61,8 +61,8 @@ INDEX_KEYWORDS = {
     "index", "الفهرس", "مسرد", "المصطلحات", "glossary",
     "author index", "subject index", "فهرس المؤلفين", "فهرس المواضيع",
 }
-TOC_LINE_PATTERN = r"\.{2,}\s*\d+"
-PAGE_NUM_PATTERN = r"^[\s\-–—|]*\d{1,4}[\s\-–—|]*$"
+TOC_LINE_PATTERN = re.compile(r"\.{2,}\s*\d+")
+PAGE_NUM_PATTERN = re.compile(r"^[\s\-–—|]*\d{1,4}[\s\-–—|]*$")
 CAPTION_KEYWORDS = {
     "figure", "fig.", "fig", "table", "chart", "diagram", "image", "photo", "map",
     "شكل", "جدول", "رسم", "مخطط", "صورة", "خريطة", "بيان",
@@ -84,7 +84,7 @@ CAPTION_MAX_DIST = 90.0
 # Any Arabic character across the standard Arabic blocks, including the
 # Presentation Forms A/B ranges that PDFs embed when fonts pre-shape glyphs.
 ARABIC_RE = re.compile(
-    "[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]"
+    "[ء-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]"
 )
 # Arabic Presentation Forms only (pre-shaped glyph code points).
 ARABIC_PRESENTATION_RE = re.compile("[ﭐ-﷿ﹰ-﻿]")
