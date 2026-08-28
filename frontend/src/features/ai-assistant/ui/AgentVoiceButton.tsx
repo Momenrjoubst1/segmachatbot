@@ -97,12 +97,13 @@ export const AgentVoiceButton: FC = () => {
       const userText = lastUserTextRef.current.trim();
       lastUserTextRef.current = "";
       input?.setText("");
+      const turnId = crypto.randomUUID();
 
       // Mirror into the thread state first (instant UI), then persist.
       const now = new Date().toISOString();
       if (userText) {
         appendMessage({
-          id: `va-u-${Date.now()}`,
+          id: `va-u-${turnId}`,
           role: "user",
           content: userText,
           is_pinned: false,
@@ -111,7 +112,7 @@ export const AgentVoiceButton: FC = () => {
       }
       if (agentText) {
         appendMessage({
-          id: `va-a-${Date.now()}`,
+          id: `va-a-${turnId}`,
           role: "assistant",
           content: agentText,
           is_pinned: false,
@@ -120,15 +121,21 @@ export const AgentVoiceButton: FC = () => {
       }
 
       if (!activeThreadId || (!userText && !agentText)) return;
-      try {
-        const res = await authFetch(BACKEND_URL + "/api/voice/agent/turn", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ threadId: activeThreadId, userText, agentText }),
-        });
-        if (!res.ok) console.warn("[agent-voice] turn persist failed", res.status);
-      } catch {
-        /* best-effort: thread state already shows the turn */
+      const body = JSON.stringify({ threadId: activeThreadId, userText, agentText, turnId });
+      // One retry — the backend dedupes by turnId so a retry cannot double-insert.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const res = await authFetch(BACKEND_URL + "/api/voice/agent/turn", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+          });
+          if (res.ok) return;
+          console.warn("[agent-voice] turn persist failed", res.status, "attempt", attempt + 1);
+        } catch {
+          /* best-effort: thread state already shows the turn */
+        }
+        await new Promise((r) => setTimeout(r, 800));
       }
     },
     [activeThreadId, appendMessage, input],
