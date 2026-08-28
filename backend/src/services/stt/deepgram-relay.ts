@@ -213,6 +213,12 @@ export class SttRelaySession {
     });
 
     dg.on("open", () => {
+      if (this.closed) {
+        // The client gave up during the handshake — an upstream socket left
+        // open here would keep billing until Deepgram's own timeout.
+        try { dg.close(1000); } catch { /* noop */ }
+        return;
+      }
       this.deepgramWs = dg;
       this.deepgramReady = true;
       // Flush audio buffered during the handshake (leading speech!)

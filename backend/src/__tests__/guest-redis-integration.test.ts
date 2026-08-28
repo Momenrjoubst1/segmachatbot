@@ -81,7 +81,13 @@ beforeAll(async () => {
       maxRetriesPerRequest: 1,
       connectTimeout: 3000,
       lazyConnect: true,
+      // One attempt is enough to detect availability; ioredis's default
+      // endless retry strategy keeps emitting 'error' events (with no
+      // listener) long after this guard gave up — that unhandled event
+      // intermittently killed whatever test was running at the time.
+      retryStrategy: () => null,
     });
+    redis.on('error', () => { /* handled by the availability guard */ });
     await redis.connect();
     await redis.ping();
 
