@@ -3,7 +3,6 @@ import { type FC, useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CalendarIcon,
-  LayoutGrid,
   Mail,
   ShareIcon,
   Lock,
@@ -22,11 +21,11 @@ import {
 } from "@/components/ui/dialog";
 import { AnimatedDock } from "@/components/ui/animated-dock";
 import { useAgenticAction } from "../../../../../context/AgenticUIBus";
+import { ChatFilesButton } from "../../../ui/chat-files-panel";
 
 export interface HeaderProps {
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
-  onToggleArtifacts: () => void;
   onToggleEmailHistory?: () => void;
   activeView: 'chat' | 'calendar';
   onToggleView: (view: 'chat' | 'calendar') => void;
@@ -34,7 +33,6 @@ export interface HeaderProps {
 }
 
 export const Header: FC<HeaderProps> = ({
-  onToggleArtifacts,
   onToggleEmailHistory,
   activeView,
   onToggleView,
@@ -72,12 +70,6 @@ export const Header: FC<HeaderProps> = ({
             arrowPath: "M12 0 C12 0, 8 4, 12 8 C16 12, 20 8, 16 14 C12 20, 8 16, 12 22 L10 26 L12 30 L14 26 L12 22"
           },
           {
-            onClick: () => handleFeatureClick('artifacts', onToggleArtifacts),
-            Icon: <LayoutGrid className="size-4" />,
-            title: "Artifacts",
-            arrowPath: "M12 0 C12 0, 16 2, 14 6 C12 10, 6 6, 8 10 C10 14, 16 12, 14 16 C12 20, 6 18, 8 22 L10 26 L12 30 L14 26 L12 22"
-          },
-          {
             onClick: () => handleFeatureClick('email', () => onToggleEmailHistory?.()),
             Icon: <Mail className="size-4" />,
             title: "Email History",
@@ -85,16 +77,20 @@ export const Header: FC<HeaderProps> = ({
           }
         ]}
       />
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors ml-auto"
-          >
-            <ShareIcon className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">Share</TooltipContent>
-      </Tooltip>
+      <div className="ml-auto flex items-center gap-1">
+        {/* Claude-style: every file attached to this chat, one click away */}
+        <ChatFilesButton />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ShareIcon className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Share</TooltipContent>
+        </Tooltip>
+      </div>
 
       <Dialog open={showLoginDialog} onOpenChange={setShowLoginDialog}>
         <DialogContent className="sm:max-w-md">

@@ -19,9 +19,16 @@ import crypto from "crypto";
 import multer from "multer";
 import fs from "fs/promises";
 import os from "os";
+import { Readable } from "stream";
 import { asyncHandler } from "../../utils/express-async-wrapper.js";
 import { createLogger } from "../../utils/logger.js";
-import { deleteR2Object, isR2Configured, uploadR2ObjectFromFile } from "../../services/textbook/r2-client.js";
+import {
+  deleteR2Object,
+  getR2ObjectWebStream,
+  isR2Configured,
+  presignR2Get,
+  uploadR2ObjectFromFile,
+} from "../../services/textbook/r2-client.js";
 import {
   detectKind,
   KIND_SPECS,
@@ -41,6 +48,37 @@ const router = Router();
 const MAX_FILE_SIZE = KIND_SPECS.video.maxBytes;
 
 const KEY_PREFIX = (userId: string) => `chat-attachments/${userId}/`;
+
+/** Extension → browser-previewable MIME, for serving stored objects inline. */
+const EXT_MIME: Record<string, string> = {
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
+  mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", mpeg: "video/mpeg", mpg: "video/mpeg",
+  avi: "video/x-msvideo", wmv: "video/x-ms-wmv", "3gp": "video/3gpp", flv: "video/x-flv",
+  mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", aac: "audio/aac",
+  m4a: "audio/mp4", aiff: "audio/aiff",
+  pdf: "application/pdf",
+  txt: "text/plain; charset=utf-8", md: "text/markdown; charset=utf-8", csv: "text/csv; charset=utf-8",
+  html: "text/html; charset=utf-8", xml: "text/xml; charset=utf-8", css: "text/css; charset=utf-8",
+  json: "application/json", js: "text/javascript; charset=utf-8", ts: "text/plain; charset=utf-8",
+  py: "text/plain; charset=utf-8", log: "text/plain; charset=utf-8",
+};
+
+function guessAttachmentMime(keyOrName: string): string {
+  const ext = (keyOrName.split(".").pop() || "").toLowerCase();
+  return EXT_MIME[ext] || "application/octet-stream";
+}
+
+/** RFC 5987 Content-Disposition value — safe for Arabic/Unicode filenames. */
+function contentDisposition(type: "inline" | "attachment", fileName: string): string {
+  const fallback = fileName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+  return `${type}; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+}
+
+/** Validate an attachment key against the caller's namespace. Returns null when foreign/invalid. */
+function ownedAttachmentKey(rawKey: string, userId: string): string | null {
+  const key = rawKey.replace(/^r2:\/\//, "");
+  return key.startsWith(KEY_PREFIX(userId)) ? key : null;
+}
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -197,6 +235,68 @@ router.delete(
       return;
     }
     res.json({ deleted: true });
+  }),
+);
+
+// ─── View URL — short-lived presigned GET for <img>/<video>/<audio>/<iframe>
+// srcs, which cannot carry Authorization headers. Ownership-checked; falls
+// back gracefully so the client can use the streaming route instead.
+router.get(
+  "/attachments/view-url",
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const key = ownedAttachmentKey(typeof req.query.key === "string" ? req.query.key : "", userId);
+    if (!key) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const url = await presignR2Get(key, 3600);
+    if (!url) {
+      res.status(503).json({ error: "storage_unavailable" });
+      return;
+    }
+    res.json({ url, expiresIn: 3600 });
+  }),
+);
+
+// ─── File stream — ownership-checked proxy for downloads and the blob-based
+// preview fallback. `download=1` forces a save dialog; otherwise inline.
+router.get(
+  "/attachments/file",
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    const key = ownedAttachmentKey(typeof req.query.key === "string" ? req.query.key : "", userId);
+    if (!key) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    // Client-supplied name is cosmetic only (used for the save-dialog label).
+    const fileName = (typeof req.query.name === "string" ? req.query.name : key.split("/").pop() || "file").substring(0, 200);
+    const dispositionType = req.query.download === "1" ? "attachment" : "inline";
+
+    const stream = await getR2ObjectWebStream(key);
+    if (!stream) {
+      res.status(503).json({ error: "storage_unavailable" });
+      return;
+    }
+
+    res.setHeader("Content-Type", guessAttachmentMime(fileName || key));
+    res.setHeader("Content-Disposition", contentDisposition(dispositionType, fileName));
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    Readable.fromWeb(stream as import("stream/web").ReadableStream).pipe(res);
   }),
 );
 
