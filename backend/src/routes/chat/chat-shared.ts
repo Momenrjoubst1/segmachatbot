@@ -73,55 +73,10 @@ export const newChatLimiter = rateLimit({
   },
 });
 
-export const DEFAULT_MODEL =
-  process.env.ASSISTANT_DEFAULT_MODEL?.trim() ||
-  "stealth/ox-alpha";
-
-export const ALLOWED_MODELS = [
-  "deepseek-v4-flash",
-  "stealth/ox-alpha",
-  "gemini-3.7-flash",
-  "gemini-2.5-flash",
-  "gemini-2.5-pro",
-  "gemini-3-flash",
-  "gemini-3.1-flash-lite",
-  "glm-5.2",
-  "gpt-5.4",
-  "gpt-4o",
-  "gpt-4o-mini",
-  "qwen/qwen3.6-27b",
-  "qwen/qwen3-32b",
-  "mixtral-8x7b-32768",
-  "llama-3.3-70b-versatile",
-  "llama-3.1-8b-instant",
-  "openai/gpt-oss-120b",
-  "openai/gpt-oss-20b",
-  "meta-llama/llama-4-scout-17b-16e-instruct",
-  "google/gemma-4-31b-it:free",
-  "google/gemma-4-26b-a4b-it:free",
-  "anthropic/claude-3.5-haiku",
-  "nvidia/nemotron-3-ultra-550b-a55b:free",
-  "nvidia/nemotron-3.5-lightning:free",
-  "nvidia/nemotron-3-super-49b-a49b:free",
-  "nvidia/nemotron-3-nano-30b-a3b:free",
-  "nvidia/nemotron-nano-9b-v2:free",
-  "nvidia/nemotron-nano-12b-2-vl:free",
-  "openai/gpt-oss-20b:free",
-  "poolside/laguna-s-2.1:free",
-  "poolside/laguna-xs-2.1:free",
-  "dots-studio/dots3-note-preview:free",
-  "liquid/lfm2.5-2.6b:free",
-  "accounts/fireworks/models/gemma-4-31b-it",
-  "inclusionai/ling-3.0-tiny",
-  "nvidia/llama-3.1-nemotron-70b-instruct",
-  "nvidia/llama-3.3-70b-instruct",
-  "nvidia/deepseek-r1",
-  "meta/llama-3.1-8b-instruct",
-  "meta/llama-3.1-70b-instruct",
-  "qwen/qwen2.5-72b-instruct",
-  "llama-3.3-70b",
-  "llama-3.1-8b",
-];
+// Model allowlist + default live in the model catalog (single source of
+// truth) — services/memory/model-context.ts. Re-exported here for the
+// route layer.
+export { DEFAULT_MODEL, ALLOWED_MODELS } from "../../services/memory/model-context.js";
 
 export async function ensureThreadOwnership(req: Request, threadId: string) {
   const userId = req.user?.id;

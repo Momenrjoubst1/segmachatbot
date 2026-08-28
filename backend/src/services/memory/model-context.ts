@@ -72,29 +72,22 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, ModelContextInfo> = {
   // Groq (caps verified live via /api/v1/models max_completion_tokens — Groq
   // hard-rejects requests whose max_tokens exceeds these)
   'qwen/qwen3.6-27b': { value: 'qwen/qwen3.6-27b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 16_384 },
+  'qwen/qwen3.8-27b': { value: 'qwen/qwen3.8-27b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 16_384 },
   'qwen/qwen3-32b': { value: 'qwen/qwen3-32b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
-  'mixtral-8x7b-32768': { value: 'mixtral-8x7b-32768', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
-  'llama-3.3-70b-versatile': { value: 'llama-3.3-70b-versatile', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
-  'llama-3.1-8b-instant': { value: 'llama-3.1-8b-instant', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
   'openai/gpt-oss-120b': { value: 'openai/gpt-oss-120b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 65_536 },
   'openai/gpt-oss-20b': { value: 'openai/gpt-oss-20b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 65_536 },
-  'meta-llama/llama-4-scout-17b-16e-instruct': { value: 'meta-llama/llama-4-scout-17b-16e-instruct', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
 
-  // OpenRouter (free tier — tight completion caps)
+  // OpenRouter (free tier — tight completion caps).
+  // Ids verified live against openrouter.ai/api/v1/models; retired ids
+  // (mixtral-8x7b-32768, llama-3.3-70b-versatile, llama-3.1-8b-instant,
+  // llama-4-scout, nemotron-3-super/nano, nemotron-nano-*, gpt-oss-20b:free,
+  // dots3-note-preview, lfm2.5-2.6b, claude-3.5-haiku) were pruned.
   'google/gemma-4-31b-it:free': { value: 'google/gemma-4-31b-it:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
   'google/gemma-4-26b-a4b-it:free': { value: 'google/gemma-4-26b-a4b-it:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
-  'anthropic/claude-3.5-haiku': { value: 'anthropic/claude-3.5-haiku', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
   'nvidia/nemotron-3-ultra-550b-a55b:free': { value: 'nvidia/nemotron-3-ultra-550b-a55b:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
   'nvidia/nemotron-3.5-lightning:free': { value: 'nvidia/nemotron-3.5-lightning:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
-  'nvidia/nemotron-3-super-49b-a49b:free': { value: 'nvidia/nemotron-3-super-49b-a49b:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
-  'nvidia/nemotron-3-nano-30b-a3b:free': { value: 'nvidia/nemotron-3-nano-30b-a3b:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
-  'nvidia/nemotron-nano-9b-v2:free': { value: 'nvidia/nemotron-nano-9b-v2:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
-  'nvidia/nemotron-nano-12b-2-vl:free': { value: 'nvidia/nemotron-nano-12b-2-vl:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
-  'openai/gpt-oss-20b:free': { value: 'openai/gpt-oss-20b:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
   'poolside/laguna-s-2.1:free': { value: 'poolside/laguna-s-2.1:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
   'poolside/laguna-xs-2.1:free': { value: 'poolside/laguna-xs-2.1:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
-  'dots-studio/dots3-note-preview:free': { value: 'dots-studio/dots3-note-preview:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
-  'liquid/lfm2.5-2.6b:free': { value: 'liquid/lfm2.5-2.6b:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
 
   // Fireworks
   'accounts/fireworks/models/gemma-4-31b-it': { value: 'accounts/fireworks/models/gemma-4-31b-it', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'fireworks', maxOutputTokens: 8_192 },
@@ -114,6 +107,16 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, ModelContextInfo> = {
   'llama-3.3-70b': { value: 'llama-3.3-70b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'cerebras', maxOutputTokens: 8_192 },
   'llama-3.1-8b': { value: 'llama-3.1-8b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'cerebras', maxOutputTokens: 8_192 },
 };
+
+/**
+ * Default assistant model when the client does not request one
+ * (and the canonical source of truth for the model allowlist).
+ */
+export const DEFAULT_MODEL =
+  process.env.ASSISTANT_DEFAULT_MODEL?.trim() || 'stealth/ox-alpha';
+
+/** Models the pipeline is allowed to run — every id in the catalog. */
+export const ALLOWED_MODELS: string[] = Object.keys(MODEL_CONTEXT_WINDOWS);
 
 /**
  * Get context window for a model ID

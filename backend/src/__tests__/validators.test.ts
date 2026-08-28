@@ -41,7 +41,7 @@ describe('Validators', () => {
 
     it('should accept model string', () => {
       const result = chatMessageSchema.safeParse({
-        model: 'llama-3.3-70b-versatile',
+        model: 'qwen/qwen3.6-27b',
       });
       expect(result.success).toBe(true);
     });

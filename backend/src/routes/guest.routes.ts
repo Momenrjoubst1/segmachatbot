@@ -692,7 +692,7 @@ router.post(
       process.env.GUEST_MODEL || "nvidia/nemotron-3.5-lightning:free",
       "google/gemma-4-31b-it:free",
       "google/gemma-4-26b-a4b-it:free",
-      "nvidia/nemotron-3-super-49b-a49b:free",
+      "qwen/qwen3.6-27b",
     ].filter((v, i, a) => a.indexOf(v) === i);
 
     log.info("Guest chat request", {

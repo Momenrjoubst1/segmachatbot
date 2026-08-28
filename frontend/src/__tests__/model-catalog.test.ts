@@ -54,8 +54,8 @@ describe('model-catalog', () => {
       expect(getContextWindow('gemini-2.5-flash')).toBe(1_000_000);
     });
 
-    it('returns context window for mixtral model', () => {
-      expect(getContextWindow('mixtral-8x7b-32768')).toBe(1_000_000);
+    it('returns context window for qwen3.8 model', () => {
+      expect(getContextWindow('qwen/qwen3.8-27b')).toBe(1_000_000);
     });
 
     it('returns default context window for unknown model', () => {
@@ -69,7 +69,7 @@ describe('model-catalog', () => {
     });
 
     it('returns provider for groq model', () => {
-      expect(getModelProvider('llama-3.3-70b-versatile')).toBe('groq');
+      expect(getModelProvider('qwen/qwen3.6-27b')).toBe('groq');
     });
 
     it('returns default provider "openrouter" for unknown model', () => {

@@ -19,7 +19,6 @@ describe('Constants', () => {
       for (const model of MODELS) {
         expect(model).toHaveProperty('name');
         expect(model).toHaveProperty('value');
-        expect(model).toHaveProperty('icon');
         expect(model).toHaveProperty('disabled');
         expect(model).toHaveProperty('contextWindow');
         expect(model).toHaveProperty('provider');

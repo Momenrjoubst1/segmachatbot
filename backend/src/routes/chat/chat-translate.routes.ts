@@ -143,7 +143,7 @@ router.post(
 
     // LLM step for dialects, grammar correction, or as translation fallback
     if (process.env.GROQ_API_KEY) {
-      chain.push({ type: "llm", provider: "groq", model: "llama-3.3-70b-versatile" });
+      chain.push({ type: "llm", provider: "groq", model: "qwen/qwen3.6-27b" });
     }
     if (process.env.GITHUB_TOKEN) {
       chain.push({ type: "llm", provider: "github", model: "openai/gpt-4o-mini" });

@@ -113,22 +113,15 @@ export const MODELS = [
   // 4. Groq Models (Free & Fast via GROQ_API_KEY)
   // ==========================================
   {
-    name: "Llama 3.3 70B (Groq - Fast)",
-    value: "llama-3.3-70b-versatile",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "groq" as const,
-  },
-  {
-    name: "Llama 3.1 8B (Groq - Fastest)",
-    value: "llama-3.1-8b-instant",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "groq" as const,
-  },
-  {
     name: "Qwen 3.6 27B (Groq)",
     value: "qwen/qwen3.6-27b",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "groq" as const,
+  },
+  {
+    name: "Qwen 3.8 27B (Groq)",
+    value: "qwen/qwen3.8-27b",
     disabled: false,
     contextWindow: 1_000_000,
     provider: "groq" as const,
@@ -150,20 +143,6 @@ export const MODELS = [
   {
     name: "Qwen 3 32B (Groq)",
     value: "qwen/qwen3-32b",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "groq" as const,
-  },
-  {
-    name: "Llama 4 Scout 17B (Groq)",
-    value: "meta-llama/llama-4-scout-17b-16e-instruct",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "groq" as const,
-  },
-  {
-    name: "Mixtral 8x7B (Groq)",
-    value: "mixtral-8x7b-32768",
     disabled: false,
     contextWindow: 1_000_000,
     provider: "groq" as const,
@@ -194,50 +173,8 @@ export const MODELS = [
     provider: "openrouter" as const,
   },
   {
-    name: "Claude 3.5 Haiku",
-    value: "anthropic/claude-3.5-haiku",
-    disabled: true,
-    contextWindow: 1_000_000,
-    provider: "openrouter" as const,
-  },
-  {
     name: "Nemotron 3 Ultra 550B (Free)",
     value: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "openrouter" as const,
-  },
-  {
-    name: "Nemotron 3 Super 49B (Free)",
-    value: "nvidia/nemotron-3-super-49b-a49b:free",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "openrouter" as const,
-  },
-  {
-    name: "Nemotron 3 Nano 30B (Free)",
-    value: "nvidia/nemotron-3-nano-30b-a3b:free",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "openrouter" as const,
-  },
-  {
-    name: "Nemotron Nano 9B V2 (Free)",
-    value: "nvidia/nemotron-nano-9b-v2:free",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "openrouter" as const,
-  },
-  {
-    name: "Nemotron Nano 12B VL (Free)",
-    value: "nvidia/nemotron-nano-12b-2-vl:free",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "openrouter" as const,
-  },
-  {
-    name: "GPT-OSS 20B (Free)",
-    value: "openai/gpt-oss-20b:free",
     disabled: false,
     contextWindow: 1_000_000,
     provider: "openrouter" as const,
@@ -252,20 +189,6 @@ export const MODELS = [
   {
     name: "Laguna XS 2.1 (Free)",
     value: "poolside/laguna-xs-2.1:free",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "openrouter" as const,
-  },
-  {
-    name: "Dots3 Note Preview (Free)",
-    value: "dots-studio/dots3-note-preview:free",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "openrouter" as const,
-  },
-  {
-    name: "LFM2.5 2.6B (Free)",
-    value: "liquid/lfm2.5-2.6b:free",
     disabled: false,
     contextWindow: 1_000_000,
     provider: "openrouter" as const,
@@ -405,7 +328,6 @@ export const MODEL_EFFORT_LEVELS: Partial<
   // OpenRouter
   "stealth/ox-alpha": ["Low", "Medium", "High"],
   "google/gemma-4-31b-it:free": ["Low", "Medium", "High"],
-  "openai/gpt-oss-20b:free": ["Low", "Medium", "High"],
 
   // Baichat (DeepSeek)
   "deepseek-v4-flash": ["Low", "High", "Max"],

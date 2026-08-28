@@ -1,7 +1,8 @@
 // Validates the chat request body, normalizes the model, and prepares per-request metrics.
 
 import { chatMessageSchema } from "../../../validators/chat-validation-schemas.js";
-import { log, DEFAULT_MODEL, ALLOWED_MODELS } from "../../../routes/chat/chat-shared.js";
+import { log } from "../../../routes/chat/chat-shared.js";
+import { DEFAULT_MODEL, ALLOWED_MODELS } from "../../../services/memory/model-context.js";
 import type { RequestMetrics } from "./types.js";
 
 export interface ValidationStepResult {

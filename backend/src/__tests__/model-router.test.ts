@@ -201,7 +201,6 @@ describe('ModelRouter', () => {
         'gemini-2.5-flash',
         'gemini-2.5-pro',
         'nvidia/nemotron-3.5-lightning:free',
-        'nvidia/nemotron-3-super-49b-a49b:free',
         'qwen/qwen3.6-27b',
         'glm-5.2',
         'gpt-4o-mini',
