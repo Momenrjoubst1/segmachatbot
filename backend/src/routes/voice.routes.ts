@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { z } from "zod";
 import { createLogger } from "../utils/logger.js";
+import redis from "../config/redis/client.js";
 import { ensureThreadOwnership } from "./chat/chat-shared.js";
 import {
   judgeUtterance,
@@ -97,16 +99,41 @@ router.post("/agent/session", turnLimiter, async (req: Request, res: Response) =
  * LLM is the brain (user choice), so this ONLY records history — the chat
  * pipeline is never invoked.
  */
+const AgentTurnSchema = z.object({
+  threadId: z.string().uuid(),
+  userText: z.string().max(20_000).default(""),
+  agentText: z.string().max(20_000).default(""),
+  // Optional client-generated id — retries of the same turn are deduped.
+  turnId: z.string().uuid().optional(),
+});
+
 router.post("/agent/turn", turnLimiter, async (req: Request, res: Response) => {
   const userId = req.user?.id;
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-  const threadId = typeof req.body?.threadId === "string" ? req.body.threadId : "";
-  const userText = typeof req.body?.userText === "string" ? req.body.userText.trim() : "";
-  const agentText = typeof req.body?.agentText === "string" ? req.body.agentText.trim() : "";
-  if (!threadId || (!userText && !agentText)) {
-    res.status(400).json({ error: "threadId and at least one of userText/agentText required" });
+  const parsed = AgentTurnSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_body", details: parsed.error.flatten().fieldErrors });
     return;
+  }
+  const threadId = parsed.data.threadId;
+  const userText = parsed.data.userText.trim();
+  const agentText = parsed.data.agentText.trim();
+  if (!userText && !agentText) {
+    res.status(400).json({ error: "at least one of userText/agentText required" });
+    return;
+  }
+
+  // Idempotency: a retried turn must not insert a second copy of the rows.
+  // Fails open when Redis is unavailable — dedup is best-effort.
+  if (parsed.data.turnId) {
+    try {
+      const claimed = await redis.set(`voice:turn:${parsed.data.turnId}`, "1", "EX", 3600, "NX");
+      if (claimed !== "OK") {
+        res.json({ ok: true, duplicate: true });
+        return;
+      }
+    } catch { /* redis unavailable */ }
   }
 
   const ownership = await ensureThreadOwnership(req, threadId);
