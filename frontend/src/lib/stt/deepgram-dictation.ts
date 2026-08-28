@@ -3,7 +3,7 @@
  *
  * Flow:
  *   getUserMedia -> AudioContext -> AudioWorklet (PCM16 @16 kHz)
- *     -> WebSocket /ws/stt?token=JWT (binary frames)
+ *     -> WebSocket /ws/stt (JWT in the first config frame, binary frames follow)
  *       -> backend relay -> Deepgram Nova-3
  *   <- {"type":"partial"|"final", text} -> onInterim/onFinalSegment
  */
@@ -230,6 +230,7 @@ export class DictationController {
       const wsBase = BACKEND_URL.replace(/^http/, "ws").replace(/\/+$/, "");
 
       let ws: WebSocket;
+      let relayToken = "";
       if (direct) {
         this.directMode = true;
         // The AudioContext must exist FIRST: its true post-decimation rate is
@@ -261,11 +262,12 @@ export class DictationController {
           this.readyResolve?.();
         };
       } else {
-        // 2b. Authenticated WebSocket to the backend relay
-        const token = await getAccessToken();
-        if (!token) throw new DictationError("auth", "Not authenticated");
+        // 2b. Authenticated WebSocket to the backend relay. The JWT goes in
+        // the config frame, not the URL — URLs leak into proxy/access logs.
+        relayToken = await getAccessToken();
+        if (!relayToken) throw new DictationError("auth", "Not authenticated");
 
-        ws = new WebSocket(wsBase + "/ws/stt?token=" + encodeURIComponent(token));
+        ws = new WebSocket(wsBase + "/ws/stt");
         ws.binaryType = "arraybuffer";
         this.ws = ws;
 
@@ -296,7 +298,7 @@ export class DictationController {
           detail: `${trackLabel} native=${nativeRate} -> wire=${outputRate}`,
         });
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "config", sampleRate: outputRate }));
+          ws.send(JSON.stringify({ type: "config", sampleRate: outputRate, token: relayToken }));
         }
       }
 

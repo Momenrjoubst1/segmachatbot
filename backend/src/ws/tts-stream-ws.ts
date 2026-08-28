@@ -1,5 +1,8 @@
 /**
- * TTS WebSocket relay — /ws/tts-stream?token=<jwt>&voiceId=<id>&model=<id>
+ * TTS WebSocket relay — /ws/tts-stream?voiceId=<id>&model=<id>
+ *
+ * The JWT arrives in the FIRST client frame ({ type:"config", token, ... })
+ * instead of the upgrade URL — JWTs in URLs leak into proxy/access logs.
  *
  * Browser-side WebSocket → this backend → ElevenLabs streaming TTS.
  * Keeps the ELEVENLABS_API_KEY server-side; the browser only sees MP3 bytes
@@ -84,11 +87,51 @@ function handleTtsUpgrade(
   const allowAnonDev =
     process.env.STT_ALLOW_ANON_DEV === "true" &&
     /localhost|127\.0\.0\.1/.test(req.headers.host || "");
-  const token = url.searchParams.get("token") || "";
   const queryVoice = url.searchParams.get("voiceId") || "";
   const queryModel = url.searchParams.get("model") || "";
 
-  wss.handleUpgrade(req, socket, head, async (clientWs) => {
+  wss.handleUpgrade(req, socket, head, (clientWs) => {
+    // Auth is deferred to the config frame: JWTs in upgrade URLs leak into
+    // proxy and access logs. The frame now carries the token.
+    let started = false;
+
+    clientWs.on("message", async (data: unknown, isBinary: boolean) => {
+      if (started) return; // post-start frames handled by the session listeners
+      if (isBinary) return; // text-only relay before the config frame
+      let cfg: {
+        type?: string;
+        token?: string;
+        voiceId?: string;
+        model?: string;
+        chunkSchedule?: number[];
+        autoMode?: boolean;
+        outputFormat?: string;
+      };
+      try {
+        cfg = JSON.parse(String(data)) as typeof cfg;
+      } catch {
+        clientWs.close(4400, "bad_frame");
+        return;
+      }
+      if (cfg.type !== "config") {
+        clientWs.close(4400, "config_first");
+        return;
+      }
+      started = true;
+      await beginSession(cfg);
+    });
+
+    async function beginSession(
+      cfg: {
+        token?: string;
+        voiceId?: string;
+        model?: string;
+        chunkSchedule?: number[];
+        autoMode?: boolean;
+        outputFormat?: string;
+      },
+    ): Promise<void> {
+    const token = typeof cfg.token === "string" ? cfg.token : "";
     const auth = await verifyToken(token, allowAnonDev, socket);
     if (!auth) {
       clientWs.close(4401, "unauthorized");
@@ -100,18 +143,27 @@ function handleTtsUpgrade(
     }
     const apiKey = process.env.ELEVENLABS_API_KEY!.trim();
 
-    let configSeen = false;
     // Persona id OR raw ElevenLabs id → concrete voice id (or null when
     // nothing is configured).
     const resolvedVoice =
-      resolveRelayVoiceInput(queryVoice || DEFAULT_VOICE) ?? "";
+      resolveRelayVoiceInput(cfg.voiceId || queryVoice || DEFAULT_VOICE) ?? "";
     let relayCfg: RelayConfig = {
       voiceId: resolvedVoice,
-      model: queryModel || DEFAULT_MODEL,
+      model: cfg.model || queryModel || DEFAULT_MODEL,
       chunkSchedule: DEFAULT_CHUNK_SCHEDULE,
       outputFormat: DEFAULT_OUTPUT_FORMAT,
       autoMode: true,
     };
+    if (Array.isArray(cfg.chunkSchedule) && cfg.chunkSchedule.length) {
+      relayCfg.chunkSchedule = cfg.chunkSchedule.filter(
+        (n) => Number.isFinite(n) && n > 0,
+      );
+      if (relayCfg.chunkSchedule.length) relayCfg.autoMode = false;
+    }
+    if (typeof cfg.autoMode === "boolean") relayCfg.autoMode = cfg.autoMode;
+    if (typeof cfg.outputFormat === "string" && cfg.outputFormat) {
+      relayCfg.outputFormat = cfg.outputFormat;
+    }
     if (!relayCfg.voiceId) {
       clientWs.send(
         JSON.stringify({
@@ -275,41 +327,10 @@ function handleTtsUpgrade(
       });
     };
 
-    // First frame: must be a JSON config message from the client.
+    // First frame was consumed by the auth gate; later frames are
+    // text payloads ({ text, flush? }) or stray binary (ignored).
     clientWs.on("message", (data: unknown, isBinary: boolean) => {
       if (closed) return;
-      if (!configSeen && !isBinary) {
-        try {
-          const cfg = JSON.parse(String(data)) as {
-            type?: string;
-            voiceId?: string;
-            model?: string;
-            chunkSchedule?: number[];
-            autoMode?: boolean;
-            outputFormat?: string;
-          };
-          if (cfg.type === "config") {
-            configSeen = true;
-            if (typeof cfg.voiceId === "string" && cfg.voiceId) {
-              relayCfg.voiceId =
-                resolveRelayVoiceInput(cfg.voiceId) ?? relayCfg.voiceId;
-            }
-            if (typeof cfg.model === "string" && cfg.model) relayCfg.model = cfg.model;
-            if (Array.isArray(cfg.chunkSchedule) && cfg.chunkSchedule.length) {
-              relayCfg.chunkSchedule = cfg.chunkSchedule.filter(
-                (n) => Number.isFinite(n) && n > 0,
-              );
-              if (relayCfg.chunkSchedule.length) relayCfg.autoMode = false;
-            }
-            if (typeof cfg.autoMode === "boolean") relayCfg.autoMode = cfg.autoMode;
-            if (typeof cfg.outputFormat === "string" && cfg.outputFormat) {
-              relayCfg.outputFormat = cfg.outputFormat;
-            }
-            connectUpstream();
-            return;
-          }
-        } catch { /* fall through: treat first frame as a text message */ }
-      }
       if (isBinary) {
         // The relay is text-only on the client side; ignore stray binary
         // frames but don't close — could be a keepalive probe.
@@ -333,6 +354,11 @@ function handleTtsUpgrade(
 
     clientWs.on("close", () => cleanup(1000, "client_closed"));
     clientWs.on("error", () => cleanup(1011, "client_error"));
+
+    // The auth gate consumed the config frame; all settings are merged —
+    // open the upstream now.
+    connectUpstream();
+    }
   });
 }
 

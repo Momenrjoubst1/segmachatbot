@@ -184,7 +184,6 @@ export class ElevenLabsStreamingTts {
     } catch { /* keep going — anon dev mode will allow it on localhost */ }
 
     const params = new URLSearchParams();
-    if (token) params.set("token", token);
     if (this.config.voiceId) params.set("voiceId", this.config.voiceId);
     if (this.config.model) params.set("model", this.config.model);
 
@@ -229,6 +228,9 @@ export class ElevenLabsStreamingTts {
           ws.send(
             JSON.stringify({
               type: "config",
+              // JWT rides in the config frame, not the URL — URLs leak into
+              // proxy/access logs.
+              token,
               voiceId: this.config.voiceId,
               model: this.config.model,
               chunkSchedule: this.config.chunkSchedule,

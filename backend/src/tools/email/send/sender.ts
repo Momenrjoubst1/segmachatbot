@@ -28,7 +28,10 @@ function validateEmails(emails: string[] | undefined): string | null {
   return null;
 }
 
-export { EmailTemplate, escapeHtml, buildHtmlEmail, buildTemplateEmail } from "./email-templates.js";
+// EmailTemplate is a type — re-exporting it as a value crashes ESM at
+// runtime (tsc silently elides the name, tsx/node does not).
+export type { EmailTemplate } from "./email-templates.js";
+export { escapeHtml, buildHtmlEmail, buildTemplateEmail } from "./email-templates.js";
 export { logEmailToDB, updateJobStatus, getEmailHistory, getEmailDetails, deleteEmailFromHistory, resendEmail, getEmailStats } from "./email-history.js";
 
 export const sendEmailSchema = z.object({

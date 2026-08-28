@@ -3,7 +3,9 @@ import "dotenv/config";
 import WebSocket from "ws";
 
 const BASE = process.env.BACKEND_WS || "ws://localhost:3004";
-const URL_ = `${BASE}/ws/stt` + (process.argv[2] ? `?token=${process.argv[2]}` : "");
+const URL_ = `${BASE}/ws/stt`;
+// JWT rides in the config frame now (URLs leak into logs).
+const TOKEN = process.argv[2] ?? "";
 
 function toneFrame(freq: number, seconds: number, rate = 16000): Buffer {
   const n = Math.floor(rate * seconds);
@@ -25,7 +27,7 @@ async function main() {
 
     ws.on("open", () => {
       console.log("WS OPEN ✓");
-      ws.send(JSON.stringify({ type: "config", sampleRate: 16000 }));
+      ws.send(JSON.stringify({ type: "config", sampleRate: 16000, token: TOKEN }));
       // Stream the tone in 100 ms frames over ~4 s
       let sent = 0;
       const iv = setInterval(() => {
