@@ -75,6 +75,8 @@ function probeFromNode(node: AudioNode): ProbeHandle | null {
   }
 }
 
+type AmpListener = (smoothed: number, fast: number) => void;
+
 class VoiceAmbienceController {
   private el: HTMLElement | null = null;
   private micProbe: ProbeHandle | null = null;
@@ -85,6 +87,24 @@ class VoiceAmbienceController {
   private state: AmbienceState = "off";
   private reducedMotion = false;
   private mq: MediaQueryList | null = null;
+  /** Extra consumers (e.g. VoiceOrb canvas waveform) of live amplitude. */
+  private ampListeners = new Set<AmpListener>();
+
+  /**
+   * Subscribe to per-frame amplitude. Fires with the same smoothed/fast pair
+   * written to --voice-amp/--voice-amp-fast, and with (0, 0) whenever the
+   * frame loop stops so consumers can reset their visuals.
+   */
+  subscribeAmp(fn: AmpListener): () => void {
+    this.ampListeners.add(fn);
+    return () => {
+      this.ampListeners.delete(fn);
+    };
+  }
+
+  private emitAmp(smoothed: number, fast: number): void {
+    for (const fn of this.ampListeners) fn(smoothed, fast);
+  }
 
   constructor() {
     if (typeof window !== "undefined" && "matchMedia" in window) {
@@ -167,21 +187,27 @@ class VoiceAmbienceController {
       }
       this.smoothed = 0;
       this.fast = 0;
+      this.emitAmp(0, 0);
     }
   }
 
   private frame = (): void => {
     this.raf = 0;
     const probe = this.activeProbe();
-    if (!probe || !this.el) return;
+    if (!probe) return;
     const raw = probe.read();
     this.smoothed = this.smoothed * (1 - AMP_SMOOTH) + raw * AMP_SMOOTH;
     this.fast = this.fast * (1 - AMP_FAST) + raw * AMP_FAST;
-    this.el.style.setProperty("--voice-amp", this.smoothed.toFixed(3));
-    this.el.style.setProperty(
-      "--voice-amp-fast",
-      Math.min(1, this.fast * 1.35).toFixed(3),
-    );
+    if (this.el) {
+      this.el.style.setProperty("--voice-amp", this.smoothed.toFixed(3));
+      this.el.style.setProperty(
+        "--voice-amp-fast",
+        Math.min(1, this.fast * 1.35).toFixed(3),
+      );
+    }
+    // Listeners get the values even when no element is registered — the orb
+    // writes them to its OWN root instead of stealing the layer's registration.
+    this.emitAmp(this.smoothed, Math.min(1, this.fast * 1.35));
     this.raf = requestAnimationFrame(this.frame);
   };
 

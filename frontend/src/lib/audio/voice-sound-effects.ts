@@ -186,6 +186,44 @@ class VoiceSoundEffects {
   }
 
   /**
+   * Play the Thinking cue — a soft two-note rise signaling "reply forming".
+   * Always synthesized (deliberately distinct from the activate/deactivate
+   * sample) and kept quiet so it never competes with incoming speech.
+   * Does NOT touch currentSource — it must never cut off session sounds.
+   */
+  playThinking(volume = 0.25): void {
+    try {
+      const ctx = this.getAudioContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(Math.min(Math.max(volume, 0.05), 0.4), now);
+      masterGain.connect(ctx.destination);
+
+      const notes: Array<{ freq: number; at: number; dur: number }> = [
+        { freq: 523.25, at: 0, dur: 0.1 },     // C5
+        { freq: 783.99, at: 0.09, dur: 0.14 }, // G5
+      ];
+      for (const { freq, at, dur } of notes) {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, now + at);
+        g.gain.setValueAtTime(0.0001, now + at);
+        g.gain.exponentialRampToValueAtTime(0.6, now + at + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + at + dur);
+        osc.connect(g);
+        g.connect(masterGain);
+        osc.start(now + at);
+        osc.stop(now + at + dur + 0.02);
+      }
+    } catch {
+      // Graceful no-op
+    }
+  }
+
+  /**
    * Fallback synthesizers in case the MP3 file is still loading or network fails.
    */
   private synthesizeActivate(ctx: AudioContext, now: number, volume: number): void {

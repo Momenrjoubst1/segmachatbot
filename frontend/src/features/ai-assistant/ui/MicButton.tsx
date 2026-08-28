@@ -1,4 +1,4 @@
-﻿import { type FC, useCallback, useEffect, useRef, useState } from "react";
+﻿import { type FC, useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { Loader2Icon, SquareIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -13,6 +13,7 @@ import { useVoiceHotkey } from "@/hooks/useVoiceHotkey";
 import { voiceDebugBus } from "@/lib/stt/voice-debug-bus";
 import { voiceSoundEffects } from "@/lib/audio/voice-sound-effects";
 import { MicrophoneMenu } from "./MicrophoneMenu";
+import { VoiceSessionProvider } from "./VoiceSessionContext";
 
   // Voice mode runs on WHATEVER model the user has selected — no forced
   // swap. The old auto-switch to a single fast model burned through one
@@ -111,6 +112,8 @@ export const MicButton: FC<MicButtonProps> = ({
     [t],
   );
 
+  const [bargeInSeq, setBargeInSeq] = useState(0);
+
   const s2c = useSpeakToChat({
     writeToComposer: useCallback((text: string) => input?.setText(text), [input]),
     submitComposer: submitComposerForm,
@@ -123,6 +126,10 @@ export const MicButton: FC<MicButtonProps> = ({
       },
       [t],
     ),
+    onBargeIn: useCallback(() => {
+      voiceDebugBus.event("s2c_barge_in", "");
+      setBargeInSeq((n) => n + 1);
+    }, []),
   });
 
   const s2cActive = s2c.state !== "off";
@@ -154,8 +161,22 @@ export const MicButton: FC<MicButtonProps> = ({
   // component tree stays valid and flipping the flag restores everything).
   if (!VOICE_STACK_ENABLED) return null;
 
+  const voiceSessionValue = useMemo(() => ({
+    active: s2cActive,
+    state: s2c.state,
+    muted: s2c.muted,
+    setMuted: s2c.setMuted,
+    stop: s2c.stop,
+    interimText: s2c.interimText,
+    transcripts: s2c.transcripts,
+    sessionRemainingMs: s2c.sessionRemainingMs,
+    personaId: s2c.personaId,
+    setPersona: s2c.setPersona,
+    bargeInSeq,
+  }), [s2cActive, s2c.state, s2c.muted, s2c.setMuted, s2c.stop, s2c.interimText, s2c.transcripts, s2c.sessionRemainingMs, s2c.personaId, s2c.setPersona, bargeInSeq]);
+
   return (
-    <>
+    <VoiceSessionProvider value={voiceSessionValue}>
       {primaryState === "speaking" && <SpeakingBar onStop={toggleLiveVoice} />}
 
       <MicrophoneMenu
@@ -190,17 +211,20 @@ export const MicButton: FC<MicButtonProps> = ({
               aria-pressed={s2cActive}
               data-testid="live-voice-button"
               data-live-state={primaryState}
+              data-voice-state={
+                s2cActive
+                  ? primaryState === "speaking"
+                    ? "speaking"
+                    : primaryState === "listening"
+                      ? "listening"
+                      : "busy"
+                  : undefined
+              }
               className={cn(
-                "relative inline-flex size-9 items-center justify-center rounded-full bg-transparent p-0 cursor-pointer",
+                "voice-live-btn relative inline-flex size-9 items-center justify-center rounded-full bg-transparent p-0 cursor-pointer",
                 "text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white",
                 "hover:bg-neutral-200/80 dark:hover:bg-neutral-800 hover:scale-105 active:scale-95",
                 "transition-all duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400",
-                s2cActive &&
-                  (primaryState === "speaking"
-                    ? "bg-violet-500/20 text-violet-600 hover:text-violet-600 dark:text-violet-300"
-                    : primaryState === "listening"
-                      ? "bg-sky-500/15 text-sky-600 hover:text-sky-600 dark:text-sky-300"
-                      : "bg-amber-500/15 text-amber-600 hover:text-amber-600 dark:text-amber-300"),
                 (primaryBusy || dictStatus === "starting" || dictStatus === "stopping") &&
                   "cursor-wait opacity-60",
                 className,
@@ -227,7 +251,7 @@ export const MicButton: FC<MicButtonProps> = ({
           </TooltipContent>
         </Tooltip>
       )}
-    </>
+    </VoiceSessionProvider>
   );
 };
 

@@ -715,7 +715,7 @@ export const Thread: FC<{
             className="relative flex flex-1 flex-col overflow-x-auto overflow-y-auto scroll-smooth"
             style={{ direction: "ltr" }}
           >
-            <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pt-4">
+            <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pt-4 md:px-7">
               <AuiIf condition={(s) => s.thread.isEmpty && shouldShowWelcome}>
                 {/* Empty state: logo, greeting, composer and suggestions grouped and centered */}
                 <div className="flex w-full flex-1 flex-col items-center justify-center gap-6 pb-24">
@@ -746,7 +746,7 @@ export const Thread: FC<{
           </ThreadPrimitive.Viewport>
 
           <AuiIf condition={(s) => !(s.thread.isEmpty && shouldShowWelcome)}>
-            <div className="mx-auto w-full max-w-3xl px-4 pb-4 md:pb-6 bg-background">
+            <div className="mx-auto w-full max-w-3xl px-4 pb-4 md:px-7 md:pb-6 bg-background">
               <ThreadComposer />
             </div>
           </AuiIf>

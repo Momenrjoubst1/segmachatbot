@@ -45,6 +45,7 @@ import {
   voiceAmbience,
   type AmbienceState,
 } from "@/features/ai-assistant/ui/voice/ambience-controller";
+import { voiceSoundEffects } from "@/lib/audio/voice-sound-effects";
 
 export type SpeakToChatState =
   | "off"
@@ -74,6 +75,8 @@ export interface UseSpeakToChatOptions {
   onNotice?: (notice: "tts_unavailable" | "half_duplex") => void;
   /** Fatal start failures (mic denied, ws down…). Session drops to off. */
   onError?: (reason: "mic" | "ws" | "auth") => void;
+  /** The user interrupted the bot mid-speech (barge-in) — visual flash hook. */
+  onBargeIn?: () => void;
 }
 
 const BARGE_IN_LOUD_RMS = 550; // above normal speech gate: avoids TTS bleed
@@ -97,6 +100,10 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
   const [muted, setMutedState] = useState(false);
   /** Live interim transcript — shown in the session panel, Claude-style. */
   const [interimText, setInterimText] = useState("");
+  /** Persisted transcript entries for the session panel (user + assistant turns). */
+  const [transcripts, setTranscripts] = useState<Array<{ id: number; role: "user" | "assistant"; text: string }>>([]);
+  /** Session countdown timer in ms (optional, for limited sessions). */
+  const [sessionRemainingMs, setSessionRemainingMs] = useState<number | null>(null);
 
   const optsRef = useRef(opts);
   optsRef.current = opts;
@@ -121,6 +128,12 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
 
   const turnTextRef = useRef("");
   const lastSentTextRef = useRef("");
+  /** Transcript entry counter for stable keys. */
+  const transcriptIdRef = useRef(0);
+  /** Session countdown interval ref. */
+  const sessionTimerRef = useRef<number | null>(null);
+  /** Default session duration (30 minutes). */
+  const SESSION_DURATION_MS = 30 * 60 * 1000;
   // ---- Semantic endpointing (backend turn detector) -------------------------
   /** Latest verdict, keyed by the EXACT transcript it judged (staleness). */
   const remoteVerdictRef = useRef<{ text: string; verdict: SemanticVerdict } | null>(null);
@@ -172,6 +185,8 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
       seenMsgRef.current = { id: lastAssistant.id, len: text.length };
       if (text) {
         lastReplyDeltaAtRef.current = Date.now();
+        // Add agent transcript to session panel
+        setTranscripts((prev) => [...prev, { id: ++transcriptIdRef.current, role: "assistant", text }]);
         // TTS-dead mode (quota/payment outage): replies are text-only, so do
         // NOT climb into "thinking" — staying in "listening" keeps
         // endpointing alive and the conversation keeps flowing voice-in /
@@ -334,6 +349,8 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     if (words >= 2 && text !== lastSentTextRef.current) {
       lastSentTextRef.current = text;
       suppressSpeechRef.current = false;
+      // Add user transcript to session panel
+      setTranscripts((prev) => [...prev, { id: ++transcriptIdRef.current, role: "user", text }]);
       // eagerFirstChunk: speak the first clause while the first sentence is
       // still generating — first audio lands ~1-2s earlier on long answers.
       splitterRef.current = new StreamingSentenceSplitter({ eagerFirstChunk: true });
@@ -579,6 +596,7 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
           // chat request, the backend sees the disconnect and persists only
           // what was actually generated — context stays truthful.
           cancelActiveRunRef.current();
+          optsRef.current.onBargeIn?.();
           // Echo heuristic: a barge that fires almost immediately after the
           // bot starts talking, with nothing the user said in between, is
           // usually our own audio looping back where AEC is weak. Three in
@@ -710,6 +728,20 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     setState("connecting");
     try {
       await startMicRef.current();
+      // Initialize session transcript and timer on successful start
+      setTranscripts([]);
+      transcriptIdRef.current = 0;
+      setSessionRemainingMs(SESSION_DURATION_MS);
+      if (sessionTimerRef.current) window.clearInterval(sessionTimerRef.current);
+      sessionTimerRef.current = window.setInterval(() => {
+        setSessionRemainingMs((prev) => {
+          if (prev === null || prev <= 1000) {
+            if (sessionTimerRef.current) window.clearInterval(sessionTimerRef.current);
+            return 0;
+          }
+          return prev - 1000;
+        });
+      }, 1000);
       setState("listening");
       return true;
     } catch (err) {
@@ -733,8 +765,12 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     ttsStreamRef.current?.close();
     ttsStreamRef.current = null;
     voiceAmbience.reset();
+    if (sessionTimerRef.current) window.clearInterval(sessionTimerRef.current);
+    sessionTimerRef.current = null;
     teardownRef.current();
     setInterimText("");
+    setSessionRemainingMs(null);
+    setTranscripts([]);
     setState("off");
   }, []);
 
@@ -755,6 +791,10 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     if (semanticTimerRef.current) {
       window.clearTimeout(semanticTimerRef.current);
       semanticTimerRef.current = null;
+    }
+    if (sessionTimerRef.current) {
+      window.clearInterval(sessionTimerRef.current);
+      sessionTimerRef.current = null;
     }
     halfDuplexRef.current = false;
     echoStreakRef.current = 0;
@@ -804,7 +844,9 @@ export function useSpeakToChat(opts: UseSpeakToChatOptions) {
     voiceDebugBus.event("s2c_state", state);
     voiceDebugBus.setState(state === "off" ? "idle" : `s2c:${state}`);
     voiceAmbience.setState(AMBIENCE_OF_STATE[state]);
+    // Claude-style "thinking" chime — subtle cue that the reply is forming.
+    if (state === "thinking") voiceSoundEffects.playThinking();
   }, [state]);
 
-  return { state, busy, muted, setMuted, start, stop, setPersona, personaId, interimText };
+  return { state, busy, muted, setMuted, start, stop, setPersona, personaId, interimText, transcripts, sessionRemainingMs };
 }

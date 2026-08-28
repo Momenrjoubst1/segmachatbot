@@ -291,5 +291,15 @@
   "voice.sample_3": "لخّص لي هذا الدرس",
   "voice.type_followup": "…أو اكتب سؤالك هنا",
   "voice.speaking_bar": "سيجما بيتكلم…",
-  "voice.stop_speaking": "إيقاف الصوت"
+  "voice.stop_speaking": "إيقاف الصوت",
+  "voice.orb_idle": "جلسة صوتية خاملة",
+  "voice.orb_connecting": "جاري الاتصال بالجلسة الصوتية…",
+  "voice.orb_listening": "بنسمعك",
+  "voice.orb_sending": "بنبعت رسالتك…",
+  "voice.orb_thinking": "سيجما بيفكر",
+  "voice.orb_speaking": "سيجما بيتكلم",
+  "voice.orb_error": "خطأ في الجلسة الصوتية",
+  "voice.orb_off": "الجلسة الصوتية مغلقة",
+  "voice.orb_aria": "جلسة صوتية",
+  "voice.orb_controls": "أدوات التحكم بالجلسة الصوتية"
 }

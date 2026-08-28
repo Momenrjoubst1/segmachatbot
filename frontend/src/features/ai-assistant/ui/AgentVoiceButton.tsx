@@ -74,12 +74,10 @@ const AgentControls: FC = () => {
       data-testid="agent-voice-button"
       data-agent-state={active ? "live" : connecting ? "connecting" : "idle"}
       className={cn(
-        "relative inline-flex size-9 items-center justify-center rounded-full bg-transparent p-0 cursor-pointer",
+        "voice-live-btn relative inline-flex size-9 items-center justify-center rounded-full bg-transparent p-0 cursor-pointer",
         "text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white",
         "hover:bg-neutral-200/80 dark:hover:bg-neutral-800 hover:scale-105 active:scale-95",
         "transition-all duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400",
-        active &&
-          "bg-emerald-500/20 text-emerald-600 hover:text-emerald-600 dark:text-emerald-300",
         connecting && "cursor-wait opacity-60",
       )}
     >

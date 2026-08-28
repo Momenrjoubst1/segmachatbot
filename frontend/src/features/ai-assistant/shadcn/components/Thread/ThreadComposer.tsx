@@ -5,6 +5,7 @@ import {
 import { ComposerPlusMenu } from "../../../ui/composer-plus-menu";
 import { MicButton } from "../../../ui/MicButton";
 import { AgentVoiceButton } from "../../../ui/AgentVoiceButton";
+import { VoiceSessionOverlay } from "../../../ui/VoiceSessionOverlay";
 import { VoiceDebugOverlay, VOICE_DEBUG_PARAM } from "../../../ui/VoiceDebugOverlay";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -311,6 +312,10 @@ export const ThreadComposer: FC = () => {
   return (
     <ComposerPrimitive.Unstable_TriggerPopoverRoot>
       <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
+        {/* Voice session overlay (orb + panel) — renders above the composer
+            shell when a speak-to-chat session is active. Floats using its
+            own internal layout so it doesn't affect composer sizing. */}
+        <VoiceSessionOverlay />
         <ComposerPrimitive.AttachmentDropzone asChild>
           <div
             data-slot="aui_composer-shell"

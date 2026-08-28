@@ -26,7 +26,66 @@
   --voice-listen-rgb: 14 165 233; /* sky-500 */
   --voice-speak-rgb: 139 92 246;  /* violet-500 */
   --voice-think-rgb: 148 163 184; /* slate-400, desaturated */
+  --voice-busy-rgb: 245 158 11;   /* amber-500, transitional states */
+  --voice-agent-rgb: 16 185 129;  /* emerald-500, ElevenLabs agent sessions */
   --va-border: 148 163 184;
+
+  /* Foreground shades: 500-level on light, lighter 300-level on dark —
+     mirrors the Tailwind pairs the hardcoded buttons used before tokens. */
+  --voice-listen-fg: var(--voice-listen-rgb);
+  --voice-speak-fg: var(--voice-speak-rgb);
+  --voice-busy-fg: var(--voice-busy-rgb);
+  --voice-agent-fg: var(--voice-agent-rgb);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --voice-listen-fg: 125 211 252; /* sky-300 */
+    --voice-speak-fg: 196 181 253;  /* violet-300 */
+    --voice-busy-fg: 252 211 77;    /* amber-300 */
+    --voice-agent-fg: 110 231 183;  /* emerald-300 */
+  }
+}
+
+/* ---- Shared live voice buttons (MicButton / AgentVoiceButton) -------------
+   State colors come exclusively from the tokens above via data attributes —
+   no component may hardcode state palette classes anymore. */
+.voice-live-btn[data-voice-state="listening"],
+.voice-live-btn[data-agent-state="live"] {
+  background: rgb(var(--voice-listen-fg) / 0.15);
+}
+
+.voice-live-btn[data-voice-state="listening"] {
+  color: rgb(var(--voice-listen-fg));
+}
+.voice-live-btn[data-voice-state="listening"]:hover {
+  color: rgb(var(--voice-listen-fg));
+  background: rgb(var(--voice-listen-fg) / 0.15);
+}
+
+.voice-live-btn[data-voice-state="speaking"] {
+  background: rgb(var(--voice-speak-fg) / 0.2);
+  color: rgb(var(--voice-speak-fg));
+}
+.voice-live-btn[data-voice-state="speaking"]:hover {
+  color: rgb(var(--voice-speak-fg));
+  background: rgb(var(--voice-speak-fg) / 0.2);
+}
+
+.voice-live-btn[data-voice-state="busy"] {
+  background: rgb(var(--voice-busy-fg) / 0.15);
+  color: rgb(var(--voice-busy-fg));
+}
+.voice-live-btn[data-voice-state="busy"]:hover {
+  color: rgb(var(--voice-busy-fg));
+  background: rgb(var(--voice-busy-fg) / 0.15);
+}
+
+.voice-live-btn[data-agent-state="live"] {
+  color: rgb(var(--voice-agent-fg));
+}
+.voice-live-btn[data-agent-state="live"]:hover {
+  color: rgb(var(--voice-agent-fg));
 }
 
 .voice-ambience {
@@ -346,4 +405,411 @@
 .voice-panel__interim {
   unicode-bidi: plaintext;
   line-height: 1.45;
+}
+
+/* ==========================================================================
+   VoiceOrb — Central visual identity for voice sessions
+   A floating orb with waveform, state colors, amplitude reactivity.
+   ========================================================================== */
+
+/* ---- VoiceOrb Design Tokens ------------------------------------------------ */
+:root {
+  /* Orb sizing */
+  --voice-orb-size: 96px;
+  --voice-orb-size-sm: 72px;
+  --voice-orb-size-lg: 120px;
+
+  /* State colors (extend existing palette) */
+  --voice-connecting-rgb: 148 163 184; /* slate-400 */
+  --voice-listening-rgb: 14 165 233;   /* sky-500 */
+  --voice-thinking-rgb: 139 92 246;    /* violet-500 */
+  --voice-speaking-rgb: 249 115 22;    /* orange-500 */
+  --voice-error-rgb: 239 68 68;        /* red-500 */
+  --voice-idle-rgb: 148 163 184;       /* slate-400 */
+
+  /* Glow parameters */
+  --voice-orb-glow-spread: 48px;
+  --voice-orb-glow-alpha-rest: 0.12;
+  --voice-orb-glow-alpha-max: 0.45;
+  --voice-orb-ring-width: 3px;
+
+  /* Waveform */
+  --voice-orb-waveform-bars: 64;
+  --voice-orb-waveform-bar-width: 2px;
+  --voice-orb-waveform-gap: 1px;
+  --voice-orb-waveform-height-mult: 0.35;
+
+  /* Animation timings */
+  --voice-orb-breathe-dur: 2.4s;
+  --voice-orb-pulse-dur: 1.6s;
+  --voice-orb-transition: 200ms ease-out;
+  --voice-orb-barge-flash-dur: 180ms;
+}
+
+/* ---- VoiceOrb Container ---------------------------------------------------- */
+.voice-orb {
+  position: relative;
+  width: var(--voice-orb-size);
+  height: var(--voice-orb-size);
+  border-radius: 50%;
+  pointer-events: auto;
+  transition: transform var(--voice-orb-transition), box-shadow var(--voice-orb-transition);
+  will-change: transform, box-shadow;
+  z-index: 50;
+}
+
+/* Size variants */
+.voice-orb--sm { width: var(--voice-orb-size-sm); height: var(--voice-orb-size-sm); }
+.voice-orb--lg { width: var(--voice-orb-size-lg); height: var(--voice-orb-size-lg); }
+
+/* ---- State-based color identity (via data-attribute) ----------------------- */
+.voice-orb[data-state="idle"]           { --vo-rgb: var(--voice-idle-rgb); }
+.voice-orb[data-state="connecting"]     { --vo-rgb: var(--voice-connecting-rgb); }
+.voice-orb[data-state="listening"]      { --vo-rgb: var(--voice-listening-rgb); }
+.voice-orb[data-state="thinking"]       { --vo-rgb: var(--voice-thinking-rgb); }
+.voice-orb[data-state="speaking"]       { --vo-rgb: var(--voice-speaking-rgb); }
+.voice-orb[data-state="error"]          { --vo-rgb: var(--voice-error-rgb); }
+
+/* ---- Layers (back → front) ------------------------------------------------- */
+/* 1. Outer Glow — radial gradient that breathes with amplitude */
+.voice-orb__glow {
+  position: absolute;
+  inset: calc(var(--voice-orb-glow-spread) * -1);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgb(var(--vo-rgb) / calc(var(--voice-orb-glow-alpha-rest) + var(--voice-amp, 0) * (var(--voice-orb-glow-alpha-max) - var(--voice-orb-glow-alpha-rest)))),
+    transparent 70%
+  );
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 300ms ease, transform 300ms ease;
+  will-change: opacity, transform;
+  pointer-events: none;
+}
+
+.voice-orb[data-amp-live="true"] .voice-orb__glow {
+  opacity: 1;
+  transform: scale(1);
+  transition: none; /* rAF-driven */
+}
+
+.voice-orb:not([data-amp-live="true"])[data-state="listening"] .voice-orb__glow,
+.voice-orb:not([data-amp-live="true"])[data-state="speaking"] .voice-orb__glow,
+.voice-orb:not([data-amp-live="true"])[data-state="thinking"] .voice-orb__glow {
+  opacity: 0.6;
+  animation: vaOrbBreathe var(--voice-orb-breathe-dur) ease-in-out infinite;
+}
+
+@keyframes vaOrbBreathe {
+  0%, 100% { opacity: 0.35; transform: scale(0.92); }
+  50%      { opacity: 0.65; transform: scale(1.02); }
+}
+
+/* 2. Waveform Ring — Canvas-rendered bars around the circumference */
+.voice-orb__waveform {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.voice-orb[data-state="listening"] .voice-orb__waveform,
+.voice-orb[data-state="speaking"] .voice-orb__waveform {
+  opacity: 1;
+}
+
+/* 3. Inner Core — solid circle, color by state, subtle scale pulse */
+.voice-orb__core {
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: rgb(var(--vo-rgb));
+  box-shadow:
+    0 0 0 1px rgb(var(--vo-rgb) / 0.15),
+    0 4px 16px rgb(var(--vo-rgb) / 0.25),
+    inset 0 -2px 8px rgb(0 0 0 / 0.1);
+  transition: background-color var(--voice-orb-transition), box-shadow var(--voice-orb-transition), transform var(--voice-orb-transition);
+  will-change: transform;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-orb:not([data-state="idle"]):not([data-state="error"]):not([data-state="connecting"]) .voice-orb__core {
+  animation: vaOrbCorePulse var(--voice-orb-pulse-dur) ease-in-out infinite;
+}
+
+@keyframes vaOrbCorePulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 1px rgb(var(--vo-rgb) / 0.15), 0 4px 16px rgb(var(--vo-rgb) / 0.25), inset 0 -2px 8px rgb(0 0 0 / 0.1); }
+  50%      { transform: scale(1.03); box-shadow: 0 0 0 2px rgb(var(--vo-rgb) / 0.25), 0 6px 24px rgb(var(--vo-rgb) / 0.35), inset 0 -2px 8px rgb(0 0 0 / 0.1); }
+}
+
+/* 4. State Icon / Content in center */
+.voice-orb__icon {
+  width: 36px;
+  height: 36px;
+  color: white;
+  flex-shrink: 0;
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.voice-orb__icon--mic { /* default */ }
+.voice-orb__icon--loader { animation: vaSpin 1s linear infinite; }
+.voice-orb__icon--brain { /* thinking */ }
+.voice-orb__icon--volume { /* speaking */ }
+.voice-orb__icon--x { /* error */ }
+
+@keyframes vaSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Connecting state: rotating dots around core */
+.voice-orb__connecting-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.voice-orb__connecting-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(var(--vo-rgb));
+  transform: translate(-50%, -50%) rotate(var(--angle)) translateY(-28px) rotate(calc(var(--angle) * -1));
+  animation: vaOrbit 1.2s linear infinite;
+  opacity: var(--dot-opacity, 1);
+}
+
+@keyframes vaOrbit {
+  from { transform: translate(-50%, -50%) rotate(0deg) translateY(-28px) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg) translateY(-28px) rotate(-360deg); }
+}
+
+/* 5. Controls Overlay (mute/end) — appears on hover/focus */
+.voice-orb__controls {
+  position: absolute;
+  bottom: -52px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.5rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease;
+  transform: translateX(-50%) translateY(8px);
+  z-index: 10;
+}
+
+.voice-orb:hover .voice-orb__controls,
+.voice-orb:focus-within .voice-orb__controls {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+.voice-orb__control-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: white;
+  border: 1px solid rgb(148 163 184 / 0.25);
+  color: rgb(71 85 105);
+  cursor: pointer;
+  transition: all 120ms ease;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.12);
+}
+
+.voice-orb__control-btn:hover {
+  background: rgb(var(--vo-rgb) / 0.1);
+  border-color: rgb(var(--vo-rgb) / 0.4);
+  color: rgb(var(--vo-rgb));
+  transform: scale(1.06);
+}
+
+.voice-orb__control-btn:active { transform: scale(0.96); }
+.voice-orb__control-btn:focus-visible {
+  outline: 2px solid rgb(var(--vo-rgb));
+  outline-offset: 2px;
+}
+
+.voice-orb__control-btn svg { width: 18px; height: 18px; }
+
+/* Session time display */
+.voice-orb__time {
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: rgb(var(--vo-rgb));
+  white-space: nowrap;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.voice-orb__time--low {
+  color: rgb(244 63 94); /* rose-500 */
+  animation: vaTimePulse 1s ease-in-out infinite;
+}
+
+@keyframes vaTimePulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+/* Barge-in flash effect */
+.voice-orb--barge-in .voice-orb__core {
+  animation: none;
+  box-shadow: 0 0 0 4px rgb(var(--voice-error-rgb) / 0.5), 0 8px 32px rgb(var(--voice-error-rgb) / 0.4);
+}
+
+.voice-orb--barge-in .voice-orb__glow {
+  background: radial-gradient(circle at center, rgb(var(--voice-error-rgb) / 0.5), transparent 70%);
+}
+
+@keyframes vaBargeFlash {
+  0%   { box-shadow: 0 0 0 0 rgb(var(--voice-error-rgb) / 0.6); }
+  50%  { box-shadow: 0 0 0 12px rgb(var(--voice-error-rgb) / 0.15); }
+  100% { box-shadow: 0 0 0 0 rgb(var(--voice-error-rgb) / 0); }
+}
+
+/* Error state persistent pulse */
+.voice-orb[data-state="error"] .voice-orb__core {
+  animation: vaErrorPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes vaErrorPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 1px rgb(var(--vo-rgb) / 0.2), 0 4px 16px rgb(var(--vo-rgb) / 0.3); }
+  50%      { transform: scale(1.04); box-shadow: 0 0 0 3px rgb(var(--vo-rgb) / 0.35), 0 6px 24px rgb(var(--vo-rgb) / 0.45); }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .voice-orb__glow,
+  .voice-orb__core,
+  .voice-orb__connecting-dot,
+  .voice-orb__icon--loader,
+  .voice-orb[data-state="error"] .voice-orb__core,
+  .voice-orb:not([data-state="idle"]):not([data-state="error"]):not([data-state="connecting"]) .voice-orb__core {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .voice-orb__glow { opacity: 0.4; transform: scale(1); }
+  .voice-orb__core { transform: scale(1); }
+  .voice-orb__waveform { opacity: 0.6; }
+  .voice-orb__controls { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+  .voice-orb__time { opacity: 1; }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .voice-orb__core {
+    box-shadow:
+      0 0 0 1px rgb(var(--vo-rgb) / 0.2),
+      0 4px 16px rgb(var(--vo-rgb) / 0.35),
+      inset 0 -2px 8px rgb(0 0 0 / 0.2);
+  }
+  .voice-orb__control-btn {
+    background: rgb(30 41 59); /* slate-900 */
+    border-color: rgb(148 163 184 / 0.2);
+    color: rgb(203 213 225); /* slate-300 */
+  }
+  .voice-orb__control-btn:hover {
+    background: rgb(var(--vo-rgb) / 0.15);
+  }
+}
+
+/* ==========================================================================
+   Unified Voice Button Styles (replacing inline colors in MicButton/AgentVoiceButton)
+   ========================================================================== */
+
+.voice-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid rgb(var(--va-border, 148 163 184) / 0.2);
+  transition: all 160ms ease;
+  cursor: pointer;
+}
+
+.voice-btn[data-state="idle"],
+.voice-btn[data-state="off"] {
+  background: transparent;
+  color: rgb(148 163 184); /* slate-400 */
+}
+
+.voice-btn[data-state="idle"]:hover,
+.voice-btn[data-state="off"]:hover {
+  background: rgb(148 163 184 / 0.1);
+  color: rgb(100 116 139); /* slate-500 */
+}
+
+.voice-btn[data-state="connecting"] {
+  background: rgb(var(--voice-connecting-rgb) / 0.12);
+  color: rgb(var(--voice-connecting-rgb));
+  cursor: wait;
+}
+
+.voice-btn[data-state="listening"] {
+  background: rgb(var(--voice-listening-rgb) / 0.15);
+  color: rgb(var(--voice-listening-rgb));
+}
+
+.voice-btn[data-state="listening"]:hover {
+  background: rgb(var(--voice-listening-rgb) / 0.22);
+}
+
+.voice-btn[data-state="thinking"] {
+  background: rgb(var(--voice-thinking-rgb) / 0.12);
+  color: rgb(var(--voice-thinking-rgb));
+}
+
+.voice-btn[data-state="thinking"]:hover {
+  background: rgb(var(--voice-thinking-rgb) / 0.18);
+}
+
+.voice-btn[data-state="speaking"] {
+  background: rgb(var(--voice-speaking-rgb) / 0.15);
+  color: rgb(var(--voice-speaking-rgb));
+}
+
+.voice-btn[data-state="speaking"]:hover {
+  background: rgb(var(--voice-speaking-rgb) / 0.22);
+}
+
+.voice-btn[data-state="error"] {
+  background: rgb(var(--voice-error-rgb) / 0.12);
+  color: rgb(var(--voice-error-rgb));
+  border-color: rgb(var(--voice-error-rgb) / 0.3);
+}
+
+.voice-btn[data-state="error"]:hover {
+  background: rgb(var(--voice-error-rgb) / 0.18);
+  border-color: rgb(var(--voice-error-rgb) / 0.5);
+}
+
+.voice-btn:disabled,
+.voice-btn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.voice-btn:focus-visible {
+  outline: 2px solid rgb(var(--vo-rgb, var(--voice-listening-rgb)));
+  outline-offset: 2px;
 }

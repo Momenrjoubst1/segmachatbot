@@ -291,5 +291,15 @@
   "voice.sample_3": "Summarize this lesson for me",
   "voice.type_followup": "…or type your question here",
   "voice.speaking_bar": "Sigma is speaking…",
-  "voice.stop_speaking": "Stop speaking"
+  "voice.stop_speaking": "Stop speaking",
+  "voice.orb_idle": "Voice session idle",
+  "voice.orb_connecting": "Connecting to voice session…",
+  "voice.orb_listening": "Listening to you",
+  "voice.orb_sending": "Sending your message…",
+  "voice.orb_thinking": "Sigma is thinking",
+  "voice.orb_speaking": "Sigma is speaking",
+  "voice.orb_error": "Voice session error",
+  "voice.orb_off": "Voice session off",
+  "voice.orb_aria": "Voice session",
+  "voice.orb_controls": "Voice session controls"
 }
