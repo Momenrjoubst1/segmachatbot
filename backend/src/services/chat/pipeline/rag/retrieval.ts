@@ -40,6 +40,7 @@ export async function retrieveAndRank(args: RetrieveAndRankArgs): Promise<Ranked
         query_embedding: queryEmbedding,
         match_threshold: matchThreshold,
         match_count: initialMatchCount,
+        p_user_id: userId,
       }),
     )
       .then((r: { data: unknown; error: { message: string } | null }) => ({
