@@ -76,6 +76,7 @@ BEGIN
     ('email_jobs','Users can update own jobs','UPDATE','auth.uid() = user_id',NULL),
     ('email_schedules','Users can view own schedules','SELECT','auth.uid() = user_id',NULL),
     ('email_schedules','Users can insert own schedules','INSERT',NULL,'auth.uid() = user_id'),
+    ('email_schedules','Users can update own schedules','UPDATE','auth.uid() = user_id',NULL),
     ('email_schedules','Users can delete own schedules','DELETE','auth.uid() = user_id',NULL),
     ('email_audit_logs','Users can view own audit logs','SELECT','auth.uid() = user_id',NULL),
     ('email_audit_logs','Users can insert own audit logs','INSERT',NULL,'auth.uid() = user_id'),
