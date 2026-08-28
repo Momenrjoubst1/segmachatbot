@@ -137,3 +137,13 @@
 | Leaked-password protection | **Plan-gated**: Management API returns 402 "available on Pro Plans and up" — project is on Free. Enable after upgrading, or ignore. Compensating control applied instead: `password_min_length` raised **6 → 8** via Management API (verified). |
 | react-router | **Upgraded 6.30.3 → 7.18.3**. App uses library-mode APIs only and had the v7 future-flags already enabled, so migration was one line (drop the now-invalid `future` prop). Audit: frontend production deps now **0 vulnerabilities**. Typecheck + 556/556 tests green. |
 | Extension schema move (vector/pg_trgm out of public) | **Closed with evidence, not moved.** The advisor's shadowing vector requires CREATE on schema public — verified `has_schema_privilege(...,'CREATE') = false` for anon/authenticated/service_role. Additionally, no database role's search_path includes `extensions`, so the move would have required touching role settings + every RPC's search_path on a live DB serving chat traffic. Risk/benefit says: keep, revisit only if CREATE privilege is ever granted on public. |
+
+### Second follow-up pass (deep dive into uncovered modules)
+
+| Commit | Outcome |
+|--------|---------|
+| c95c605 | **Email scheduler worker**: the pending→processing "lock" checked error only (Supabase reports no error on zero-row updates) → racing workers could double-send; locks now verified via returned rows. Rows stuck in `processing` after a crash are reclaimed after 10 min instead of orphaned. Subjects CRLF-stripped at the provider choke point. |
+| 51b8bf9 | **pdf-processor: 4 production bugs** surfaced once the suite could finally run (CI job + local runtime fixed): two constants were raw strings while code calls `.search()/.match()` on them (TOC + page-number detection crashed every page); `ARABIC_RE` counted Arabic punctuation as letters; `classify_page` ordering blanked short-titled covers and figure pages and let the `فهرس` TOC substring swallow Arabic index pages; `_int_color_to_hex` dropped the wrong byte of RRGGBBAA. `test_structure.py` rewritten from a stray vitest-syntax file into real pytest. |
+| — | **Local pdf-processor venv restored**: VC++ 2015–2022 runtime installed (was missing → every PyMuPDF .pyd failed); local pytest now runs. **Suite: 106/106.** |
+| — | **password_min_length 6 → 8** applied via Management API (compensating control; HIBP itself is Pro-plan-gated, 402). |
+| — | Textbook worker audited — already has stuck-job sweeps, dead-letter retries and reconciliation; no change needed. |
