@@ -69,14 +69,15 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, ModelContextInfo> = {
   'gpt-4o': { value: 'gpt-4o', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 16_384 },
   'gpt-4o-mini': { value: 'gpt-4o-mini', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'github', maxOutputTokens: 16_384 },
 
-  // Groq (max_completion_tokens cap: 32,768)
-  'qwen/qwen3.6-27b': { value: 'qwen/qwen3.6-27b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
+  // Groq (caps verified live via /api/v1/models max_completion_tokens — Groq
+  // hard-rejects requests whose max_tokens exceeds these)
+  'qwen/qwen3.6-27b': { value: 'qwen/qwen3.6-27b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 16_384 },
   'qwen/qwen3-32b': { value: 'qwen/qwen3-32b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
   'mixtral-8x7b-32768': { value: 'mixtral-8x7b-32768', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
   'llama-3.3-70b-versatile': { value: 'llama-3.3-70b-versatile', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
   'llama-3.1-8b-instant': { value: 'llama-3.1-8b-instant', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
-  'openai/gpt-oss-120b': { value: 'openai/gpt-oss-120b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
-  'openai/gpt-oss-20b': { value: 'openai/gpt-oss-20b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
+  'openai/gpt-oss-120b': { value: 'openai/gpt-oss-120b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 65_536 },
+  'openai/gpt-oss-20b': { value: 'openai/gpt-oss-20b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 65_536 },
   'meta-llama/llama-4-scout-17b-16e-instruct': { value: 'meta-llama/llama-4-scout-17b-16e-instruct', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
 
   // OpenRouter (free tier — tight completion caps)

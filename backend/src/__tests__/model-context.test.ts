@@ -25,8 +25,7 @@ describe('MODEL_CONTEXT_WINDOWS', () => {
   });
 
   it('covers the production default model deepseek-v4-flash', () => {
-    // The live chat pipeline defaults to deepseek-v4-flash; if this entry
-    // disappears the whole pipeline silently budgets against the fallback.
+    // Live chat pipeline defaults to deepseek-v4-flash; it must stay a known model.
     expect(isKnownModel('deepseek-v4-flash')).toBe(true);
   });
 });
@@ -49,12 +48,12 @@ describe('MAX_OUTPUT_TOKENS', () => {
   });
 
   it('clamps to the provider completion cap for strict providers', () => {
-    // Groq caps max_completion_tokens at 32,768
-    expect(getModelMaxOutputTokens('qwen/qwen3.6-27b')).toBe(32_768);
+    // Groq caps qwen/qwen3.6-27b at 16,384 (verified live — requests above it 400)
+    expect(getModelMaxOutputTokens('qwen/qwen3.6-27b')).toBe(16_384);
     // GitHub Models gpt-4o-mini caps at 16,384
     expect(getModelMaxOutputTokens('gpt-4o-mini')).toBe(16_384);
     // OpenRouter free tier is tighter still
-    expect(getModelMaxOutputTokens('google/gemini-2.0-flash-exp:free')).toBe(8_192);
+    expect(getModelMaxOutputTokens('nvidia/nemotron-3.5-lightning:free')).toBe(8_192);
   });
 });
 

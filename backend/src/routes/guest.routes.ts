@@ -19,9 +19,7 @@ interface GuestRequest extends Request {
   guestId?: string;
 }
 
-// ---------------------------------------------------------------------------
-// i18n refusal messages + locale detection
-// ---------------------------------------------------------------------------
+// Locale-aware refusal messages and detection.
 
 const REFUSAL_TEXT: Record<string, string> = {
   en: "I can't help with that request. Could you try rephrasing?",
@@ -43,15 +41,9 @@ function sendRefusalChunk(res: Response, text: string): void {
 
 const router = Router();
 
-// ---------------------------------------------------------------------------
-// FIX 1: Model pinning — server-controlled, client cannot override
-// ---------------------------------------------------------------------------
+// Server-controlled model pinning — clients cannot override.
 
-const GUEST_MODEL = process.env.GUEST_MODEL ?? "llama-3.3-70b-versatile";
-
-// ---------------------------------------------------------------------------
-// FIX 3: Zod body validation — replaces manual checks
-// ---------------------------------------------------------------------------
+// Zod validation of the guest chat body.
 
 const GuestChatBodySchema = z.object({
   message: z.string().min(1, "Message is required").max(10_000, "Message too long"),
@@ -66,13 +58,7 @@ const GuestChatBodySchema = z.object({
     .default([]),
 });
 
-/**
- * Sanitize conversation history to prevent prompt injection attacks.
- * - Strips any messages with system/developer roles (shouldn't exist but defense in depth)
- * - Removes empty messages
- * - Trims whitespace from content
- * - Limits total history length to prevent token abuse
- */
+// Sanitize conversation history to blunt prompt injection and token abuse.
 function sanitizeConversationHistory(
   history: Array<{ role: string; content: string }>
 ): Array<{ role: "user" | "assistant"; content: string }> {
@@ -101,9 +87,7 @@ function sanitizeConversationHistory(
   return sanitized;
 }
 
-// ---------------------------------------------------------------------------
-// Guest cookie + rate limiting (self-contained, no external middleware deps)
-// ---------------------------------------------------------------------------
+// Guest cookie and rate-limiting setup.
 
 const GUEST_COOKIE = "guest_id";
 const COOKIE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -115,10 +99,7 @@ const TRANSCRIPT_KEY_PREFIX = "guest:transcript:";
 const MAX_TRANSCRIPT_MESSAGES = 20; // Keep last 20 turns (user+assistant pairs)
 const MAX_TRANSCRIPT_CHARS = 40_000; // Total chars cap for transcript
 
-/**
- * Parse raw Cookie header string into a key→value map.
- * No external cookie-parser dependency needed.
- */
+// Parse a raw Cookie header into a key→value map without dependencies.
 function parseCookies(header: string | undefined): Record<string, string> {
   const cookies: Record<string, string> = {};
   if (!header) return cookies;
@@ -137,14 +118,7 @@ function parseCookies(header: string | undefined): Record<string, string> {
   return cookies;
 }
 
-// ── Fixed-window counters (Redis-backed when available, in-memory fallback) ─
-// FIX 5: Uses Redis when available for multi-instance deployments.
-// Falls back to in-memory Map for development/single-instance.
-// Cleanup runs every 30 minutes for in-memory fallback.
-//
-// Fixed-window algorithm: TTL is set ONLY when the counter is first created.
-// Subsequent INCR calls do NOT extend the TTL, so the window stays anchored
-// to the first request in each 24-hour period.
+// Fixed-window guest counters: Redis-backed with in-memory fallback; TTL anchors on first INCR.
 
 interface GuestWindow {
   count: number;
@@ -180,12 +154,7 @@ if (!useRedis) {
   startInMemoryCleanup();
 }
 
-/**
- * Check if Redis is available and responsive.
- * The ping result is cached briefly (both success and failure): during a Redis
- * outage every guest request would otherwise pay the full retry/backoff
- * latency of a failing PING, amplifying outage-induced latency.
- */
+// Probe Redis availability with a briefly cached ping result.
 const REDIS_PING_CACHE_MS = 5_000;
 let lastPingAt = 0;
 let lastPingOk = false;
@@ -207,18 +176,7 @@ async function isRedisAvailable(): Promise<boolean> {
   return lastPingOk;
 }
 
-/**
- * Lua script for fixed-window guest quota.
- *
- * Behavior:
- * - INCR the counter.
- * - If the counter is 1 (first request in window), set EXPIRE to anchor the window.
- * - If the counter is > 1, do NOT call EXPIRE (window stays anchored).
- * - Return [count, ttl_seconds].
- *
- * This ensures a guest gets exactly 4 messages in a fixed 24-hour window;
- * sending more messages does NOT extend the reset time.
- */
+// Lua script for the fixed-window guest quota: INCR, anchor EXPIRE once.
 const FIXED_WINDOW_LUA = `
   local key = KEYS[1]
   local window_seconds = tonumber(ARGV[1])
@@ -245,10 +203,7 @@ redis.defineCommand("guestFixedWindowIncr", {
   lua: FIXED_WINDOW_LUA,
 });
 
-/**
- * Increment the guest message counter using Redis with fixed-window semantics.
- * Returns { allowed, count, limit, retryAfterMs }.
- */
+// Increment the guest counter in Redis with fixed-window semantics.
 async function incrementGuestCountRedis(guestId: string): Promise<{
   allowed: boolean;
   count: number;
@@ -279,10 +234,7 @@ async function incrementGuestCountRedis(guestId: string): Promise<{
   }
 }
 
-/**
- * Read the current guest count without incrementing.
- * Used by GET /status.
- */
+// Read the guest count without incrementing (used by GET /status).
 async function readGuestCountRedis(guestId: string): Promise<{
   count: number;
   limit: number;
@@ -301,10 +253,7 @@ async function readGuestCountRedis(guestId: string): Promise<{
   }
 }
 
-/**
- * Decrement the guest message counter (rollback on failed request).
- * Only decrements if count > 0. Prevents negative counts.
- */
+// Roll back the Redis guest counter, never below zero.
 async function decrementGuestCountRedis(guestId: string): Promise<void> {
   const key = `guest:count:${guestId}`;
   try {
@@ -329,10 +278,7 @@ async function decrementGuestCountRedis(guestId: string): Promise<void> {
   }
 }
 
-/**
- * Increment the guest message counter using in-memory Map.
- * Returns { allowed, count, limit, retryAfterMs }.
- */
+// Increment the guest counter in the in-memory Map.
 function incrementGuestCountMemory(guestId: string): {
   allowed: boolean;
   count: number;
@@ -363,9 +309,7 @@ function incrementGuestCountMemory(guestId: string): {
   };
 }
 
-/**
- * Read the current guest count without incrementing (in-memory).
- */
+// Read the guest count without incrementing (in-memory).
 function readGuestCountMemory(guestId: string): {
   count: number;
   limit: number;
@@ -379,10 +323,7 @@ function readGuestCountMemory(guestId: string): {
   return { count: 0, limit: MAX_GUEST_MESSAGES, retryAfterMs: WINDOW_MS };
 }
 
-/**
- * Decrement the guest message counter (in-memory rollback).
- * Prevents negative counts.
- */
+// Roll back the in-memory guest counter, never below zero.
 function decrementGuestCountMemory(guestId: string): void {
   const existing = guestWindows.get(guestId);
   if (existing && existing.count > 0) {
@@ -390,10 +331,7 @@ function decrementGuestCountMemory(guestId: string): void {
   }
 }
 
-/**
- * Increment the guest message counter.
- * Uses Redis when available for multi-instance support, otherwise in-memory.
- */
+// Increment the guest counter via Redis or the in-memory fallback.
 async function incrementGuestCount(guestId: string): Promise<{
   allowed: boolean;
   count: number;
@@ -406,9 +344,7 @@ async function incrementGuestCount(guestId: string): Promise<{
   return incrementGuestCountMemory(guestId);
 }
 
-/**
- * Read the current guest count without incrementing.
- */
+// Read the guest count without incrementing.
 async function readGuestCount(guestId: string): Promise<{
   count: number;
   limit: number;
@@ -420,9 +356,7 @@ async function readGuestCount(guestId: string): Promise<{
   return readGuestCountMemory(guestId);
 }
 
-/**
- * Decrement the guest message counter (rollback on failure).
- */
+// Roll back the guest counter after a failed request.
 async function decrementGuestCount(guestId: string): Promise<void> {
   if (useRedis && (await isRedisAvailable())) {
     await decrementGuestCountRedis(guestId);
@@ -431,9 +365,7 @@ async function decrementGuestCount(guestId: string): Promise<void> {
   }
 }
 
-// ─── Guest ID middleware ──────────────────────────────────────────────────────
-// Reads or generates the anonymous cookie. Attaches guestId to req for
-// downstream use. Sets the cookie on the response if newly generated.
+// Guest ID middleware: reads or generates the anonymous cookie for the request.
 
 function guestCookieMiddleware(req: Request, res: Response, next: NextFunction): void {
   const cookies = parseCookies(req.headers.cookie);
@@ -471,9 +403,7 @@ function guestCookieMiddleware(req: Request, res: Response, next: NextFunction):
   next();
 }
 
-// ── Guest rate-limit middleware ──────────────────────────────────────────────
-// Returns 429 with a structured body the frontend can parse directly.
-// IMPORTANT: This runs AFTER body validation (moved to route handler).
+// Guest rate-limit middleware answering 429 with a structured body.
 
 async function guestRateLimitMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
   const guestId: string | undefined = (req as GuestRequest).guestId;
@@ -505,14 +435,7 @@ async function guestRateLimitMiddleware(req: Request, res: Response, next: NextF
   next();
 }
 
-// ─── Server-side guest transcript storage ───────────────────────────────────
-// Stores conversation history in Redis keyed by guest_id.
-// The server builds the LLM history from this transcript, NOT from
-// client-provided assistant messages (which could be forged).
-//
-// Fallback: When Redis is unavailable, the client-provided history is used
-// with strict sanitization (roles restricted to user/assistant, length capped).
-// This is documented and logged as degraded mode.
+// Server-side guest transcript in Redis; degraded fallback uses sanitized client history.
 
 function transcriptKey(guestId: string): string {
   return `${TRANSCRIPT_KEY_PREFIX}${guestId}`;
@@ -523,9 +446,7 @@ interface TranscriptEntry {
   content: string;
 }
 
-/**
- * Load the server-side transcript for a guest.
- */
+// Load the server-side transcript for a guest.
 async function loadTranscript(guestId: string): Promise<TranscriptEntry[]> {
   if (useRedis && (await isRedisAvailable())) {
     try {
@@ -542,16 +463,7 @@ async function loadTranscript(guestId: string): Promise<TranscriptEntry[]> {
   return [];
 }
 
-/**
- * Lua script for atomic transcript append with fixed-window TTL.
- * 
- * ATOMICITY: This entire script runs atomically in Redis (single-threaded).
- * The read-modify-write (GET -> modify -> SET) is safe from races because
- * Redis executes Lua scripts sequentially - no other command interleaves.
- * 
- * Fixed-window semantics: TTL is anchored on FIRST write only.
- * Subsequent appends overwrite value WITHOUT touching TTL.
- */
+// Lua script appending transcript entries atomically with an anchored TTL.
 const TRANSCRIPT_APPEND_LUA = `
   local key = KEYS[1]
   local new_entries_json = ARGV[1]
@@ -608,11 +520,7 @@ redis.defineCommand("guestAppendTranscript", {
   lua: TRANSCRIPT_APPEND_LUA,
 });
 
-/**
- * Append entries to the server-side transcript and trim to bounds.
- * Uses a Lua script for atomic append with fixed-window TTL:
- * the 24h window is anchored to the first message, not the last.
- */
+// Append transcript entries atomically, trimmed with a first-write-anchored TTL.
 async function appendTranscript(guestId: string, entries: TranscriptEntry[]): Promise<void> {
   if (entries.length === 0) return;
 
@@ -631,19 +539,12 @@ async function appendTranscript(guestId: string, entries: TranscriptEntry[]): Pr
       log.warn("Failed to save guest transcript to Redis", { error: (err as Error)?.message });
     }
   }
-  // In-memory fallback: transcript not persisted across requests.
-  // When Redis is unavailable, guest conversations have no cross-request history.
-  // The LLM receives only the current message (no prior context).
+  // In-memory fallback: no transcript persists across requests.
 }
 
-// ---------------------------------------------------------------------------
-// Guest system prompt — imported from prompts/guest-system-prompt.ts
-// ---------------------------------------------------------------------------
+// Guest system prompt (imported from prompts/guest-system-prompt.ts).
 
-// ---------------------------------------------------------------------------
-// GET /api/guest/status — Return current guest session status
-// Uses a lightweight dedicated limiter (not the chat IP limiter)
-// ---------------------------------------------------------------------------
+// GET /api/guest/status — quota status via a lightweight dedicated limiter.
 
 router.get(
   "/status",
@@ -667,18 +568,13 @@ router.get(
   }),
 );
 
-// ---------------------------------------------------------------------------
-// POST /api/guest/chat — stateless guest chat endpoint
-// IMPORTANT: Body validation runs BEFORE quota increment to prevent
-// malformed requests from consuming quota.
-// ---------------------------------------------------------------------------
+// POST /api/guest/chat — validates the body before any quota is consumed.
 
 router.post(
   "/chat",
   guestIpLimiter,
   guestCookieMiddleware,
-  // NOTE: guestRateLimitMiddleware is NOT in the middleware chain here.
-  // We validate the body first, then increment quota inside the handler.
+  // Quota is incremented inside the handler, after body validation.
   asyncHandler(async (req, res) => {
     const guestId: string | undefined = (req as GuestRequest).guestId;
     if (!guestId) {
@@ -686,7 +582,7 @@ router.post(
       return;
     }
 
-    // --- FIX 3: Zod validation BEFORE quota increment ---
+    // Zod validation before quota increment.
     const parsed = GuestChatBodySchema.safeParse(req.body);
     if (!parsed.success) {
       // Invalid request — do NOT consume quota
@@ -696,7 +592,7 @@ router.post(
 
     const { message, conversationHistory } = parsed.data;
 
-    // --- Input moderation (fail-OPEN for guest availability) ---
+    // Input moderation, failing open for guest availability.
     try {
       // Check if message contains image content
       const hasImage = conversationHistory.some((msg: { role: string; content: string | Array<{ type?: string; name?: string }> }) => {
@@ -752,7 +648,7 @@ router.post(
       });
     }
 
-    // --- Increment quota ONLY after validation passes ---
+    // Increment quota only after validation passes.
     const { allowed, count, limit, retryAfterMs } = await incrementGuestCount(guestId);
 
     // Always set these headers so the frontend can read quota state
@@ -773,24 +669,30 @@ router.post(
       return;
     }
 
-    // --- Build messages from SERVER-SIDE transcript (not client history) ---
-    // Client-provided conversationHistory is IGNORED for LLM context.
-    // The server maintains its own transcript to prevent prompt injection.
+    // Build LLM context from the server-side transcript, not client history.
     const serverTranscript = await loadTranscript(guestId);
     const messages = [
       ...serverTranscript,
       { role: "user" as const, content: message.trim() },
     ];
 
-    // --- Set SSE headers (matching existing chat endpoint) ---
+    // Set SSE streaming headers.
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
 
-    // --- Stream the response with automatic model fallback ---
+    // Stream the response with automatic model fallback.
+    // Groq direct cannot serve as the guest pin: the free-tier key admits at
+    // most 8k tokens/min, so pinned requests above that are rejected at the
+    // gate. These OpenRouter :free ids are verified-live but individually
+    // flap under load (streams can end with zero text), so the chain spans
+    // several upstreams and skips any candidate that yields no text.
     const guestCandidateModels = [
-      process.env.GUEST_MODEL || "qwen/qwen3.6-27b",
+      process.env.GUEST_MODEL || "nvidia/nemotron-3.5-lightning:free",
+      "google/gemma-4-31b-it:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "nvidia/nemotron-3-super-49b-a49b:free",
     ].filter((v, i, a) => a.indexOf(v) === i);
 
     log.info("Guest chat request", {
@@ -839,8 +741,7 @@ router.post(
               length: fullResponse.length,
               max: MAX_RESPONSE_CHARS,
             });
-            // Make the cut-off visible instead of silently ending mid-sentence,
-            // and persist the marker so the stored transcript reflects it.
+            // Mark the truncation visibly and persist it in the transcript.
             const truncationMarker = "\n\n_[تم اختصار الرد لأنه تجاوز الحد الأقصى للطول]_";
             fullResponse += truncationMarker;
             res.write(`0:${JSON.stringify(truncationMarker)}\n`);
@@ -877,8 +778,7 @@ router.post(
       return;
     }
 
-    // --- Persist to server-side transcript AFTER successful stream ---
-    // <think> blocks are UI-only; never store them in the guest transcript.
+    // Persist post-stream, stripping UI-only <think> tags from the reply.
     await appendTranscript(guestId, [
       { role: "user", content: message.trim() },
       { role: "assistant", content: stripThinkTags(fullResponse) },
