@@ -9,44 +9,48 @@ import { SessionExpiredModal } from "@/components/SessionExpiredModal";
 import { NotFound } from "@/components/ui/ghost-404-page";
 
 import { LoginPage } from "@/components/LoginPage";
-import { GuestModeProvider } from "@/context/GuestModeContext";
-import { ChatHistoryProvider } from "@/hooks/useChatHistory";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { SidebarView } from "@/features/ai-assistant/shadcn/components/Sidebar/SidebarView";
 
 /**
- * Claude-style artifacts shell: the sidebar stays on the left, the library
- * page renders in the content area on the right.
+ * Lazy-load with automatic retry for chunk load failures.
+ * This handles network hiccups and stale chunks after deployments.
  */
-function ArtifactsLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <GuestModeProvider>
-      <ChatHistoryProvider>
-        <TooltipProvider>
-          <div className="flex h-screen h-[100dvh] w-full overflow-hidden bg-[#FDFBF7] text-foreground">
-            <div className="hidden shrink-0 md:block">
-              <SidebarView
-                courses={[]}
-                activeCourse={null}
-                onActiveCourseChange={() => {}}
-              />
-            </div>
-            <div className="min-w-0 flex-1 overflow-hidden">{children}</div>
-          </div>
-        </TooltipProvider>
-      </ChatHistoryProvider>
-    </GuestModeProvider>
+function lazyWithRetry<T extends React.ComponentType<unknown>>(
+  importFn: () => Promise<{ default: T }>,
+  retries = 2,
+  delay = 1000,
+) {
+  return lazy(() =>
+    importFn().catch((err: unknown) => {
+      // Only retry on chunk load errors (network or missing chunk)
+      const isChunkError =
+        err instanceof Error &&
+        (/Failed to fetch dynamically imported module/.test(err.message) ||
+          /Importing a module script failed/.test(err.message) ||
+          /Loading chunk \d+ failed/.test(err.message) ||
+          (err as { code?: string }).code === "ERR_CHUNK_LOAD_TIMEOUT");
+
+      if (isChunkError && retries > 0) {
+        return new Promise<{ default: T }>((resolve) =>
+          setTimeout(() => resolve(lazyWithRetry(importFn, retries - 1, delay * 2) as unknown as { default: T }), delay),
+        ).then((m) => m);
+      }
+
+      throw err;
+    }),
   );
 }
 
-const AssistantApp = lazy(() => import("@/features/ai-assistant/AssistantApp").then(m => ({ default: m.AssistantApp })));
-const ArtifactPage = lazy(() => import("@/features/artifacts/ArtifactPage").then(m => ({ default: m.ArtifactPage })));
-const ArtifactLibraryPage = lazy(() => import("@/features/artifacts/ArtifactLibraryPage").then(m => ({ default: m.ArtifactLibraryPage })));
+const AssistantApp = lazyWithRetry(() =>
+  import("@/features/ai-assistant/AssistantApp").then((m) => ({ default: m.AssistantApp })),
+);
 
 function RouteFallback() {
   return (
     <div className="flex h-screen h-[100dvh] w-full items-center justify-center bg-background">
-      <div className="size-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+      <div className="flex flex-col items-center gap-4">
+        <div className="size-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
     </div>
   );
 }
@@ -93,28 +97,6 @@ function AppContent() {
             <ErrorBoundary componentName="AssistantApp">
               <Suspense fallback={<RouteFallback />}>
                 <AssistantApp />
-              </Suspense>
-            </ErrorBoundary>
-          }
-        />
-        <Route
-          path="/artifacts"
-          element={
-            <ErrorBoundary componentName="ArtifactLibraryPage">
-              <Suspense fallback={<RouteFallback />}>
-                <ArtifactsLayout>
-                  <ArtifactLibraryPage />
-                </ArtifactsLayout>
-              </Suspense>
-            </ErrorBoundary>
-          }
-        />
-        <Route
-          path="/artifacts/:id"
-          element={
-            <ErrorBoundary componentName="ArtifactPage">
-              <Suspense fallback={<RouteFallback />}>
-                <ArtifactPage />
               </Suspense>
             </ErrorBoundary>
           }
