@@ -101,3 +101,31 @@
 
 ---
 *المراجعة القديمة (DEEP_CODE_REVIEW.md، 21 آب) لا تزال مرجعاً صالحاً لتاريخها؛ هذا التقرير يحل محلها كصورة حالية.*
+
+---
+
+## Resolution Log (applied 2026-08-28, overnight hardening pass)
+
+| Commit | Fix |
+|--------|-----|
+| b0351e1 | CI triggers → master/main/develop (CI never ran before) |
+| a7c12d3 | Migration 033: RLS backfill (chat/memory/ban tables) + re-scope 3 "Service role" policies that were TO public — **live anon-CRUD vuln empirically proven then closed** (INSERT now 42501) |
+| 27664d6 + a5eaf27 | /voice/agent/turn: Zod + 20k caps + turnId idempotency (Redis SET NX) + client retry |
+| 6a601fa | Migration 034: match_documents user-scoped (p_user_id); stale 3-arg overload dropped |
+| 0a0e47c..9ddd497 | WIP split into 13 logical commits (87 comments-only files verified mechanically) |
+| 0d3b3cd | 12 retired model ids pruned (verified vs Groq/OpenRouter live catalogs); qwen3.8-27b added; ALLOWED_MODELS/DEFAULT_MODEL moved into the model catalog (layer fix) |
+| 995d627 | ArtifactPanel regression from layout refactor restored (panel was dead) |
+| 9af69c1 + 5bf24f8 | Migration 035: RLS for 13 orphan tables (40 policies, re-scoped TO authenticated); applied live |
+| 521656a | pdf-processor CI job + PDF_PROCESSOR_TOKEN plumbing + unauthenticated-run warning; migrations README drift notes; structured logging in web-search |
+| 077bb13 | ws 8.21.3 (memory-disclosure + fragment-DoS advisories patched) |
+
+**Verification state:** backend 754/754, frontend 556/556, both typechecks clean, `vite build` succeeds. Live DB: 44/44 tables RLS-on, policies match migrations.
+
+**Accepted risks / deferred (documented, deliberate):**
+- adm-zip + sharp HIGHs are transitive inside @huggingface/transformers — no upstream fix; no untrusted ZIP/image input reaches them. Revisit when transformers ships updated onnxruntime.
+- react-router 2 moderates: fix requires the 7.x major — schedule a dedicated upgrade.
+- Extensions `vector`/`pg_trgm` in the public schema (advisor WARN): moving them requires rewriting every RPC's `SET search_path` — coordinated change, do in a maintenance window.
+- Leaked-password protection: Supabase **Dashboard → Auth settings** — manual one-liner, not API-reachable.
+- WS JWT via query string: works; move to first-frame auth when the voice stack is next touched.
+- Vite chunks >1MB (index 1.5MB): vendor already split; further app-code splitting is a perf project, not a blocker.
+- Local pdf-processor venv on Windows can't load PyMuPDF (machine missing the standard VC++ 2015–2022 runtime — only _clr0400 variants present). Install `vc_redist.x64` from Microsoft to restore local pytest; CI now covers the tests on clean Ubuntu regardless.
