@@ -156,3 +156,13 @@
 | — | **Memory extraction service audited, healthy**: stuck-job cleanup every 5 min, retry sweep every 2 min, in-process dedup, dead-letter table. One latent note: the `pending→processing` claim is unverified (same class as the email-worker bug) but safe under the current single-replica deployment — revisit if the backend ever scales past one replica. |
 | — | **Textbook worker audited, healthy** (stuck sweeps + dead letters + reconciliation). |
 | — | **Flaky test fixed**: guest-redis-integration left ioredis's default endless retry strategy running after its availability guard gave up — the unhandled 'error' events intermittently killed 2 unrelated tests. Pinned `retryStrategy: () => null` + silent error listener; 3 consecutive full-suite runs now 754/754. |
+
+### Fourth pass — the 9→10 items (code & security)
+
+| Commit | Outcome |
+|--------|---------|
+| 2477fe7 | **Memory job claiming verified** (pending→processing must match a row) — closes the last known instance of the unverified-optimistic-lock class. |
+| ef678f7 | **CI gates on new high-severity dependencies** (accepted adm-zip/sharp set allowlisted; any other high fails the build). |
+| — | **Secrets scan**: full git history pickaxe-scanned for key patterns (groq/openrouter/google/anthropic/openai/private-keys) — only test placeholders (`gsk_test_key`, `sk-or-v1-test-key`); no real secrets ever committed; all .env files untracked. |
+| cd9c0af | **WS JWTs moved out of upgrade URLs** into the first config frame (both relays + frontend clients + e2e probe). Verified live: anon-dev session authenticates and streams 128KB to Deepgram; garbage token → 4401 before ready. **Also fixed a P0 the startup smoke exposed**: sender.ts re-exported the `EmailTemplate` type as a value — the backend could not boot under node/tsx at all (tsc elides the name silently). |
+| — | **First load test in project history** (autocannon, single replica, local): `/api/health` 1,891 rps · 0 errors · p99 35ms; `/api/guest` validation 1,421 rps · p99 32ms; `/api/chat` auth-reject 1,462 rps · p99 25ms (20–25 concurrent, 10–12s each). The app layer is not the bottleneck — provider quotas are, as expected. |
