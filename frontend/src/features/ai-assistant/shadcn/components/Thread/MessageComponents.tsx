@@ -36,10 +36,12 @@ import {
   AlertTriangleIcon,
   BoxIcon,
   CheckIcon,
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CopyIcon,
   DownloadIcon,
+  FileTextIcon,
   MoreHorizontalIcon,
   PencilIcon,
   RefreshCwIcon,
@@ -47,7 +49,9 @@ import {
   ThumbsUpIcon,
 } from "lucide-react";
 import { LexicalComposerInput } from "@assistant-ui/react-lexical";
-import { type FC, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { type FC, memo, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import {
   useMessageFeedback,
@@ -403,15 +407,76 @@ const AssistantActionBar: FC = () => {
   );
 };
 
+/** "2 hours ago" for recent messages, "Aug 16" for older ones — locale-aware. */
+function formatMessageTime(createdAt: unknown, language: string): string | null {
+  const date = createdAt instanceof Date ? createdAt : new Date(String(createdAt ?? ""));
+  if (Number.isNaN(date.getTime())) return null;
+  const diffMinutes = (Date.now() - date.getTime()) / 60_000;
+  if (diffMinutes < 1) return new Intl.RelativeTimeFormat(language, { numeric: "auto" }).format(0, "minute");
+  if (diffMinutes < 60) {
+    return new Intl.RelativeTimeFormat(language, { numeric: "auto" }).format(-Math.floor(diffMinutes), "minute");
+  }
+  if (diffMinutes < 24 * 60) {
+    return new Intl.RelativeTimeFormat(language, { numeric: "auto" }).format(-Math.floor(diffMinutes / 60), "hour");
+  }
+  return new Intl.DateTimeFormat(language, { month: "short", day: "numeric" }).format(date);
+}
+
 const UserActionBar: FC = () => {
+  const isCopied = useAuiState((s) => s.message.isCopied);
+  const messageId = useAuiState((s) => s.message.id);
+  const runtimeCreatedAt = useAuiState((s) => (s.message as Record<string, unknown>).createdAt);
+  const isLast = useAuiState((s) => {
+    const msgs = s.thread.messages;
+    return msgs.length > 0 && msgs[msgs.length - 1]?.id === s.message.id;
+  });
+  // Hydrated messages don't carry timestamps through the AI SDK runtime —
+  // prefer the chat-history record (same source AssistantMessage uses).
+  const { activeThreadMessages } = useChatHistory();
+  const historyCreatedAt = activeThreadMessages?.find((m) => m.id === messageId)?.created_at;
+  const { t, i18n } = useTranslation();
+  const timeLabel = useMemo(
+    () => formatMessageTime(historyCreatedAt ?? runtimeCreatedAt, i18n.language),
+    [historyCreatedAt, runtimeCreatedAt, i18n.language],
+  );
+
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
-      autohide="not-last"
-      className="message-action-bar aui-user-action-bar-root absolute top-1 right-1 z-10 flex items-center"
+      className={cn(
+        "message-action-bar aui-user-action-bar-root mt-1 flex items-center justify-end gap-0.5 transition-opacity",
+        // Claude-style reveal: always visible on the latest message (also
+        // covers touch devices), hover/focus-revealed on older ones.
+        isLast
+          ? "opacity-100"
+          : "invisible opacity-0 group-hover:visible group-hover:opacity-100 focus-within:visible focus-within:opacity-100",
+      )}
     >
+      {timeLabel && (
+        <span
+          className="mr-1 select-none text-[11px] text-muted-foreground/70"
+          title={
+            (() => {
+              const d = historyCreatedAt ? new Date(historyCreatedAt) : runtimeCreatedAt instanceof Date ? runtimeCreatedAt : null;
+              return d && !Number.isNaN(d.getTime()) ? d.toLocaleString(i18n.language) : undefined;
+            })()
+          }
+        >
+          {timeLabel}
+        </span>
+      )}
+      <ActionBarPrimitive.Reload asChild>
+        <TooltipIconButton tooltip={t("retry", "Retry")} className="size-7 rounded-md hover:bg-muted">
+          <RefreshCwIcon className="size-3.5" />
+        </TooltipIconButton>
+      </ActionBarPrimitive.Reload>
+      <ActionBarPrimitive.Copy asChild>
+        <TooltipIconButton tooltip="Copy" className="size-7 rounded-md hover:bg-muted">
+          {isCopied ? <CheckIcon className="size-3.5 text-green-600" /> : <CopyIcon className="size-3.5" />}
+        </TooltipIconButton>
+      </ActionBarPrimitive.Copy>
       <ActionBarPrimitive.Edit asChild>
-        <TooltipIconButton tooltip="Edit" className="aui-user-action-edit size-7 rounded-full bg-background/80 hover:bg-background border shadow-sm">
+        <TooltipIconButton tooltip="Edit" className="aui-user-action-edit size-7 rounded-md hover:bg-muted">
           <PencilIcon className="size-3.5" />
         </TooltipIconButton>
       </ActionBarPrimitive.Edit>
@@ -446,7 +511,204 @@ const EditComposer: FC = () => {
   );
 };
 
+// ─── User message text — renders inline text-file attachments as
+// expandable chips instead of raw <attachment> blocks ────────────────────────
+
+const ATTACHMENT_BLOCK_RE = /<attachment name=([^>\n]+)>\n?([\s\S]*?)<\/attachment>/g;
+
+const InlineAttachmentChip: FC<{ name: string; content: string }> = ({ name, content }) => {
+  const [open, setOpen] = useState(false);
+  const lineCount = content.split("\n").length;
+  return (
+    <span className="my-1 block w-fit max-w-full overflow-hidden rounded-xl border border-border/60 bg-muted/60 align-middle">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="state-layer flex w-full items-center gap-2 px-3 py-1.5 text-left"
+        aria-expanded={open}
+      >
+        <FileTextIcon className="size-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
+        <span className="min-w-0 flex-1 truncate font-mono text-[12px] font-medium" dir="ltr">
+          {name}
+        </span>
+        <span className="shrink-0 text-[10px] text-muted-foreground">
+          {lineCount} {lineCount === 1 ? "line" : "lines"}
+        </span>
+        <ChevronDownIcon
+          className={cn("size-3 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open && (
+        <pre
+          dir="ltr"
+          className="max-h-64 overflow-auto border-t border-border/50 bg-background/60 px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-all"
+        >
+          {content.trimEnd()}
+        </pre>
+      )}
+    </span>
+  );
+};
+
+// Claude's rose-tinted inline code + modest headings for user messages.
+const UserMarkdown: FC<{ text: string }> = memo(({ text }) => (
+  <Markdown
+    remarkPlugins={[remarkGfm]}
+    components={{
+      p: ({ children }) => <p className="m-0">{children}</p>,
+      h1: ({ children }) => <h3 className="mt-3 mb-1 text-[15px] font-semibold first:mt-0">{children}</h3>,
+      h2: ({ children }) => <h3 className="mt-3 mb-1 text-[15px] font-semibold first:mt-0">{children}</h3>,
+      h3: ({ children }) => <h4 className="mt-2.5 mb-1 text-[15px] font-semibold first:mt-0">{children}</h4>,
+      h4: ({ children }) => <h5 className="mt-2 mb-0.5 text-[14px] font-semibold first:mt-0">{children}</h5>,
+      h5: ({ children }) => <h6 className="mt-2 mb-0.5 text-[14px] font-semibold first:mt-0">{children}</h6>,
+      h6: ({ children }) => <h6 className="mt-2 mb-0.5 text-[14px] font-semibold first:mt-0">{children}</h6>,
+      strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+      a: ({ children, href }) => (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-blue-600 underline underline-offset-2 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+        >
+          {children}
+        </a>
+      ),
+      code: ({ children }) => (
+        <code
+          dir="ltr"
+          className="rounded-md bg-rose-500/10 px-1.5 py-0.5 font-mono text-[12.5px] text-rose-700 dark:bg-rose-400/15 dark:text-rose-300"
+        >
+          {children}
+        </code>
+      ),
+      pre: ({ children }) => (
+        <div
+          dir="ltr"
+          className="my-1.5 overflow-x-auto rounded-xl border border-border/50 bg-muted/70 p-3 text-left [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-[12.5px] [&_code]:text-foreground dark:bg-muted/40"
+        >
+          <pre className="m-0 font-mono text-[12.5px] leading-relaxed">{children}</pre>
+        </div>
+      ),
+      ul: ({ children }) => <ul className="my-1 list-disc space-y-0.5 pl-5">{children}</ul>,
+      ol: ({ children }) => <ol className="my-1 list-decimal space-y-0.5 pl-5">{children}</ol>,
+      li: ({ children }) => <li className="m-0">{children}</li>,
+      blockquote: ({ children }) => (
+        <blockquote className="my-1.5 border-l-2 border-border pl-3 text-muted-foreground">{children}</blockquote>
+      ),
+      hr: () => <hr className="my-2 border-border/60" />,
+      table: ({ children }) => (
+        <div dir="ltr" className="my-1.5 overflow-x-auto">
+          <table className="w-full border-collapse text-[13px]">{children}</table>
+        </div>
+      ),
+      th: ({ children }) => (
+        <th className="border border-border/60 bg-muted/50 px-2 py-1 text-start font-semibold">{children}</th>
+      ),
+      td: ({ children }) => <td className="border border-border/60 px-2 py-1 align-top">{children}</td>,
+    }}
+  >
+    {text}
+  </Markdown>
+));
+UserMarkdown.displayName = "UserMarkdown";
+
+/** Text renderer for user messages — Claude-style: attachment blocks → chips,
+ * @directives → chips, everything else → rendered markdown. */
+const DIRECTIVE_TOKEN_RE = /:([\w-]{1,64})\[/;
+
+const UserTextPart: FC<{ text?: string }> = ({ text }) => {
+  const value = text ?? "";
+  ATTACHMENT_BLOCK_RE.lastIndex = 0;
+  const matches = [...value.matchAll(ATTACHMENT_BLOCK_RE)];
+
+  // Messages containing @directive tokens keep the chip-aware renderer;
+  // everything else renders as markdown.
+  const renderTextSegment = (segment: string, key?: string) => {
+    if (segment.length === 0) return null;
+    const node = DIRECTIVE_TOKEN_RE.test(segment) ? (
+      <DirectiveText
+        {...({ type: "text", text: segment, status: { type: "complete" } } as const)}
+      />
+    ) : (
+      <UserMarkdown text={segment} />
+    );
+    return key ? <span key={key}>{node}</span> : node;
+  };
+
+  if (matches.length === 0) return renderTextSegment(value);
+
+  const pieces: Array<{ key: string; node: ReactNode }> = [];
+  let cursor = 0;
+  matches.forEach((m, i) => {
+    const start = m.index ?? 0;
+    if (start > cursor) {
+      pieces.push({ key: `t${i}`, node: renderTextSegment(value.slice(cursor, start)) });
+    }
+    pieces.push({
+      key: `a${i}`,
+      node: <InlineAttachmentChip name={(m[1] || "").trim()} content={m[2] ?? ""} />,
+    });
+    cursor = start + m[0].length;
+  });
+  if (cursor < value.length) {
+    pieces.push({ key: "tail", node: renderTextSegment(value.slice(cursor)) });
+  }
+
+  return <>{pieces.map((p) => <span key={p.key}>{p.node}</span>)}</>;
+};
+
 // ─── Exported Message Components ──────────────────────────────────────────────────
+
+/** Collapsed height for long user messages — ≈9 text lines, Claude-style. */
+const USER_TEXT_COLLAPSED_PX = 208;
+
+/**
+ * Long user messages clamp to ~8 lines with a fade gradient + "Show more" —
+ * expanding replaces the gradient with "Show less". Measures real content
+ * height, so short messages never see the toggle.
+ */
+const UserTextCollapsible: FC<{ children: ReactNode }> = ({ children }) => {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const [isClamped, setIsClamped] = useState(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const check = () => setIsClamped(el.scrollHeight > USER_TEXT_COLLAPSED_PX + 4);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const collapsed = isClamped && !expanded;
+
+  return (
+    <div>
+      <div
+        ref={contentRef}
+        className={cn("relative", collapsed && "max-h-52 overflow-hidden")}
+      >
+        {children}
+        {collapsed && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-muted via-muted/90 to-transparent" />
+        )}
+      </div>
+      {isClamped && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="state-layer mt-1 rounded px-0.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+          aria-expanded={expanded}
+        >
+          {expanded ? t("showLess", "Show less") : t("showMore", "Show more")}
+        </button>
+      )}
+    </div>
+  );
+};
 
 export const UserMessage: FC = () => {
   const status = useAuiState((s) => s.message.status);
@@ -456,33 +718,50 @@ export const UserMessage: FC = () => {
   );
   const isForked = (branchCount ?? 1) > 1;
   const { t } = useTranslation();
+  // Only wrap text in the collapsible when there IS text — an unconditional
+  // wrapper div would defeat the bubble's empty:hidden for attachment-only
+  // messages.
+  const hasTextContent = useAuiState((s) => {
+    const content = s.message.content;
+    return (
+      Array.isArray(content) &&
+      content.some(
+        (p) =>
+          (p as { type?: string; text?: string }).type === "text" &&
+          ((p as { text?: string }).text ?? "").trim().length > 0,
+      )
+    );
+  });
+  const textParts = (
+    <MessagePrimitive.Parts components={{ Text: UserTextPart }} />
+  );
 
   return (
     <ErrorBoundary fallback={<div className="text-destructive text-sm p-2">Failed to render user message</div>}>
       <MessagePrimitive.Root
       data-slot="aui_user-message-root"
       data-role="user"
-      className="fade-in slide-in-from-bottom-1 mx-auto grid w-full min-w-0 max-w-3xl animate-in auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] content-start gap-y-2 px-2 duration-150 [&:where(>*)]:col-start-2"
+      className="fade-in slide-in-from-bottom-1 mx-auto grid w-full min-w-0 max-w-3xl animate-in auto-rows-auto grid-cols-[minmax(72px,1fr)_minmax(0,88%)] content-start gap-y-2 px-2 duration-150 [&:where(>*)]:col-start-2"
     >
       <UserMessageAttachments />
 
-      <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0 group">
+      <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0 justify-self-end group">
         <div
           className={cn(
             "message-hover-wrapper",
-            "aui-user-message-content wrap-break-word peer rounded-2xl bg-primary/10 border px-4 py-2.5 text-foreground empty:hidden shadow-sm",
+            "aui-user-message-content wrap-break-word whitespace-pre-wrap peer rounded-2xl bg-muted px-4 py-2.5 text-[15px] leading-[1.6] text-foreground empty:hidden shadow-sm border",
             hasError
               ? "border-destructive bg-destructive/5"
               : isForked
                 ? "border-l-2 border-l-blue-400 border-primary/20"
-                : "border-primary/20",
+                : "border-transparent",
           )}
           dir="auto"
         >
           <MessagePrimitive.Quote>{(quote) => <QuoteBlock {...quote} />}</MessagePrimitive.Quote>
-          <MessagePrimitive.Parts components={{ Text: DirectiveText }} />
-          <UserActionBar />
+          {hasTextContent ? <UserTextCollapsible>{textParts}</UserTextCollapsible> : textParts}
         </div>
+        <UserActionBar />
         {isForked && (
           <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
             <span>This created a new branch. Use ← → to navigate between versions.</span>
