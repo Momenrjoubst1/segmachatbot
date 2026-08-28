@@ -6,6 +6,7 @@ process.env.SUPABASE_URL = 'http://vitest.supabase.local';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'vitest-service-role-jwt-placeholder';
 process.env.REDIS_URL = 'redis://localhost:6379';
 process.env.GROQ_API_KEY = 'gsk_test_key';
+process.env.OPENROUTER_API_KEY = 'sk-or-v1-test-key';
 process.env.ASSISTANT_DEFAULT_MODEL = 'llama-3.3-70b-versatile';
 process.env.ANALYTICS_ENABLED = 'false';
 

@@ -1,14 +1,11 @@
-/**
- * Configuration Validator Tests
- * اختبارات مدقق التكوين
- */
+// Tests for the configuration validator
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { validateConfiguration, validationRules } from '../config/config-validator.js';
 
 describe('Configuration Validator', () => {
   beforeEach(() => {
-    // Save original environment
+    // Set a known baseline environment before each test
     process.env.NODE_ENV = 'test';
     process.env.RUN_CONFIG_VALIDATION_IN_TESTS = 'true';
   });
@@ -24,6 +21,7 @@ describe('Configuration Validator', () => {
     delete process.env.ASSISTANT_DEFAULT_MODEL;
     delete process.env.AZURE_API_KEY;
     delete process.env.GROQ_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
     delete process.env.RUN_CONFIG_VALIDATION_IN_TESTS;
     delete process.env.MEMORY_MAX_MESSAGES;
     delete process.env.MEMORY_MIN_FOR_SUMMARY;
