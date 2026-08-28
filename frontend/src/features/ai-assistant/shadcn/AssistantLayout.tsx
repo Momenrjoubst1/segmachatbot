@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 
 // Lazy load heavy components
 const EmailHistoryPanel = lazy(() => import("../components/EmailHistoryPanel").then(m => ({ default: m.EmailHistoryPanel })));
+const ArtifactPanel = lazy(() => import("@/features/artifacts/ArtifactPanel").then(m => ({ default: m.ArtifactPanel })));
 const FullScreenCalendar = lazy(() => import("@/components/ui/fullscreen-calendar").then(m => ({ default: m.FullScreenCalendar })));
 const SchedulingPanel = lazy(() => import("@/features/calendar/components").then(m => ({ default: m.SchedulingPanel })));
 const TaskList = lazy(() => import("@/features/tasks/components/TaskList"));
@@ -54,9 +55,10 @@ export const Shadcn: FC<{
   onSkipOnboarding?: () => void;
   isGuestMode?: boolean;
 }> = ({ isOnboarded, isCoursesLoadingVisible, coursesError, retryCourses, onActiveCourseChange, onCompleteOnboarding, onSkipOnboarding, isGuestMode = false }) => {
-  const { activeView, onToggleView, emailHistoryOpen, setEmailHistoryOpen } = useAssistantLayout();
+  const { activeView, onToggleView, artifactPanelOpen, setArtifactPanelOpen, emailHistoryOpen, setEmailHistoryOpen } = useAssistantLayout();
   const { t } = useTranslation("errors");
   const { t: tCal } = useTranslation("calendar");
+  const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const { loadThread, goToPreviousThread, goToNextThread } = useChatHistory();
 
@@ -128,6 +130,17 @@ export const Shadcn: FC<{
     window.addEventListener("sigma:calendar-refresh", handleRefresh);
     return () => window.removeEventListener("sigma:calendar-refresh", handleRefresh);
   }, [calendarUserId, calendar.fetchEvents]);
+
+  // Open the artifacts panel (selecting the artifact from the event, if any).
+  useEffect(() => {
+    const openArtifacts = (event: Event) => {
+      const artifactId = (event as CustomEvent<{ artifactId?: string }>).detail?.artifactId;
+      if (artifactId) setActiveArtifactId(artifactId);
+      setArtifactPanelOpen(true);
+    };
+    window.addEventListener("sigma:open-artifacts", openArtifacts);
+    return () => window.removeEventListener("sigma:open-artifacts", openArtifacts);
+  }, [setArtifactPanelOpen]);
 
   const closeScheduler = useCallback(() => {
     setShowScheduler(false);
@@ -279,8 +292,13 @@ export const Shadcn: FC<{
       onToggleView('calendar');
     } else if (action.action === "OPEN_EMAIL") {
       setEmailHistoryOpen(true);
+    } else if (action.action === "OPEN_ARTIFACTS") {
+      if (action.payload?.artifactId) {
+        setActiveArtifactId(action.payload.artifactId);
+      }
+      setArtifactPanelOpen(true);
     }
-  }, [onToggleView, setEmailHistoryOpen]));
+  }, [onToggleView, setEmailHistoryOpen, setArtifactPanelOpen]));
 
   useAgenticAction("composer", useCallback((action) => {
     if (action.action === "SET_TEXT") {
@@ -402,6 +420,18 @@ export const Shadcn: FC<{
             </div>
           )}
         </main>
+        {!isGuestMode && (
+          <Suspense fallback={<PanelLoading />}>
+            <ErrorBoundary componentName="ArtifactPanel">
+              <ArtifactPanel
+                open={artifactPanelOpen}
+                onClose={() => setArtifactPanelOpen(false)}
+                activeArtifactId={activeArtifactId}
+                onRequestOpen={() => setArtifactPanelOpen(true)}
+              />
+            </ErrorBoundary>
+          </Suspense>
+        )}
         {!isGuestMode && emailHistoryOpen && (
           <div className="absolute right-0 top-0 h-full w-96 border-l bg-background z-30 shadow-xl">
             <Suspense fallback={<PanelLoading />}>

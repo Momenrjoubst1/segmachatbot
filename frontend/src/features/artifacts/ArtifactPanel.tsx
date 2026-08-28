@@ -182,6 +182,7 @@ export function ArtifactPanel({ open, onClose, activeArtifactId, onRequestOpen, 
           </button>
           <button
             onClick={onClose}
+            data-testid="close-artifacts"
             className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
             title={t("panel.close")}
           >
