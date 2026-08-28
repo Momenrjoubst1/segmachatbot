@@ -147,3 +147,12 @@
 | — | **Local pdf-processor venv restored**: VC++ 2015–2022 runtime installed (was missing → every PyMuPDF .pyd failed); local pytest now runs. **Suite: 106/106.** |
 | — | **password_min_length 6 → 8** applied via Management API (compensating control; HIBP itself is Pro-plan-gated, 402). |
 | — | Textbook worker audited — already has stuck-job sweeps, dead-letter retries and reconciliation; no change needed. |
+
+### Third pass (audio streaming + memory services)
+
+| Commit | Outcome |
+|--------|---------|
+| 65c6484 | **Deepgram relay**: a client disconnect during the upstream handshake left the just-opened Deepgram stream connected (billing) until Deepgram's own timeout — the session is now checked at `open`. |
+| — | **Memory extraction service audited, healthy**: stuck-job cleanup every 5 min, retry sweep every 2 min, in-process dedup, dead-letter table. One latent note: the `pending→processing` claim is unverified (same class as the email-worker bug) but safe under the current single-replica deployment — revisit if the backend ever scales past one replica. |
+| — | **Textbook worker audited, healthy** (stuck sweeps + dead letters + reconciliation). |
+| — | **Flaky test fixed**: guest-redis-integration left ioredis's default endless retry strategy running after its availability guard gave up — the unhandled 'error' events intermittently killed 2 unrelated tests. Pinned `retryStrategy: () => null` + silent error listener; 3 consecutive full-suite runs now 754/754. |
