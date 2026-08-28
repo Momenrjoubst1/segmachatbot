@@ -377,8 +377,25 @@ class ReliableMemoryExtractionService {
       return;
     }
 
-    // Update status to processing
-    await this.updateJobStatus(jobId, 'processing', { attempt: jobData.attempt + 1 });
+    // Claim the job with a verified pending→processing transition. Supabase
+    // reports no error for zero-row updates, so the claim must be confirmed
+    // by the returned row count — otherwise two workers (or a retry racing
+    // the original) could extract the same conversation in parallel.
+    const { data: claimed, error: claimError } = await supabase
+      .from('memory_extraction_jobs')
+      .update({
+        status: 'processing',
+        attempt: jobData.attempt + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', jobId)
+      .eq('status', 'pending')
+      .select('id');
+
+    if (claimError || !claimed || claimed.length === 0) {
+      log.info('[ReliableExtraction] Job not claimable (claimed/completed elsewhere)', { jobId });
+      return;
+    }
 
     try {
       // Check if we should use enhanced memory extraction
