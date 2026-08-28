@@ -1,0 +1,628 @@
+openapi: 3.1.0
+info:
+  title: Sigma AI Chatbot API
+  description: |
+    Full-stack AI chatbot API with RAG (Retrieval-Augmented Generation), memory management, and multi-model support.
+    
+    ## Authentication
+    Most endpoints require a valid Supabase JWT token in the `Authorization: Bearer <token>` header.
+    
+    ## Rate Limiting
+    - Global: 100 requests/minute/IP
+    - Chat: 30 requests/minute/user
+    - Guest: 12 requests/hour/IP
+  version: 1.0.0
+  contact:
+    name: Sigma AI Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:3004
+    description: Local development
+  - url: https://api.sigma-ai.example.com
+    description: Production
+
+tags:
+  - name: Chat
+    description: Chat and conversation endpoints
+  - name: Guest
+    description: Unauthenticated guest chat
+  - name: Memory
+    description: User memory management
+  - name: Textbooks
+    description: Textbook upload and management
+  - name: Artifacts
+    description: AI-generated artifacts
+  - name: Study
+    description: Flashcards and study tools
+  - name: Analytics
+    description: Usage analytics
+  - name: Health
+    description: Health check endpoints
+  - name: Moderation
+    description: Content moderation
+  - name: Voice
+    description: Voice and speech services
+  - name: Tools
+    description: AI tool execution
+
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Returns system health status including Redis, BM25, and AI providers
+      responses:
+        '200':
+          description: System healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: System degraded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/chat:
+    post:
+      tags: [Chat]
+      summary: Send chat message
+      description: |
+        Send a message and receive an AI-generated response via streaming.
+        Supports RAG, memory, and tool execution.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: Streaming response (text/plain)
+          headers:
+            X-Thread-Id:
+              schema:
+                type: string
+              description: Chat thread ID
+            X-RAG-Sources:
+              schema:
+                type: string
+              description: JSON array of RAG sources (if any)
+            X-Model-Fallback:
+              schema:
+                type: string
+              description: Model fallback information (if used)
+          content:
+            text/plain:
+              schema:
+                type: string
+        '400':
+          description: Validation error
+        '401':
+          description: Unauthorized
+        '429':
+          description: Rate limit exceeded
+
+  /api/guest/chat:
+    post:
+      tags: [Guest]
+      summary: Guest chat (unauthenticated)
+      description: |
+        Send a message as a guest user. Limited to 4 messages per 24 hours.
+        Uses cookie-based session tracking.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestChatRequest'
+      responses:
+        '200':
+          description: Streaming response
+          headers:
+            X-Guest-Message-Count:
+              schema:
+                type: integer
+            X-Guest-Message-Limit:
+              schema:
+                type: integer
+        '429':
+          description: Guest quota exceeded
+
+  /api/guest/status:
+    get:
+      tags: [Guest]
+      summary: Get guest quota status
+      responses:
+        '200':
+          description: Guest status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestStatus'
+
+  /api/memory:
+    get:
+      tags: [Memory]
+      summary: Get user memory
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User memory entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemoryResponse'
+    delete:
+      tags: [Memory]
+      summary: Delete memory entry or clear all
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: key
+          in: query
+          schema:
+            type: string
+        - name: id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Memory deleted
+
+  /api/memory/instructions:
+    put:
+      tags: [Memory]
+      summary: Set custom instructions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                instructions:
+                  type: string
+      responses:
+        '200':
+          description: Instructions updated
+
+  /api/textbooks:
+    get:
+      tags: [Textbooks]
+      summary: List user textbooks
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of textbooks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Textbook'
+
+  /api/textbooks/upload-file:
+    post:
+      tags: [Textbooks]
+      summary: Upload textbook PDF
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF file (max 500MB)
+      responses:
+        '200':
+          description: Upload accepted
+        '400':
+          description: Invalid file
+
+  /api/textbooks/{id}/status:
+    get:
+      tags: [Textbooks]
+      summary: Get textbook processing status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Processing status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [pending, processing, completed, failed]
+
+  /api/artifacts:
+    get:
+      tags: [Artifacts]
+      summary: List user artifacts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of artifacts
+    post:
+      tags: [Artifacts]
+      summary: Create artifact
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArtifactCreate'
+      responses:
+        '201':
+          description: Artifact created
+
+  /api/artifacts/{id}:
+    get:
+      tags: [Artifacts]
+      summary: Get artifact
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Artifact details
+    patch:
+      tags: [Artifacts]
+      summary: Update artifact
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Artifact updated
+    delete:
+      tags: [Artifacts]
+      summary: Delete artifact
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Artifact deleted
+
+  /api/public/artifacts/{id}:
+    get:
+      tags: [Artifacts]
+      summary: Get public artifact (no auth required)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Public artifact
+        '404':
+          description: Artifact not found or not public
+
+  /api/study/flashcards/due:
+    get:
+      tags: [Study]
+      summary: Get due flashcards
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Due flashcards
+
+  /api/study/flashcards/review:
+    post:
+      tags: [Study]
+      summary: Review flashcard
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                cardId:
+                  type: string
+                quality:
+                  type: integer
+                  minimum: 0
+                  maximum: 5
+      responses:
+        '200':
+          description: Review recorded
+
+  /api/analytics/user-dashboard:
+    get:
+      tags: [Analytics]
+      summary: Get user analytics dashboard
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User analytics
+
+  /api/moderation/check:
+    post:
+      tags: [Moderation]
+      summary: Check content for moderation issues
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  maxLength: 50000
+      responses:
+        '200':
+          description: Moderation result
+
+  /api/tools/execute:
+    post:
+      tags: [Tools]
+      summary: Execute AI tool
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tool:
+                  type: string
+                args:
+                  type: object
+      responses:
+        '200':
+          description: Tool execution result
+
+  /api/voice/agent/session:
+    post:
+      tags: [Voice]
+      summary: Create voice agent session
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Voice session created
+
+  /api/tts:
+    post:
+      tags: [Voice]
+      summary: Text-to-speech synthesis
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+                voiceId:
+                  type: string
+      responses:
+        '200':
+          description: Audio stream
+
+  /api/proxy/image:
+    get:
+      tags: [Chat]
+      summary: Proxy external image
+      description: SSRF-protected image proxy for external URLs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+      responses:
+        '200':
+          description: Proxied image
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supabase JWT token
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        uptimeSeconds:
+          type: integer
+        latencyMs:
+          type: integer
+        services:
+          type: object
+          properties:
+            redis:
+              type: string
+              enum: [ok, degraded, unavailable]
+            bm25:
+              type: object
+              properties:
+                status:
+                  type: string
+                totalDocs:
+                  type: integer
+            aiProviders:
+              type: object
+              properties:
+                available:
+                  type: array
+                  items:
+                    type: string
+                count:
+                  type: integer
+
+    ChatRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: [user, assistant]
+              content:
+                type: string
+        selectedModel:
+          type: string
+          description: AI model identifier
+        selectedEffort:
+          type: string
+          enum: [low, medium, high]
+        ragEnabled:
+          type: boolean
+        threadId:
+          type: string
+        courseId:
+          type: string
+
+    GuestChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        conversationHistory:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: [user, assistant]
+              content:
+                type: string
+                maxLength: 10000
+
+    GuestStatus:
+      type: object
+      properties:
+        messageCount:
+          type: integer
+        messageLimit:
+          type: integer
+        retryAfter:
+          type: string
+          format: date-time
+
+    MemoryResponse:
+      type: object
+      properties:
+        memory:
+          type: object
+          additionalProperties:
+            type: string
+        customInstructions:
+          type: string
+
+    Textbook:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        createdAt:
+          type: string
+          format: date-time
+
+    ArtifactCreate:
+      type: object
+      required: [title, content, type]
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        type:
+          type: string
+          enum: [code, html, markdown, chart, mermaid]
+        visibility:
+          type: string
+          enum: [private, public]
+          default: private
