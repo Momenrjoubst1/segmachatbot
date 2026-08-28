@@ -100,6 +100,10 @@ const ABUSE_PATTERNS: ReadonlyArray<PatternRule> = [
   { pattern: /\s{500,}/, severity: 'medium', desc: 'Excessive whitespace (potential token bombing)' },
   // Repetitive content
   { pattern: /(.{50,})\1{5,}/i, severity: 'medium', desc: 'Repetitive content flooding' },
+  // Excessive emoji/special chars (common in spam)
+  { pattern: /[\u{1F600}-\u{1F64F}]{20,}/u, severity: 'low', desc: 'Excessive emoji spam' },
+  // Repeated special characters
+  { pattern: /[!?._-]{50,}/, severity: 'low', desc: 'Excessive special characters' },
 ];
 
 // ==========================================
@@ -183,8 +187,8 @@ class InputValidationService {
     issues.push(...abuseIssues);
     riskScore += abuseIssues.length * 20;
 
-    // 5. Profanity (best-effort, lazy)
-    if (enableModeration && message.length < 5000) {
+    // 5. Profanity (best-effort, lazy) — extended to 20K chars for better coverage
+    if (enableModeration && message.length < 20_000) {
       const profanity = await this.checkProfanity(message);
       if (profanity.flagged) {
         sanitizedMessage = profanity.cleaned ?? message;
