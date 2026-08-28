@@ -129,3 +129,11 @@
 - WS JWT via query string: works; move to first-frame auth when the voice stack is next touched.
 - Vite chunks >1MB (index 1.5MB): vendor already split; further app-code splitting is a perf project, not a blocker.
 - Local pdf-processor venv on Windows can't load PyMuPDF (machine missing the standard VC++ 2015–2022 runtime — only _clr0400 variants present). Install `vc_redist.x64` from Microsoft to restore local pytest; CI now covers the tests on clean Ubuntu regardless.
+
+### Follow-up pass (same day, evening)
+
+| Item | Outcome |
+|------|---------|
+| Leaked-password protection | **Plan-gated**: Management API returns 402 "available on Pro Plans and up" — project is on Free. Enable after upgrading, or ignore. Compensating control applied instead: `password_min_length` raised **6 → 8** via Management API (verified). |
+| react-router | **Upgraded 6.30.3 → 7.18.3**. App uses library-mode APIs only and had the v7 future-flags already enabled, so migration was one line (drop the now-invalid `future` prop). Audit: frontend production deps now **0 vulnerabilities**. Typecheck + 556/556 tests green. |
+| Extension schema move (vector/pg_trgm out of public) | **Closed with evidence, not moved.** The advisor's shadowing vector requires CREATE on schema public — verified `has_schema_privilege(...,'CREATE') = false` for anon/authenticated/service_role. Additionally, no database role's search_path includes `extensions`, so the move would have required touching role settings + every RPC's search_path on a live DB serving chat traffic. Risk/benefit says: keep, revisit only if CREATE privilege is ever granted on public. |
