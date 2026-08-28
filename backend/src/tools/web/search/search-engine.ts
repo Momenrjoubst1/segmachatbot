@@ -2,6 +2,9 @@ import axios from "axios";
 import crypto from "crypto";
 import redis from "../../../config/redis/client.js";
 import { circuitBreakerRegistry } from "../../../utils/circuit-breaker.js";
+import { createLogger } from "../../../utils/logger.js";
+
+const log = createLogger("web-search");
 
 export interface WebSearchResult {
   title: string;
@@ -137,13 +140,13 @@ export async function searchWeb(query: string, count: number = 5): Promise<WebSe
       }
     } catch (error) {
       lastError = error as Error;
-      console.warn(`Web search provider ${provider.name} failed, trying next provider`, { error: lastError.message });
+      log.warn(`Web search provider ${provider.name} failed, trying next provider`, { error: lastError.message });
     }
   }
 
   // All providers failed
   if (lastError) {
-    console.error('All web search providers failed', { error: lastError.message });
+    log.error('All web search providers failed', { error: lastError.message });
   }
   return [];
 }

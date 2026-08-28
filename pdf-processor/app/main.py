@@ -6,6 +6,7 @@ import os
 import re
 import tempfile
 from urllib.parse import urlparse, urlunparse
+import logging
 
 import boto3
 import fitz
@@ -145,6 +146,13 @@ def _report_progress(textbook_id: str, stage: str, done: int, total: int) -> Non
 # Security and limits
 PDF_PROCESSOR_TOKEN = os.environ.get("PDF_PROCESSOR_TOKEN", "")
 MAX_PAGES = int(os.environ.get("PDF_MAX_PAGES", "800"))
+
+if not PDF_PROCESSOR_TOKEN:
+    logging.getLogger("uvicorn.error").warning(
+        "PDF_PROCESSOR_TOKEN is not set — endpoints accept UNAUTHENTICATED "
+        "requests. Set the shared token, and keep this service bound to "
+        "loopback / the internal compose network only."
+    )
 UUID_REGEX = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
 )

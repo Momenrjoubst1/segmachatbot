@@ -67,3 +67,22 @@ jobs:
       - name: Run tests
         working-directory: frontend
         run: npm test
+
+  pdf-processor-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pdf-processor/requirements.txt
+
+      - name: Install dependencies
+        working-directory: pdf-processor
+        run: pip install -r requirements.txt pytest httpx
+
+      - name: Run tests
+        working-directory: pdf-processor
+        run: python -m pytest tests/ -q

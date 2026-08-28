@@ -64,3 +64,19 @@ ORDER BY version;
 - **CONCURRENTLY**: If your migration uses `CREATE INDEX CONCURRENTLY`, the script will run it outside a transaction automatically (detected by keyword).
 - **Idempotency**: Use `IF NOT EXISTS` / `IF EXISTS` in your migrations so they can be safely re-run.
 - **full_schema.sql**: This is updated manually to reflect the current state after all migrations. It's a reference, not a migration.
+
+## Known Gaps & Drift (documented 2026-08-28)
+
+- **003 and 026 do not exist.** The numbers were skipped historically; do not
+  reuse them. Next free number is listed by `ls migrations/ | tail -1`.
+- **The live database predates this runner.** There is no `schema_migrations`
+  table in the live project — it was built by applying `full_schema.sql`
+  (and later changes) manually. Consequences:
+  - Do NOT point `npm run db:migrate` at the live DB without baselining
+    first: the runner would try to apply every numbered migration from 001.
+  - Migrations 033/034/035 are **drift-repair** migrations: they reproduce the
+    live security posture (RLS on chat/memory/ban/orphan tables, re-scoped
+    service-role policies, user-scoped `match_documents`) in the numbered
+    chain. They are idempotent and have been applied to the live DB.
+- **`full_schema.sql` is a reference, not applied** (see above). Migrations
+  033+ are now the canonical source for the policies it describes.

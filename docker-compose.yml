@@ -91,6 +91,10 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      # Shared secret the backend sends as a Bearer header. Set it in the
+      # root .env — without it the service accepts unauthenticated calls
+      # (safe only because it is loopback-bound / internal-network only).
+      - PDF_PROCESSOR_TOKEN=${PDF_PROCESSOR_TOKEN:-}
       - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}
       - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
       - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
