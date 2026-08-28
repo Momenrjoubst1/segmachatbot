@@ -1,3 +1,5 @@
+// Textbook search: chunk search, figure retrieval, context enrichment.
+
 import { supabase } from "../../config/supabase.config.js";
 import { createLogger } from "../../utils/logger.js";
 import { presignR2Get, extractR2KeyFromUrl, isR2Configured } from "./r2-client.js";
@@ -5,375 +7,9 @@ import { TEXTBOOK_CONFIG, RERANKER_CONFIG } from "../../config/constants.js";
 
 const log = createLogger("textbook-search");
 
-const CACHE_TTL_MS = 5 * 60 * 1000;
-const CACHE_MAX_SIZE = 100;
-
-class LRUCache<K, V> {
-  private cache = new Map<K, { value: V; expiry: number }>();
-  private maxSize: number;
-  private ttl: number;
-
-  constructor(maxSize: number, ttl: number) {
-    this.maxSize = maxSize;
-    this.ttl = ttl;
-  }
-
-  get(key: K): V | undefined {
-    const entry = this.cache.get(key);
-    if (!entry) return undefined;
-    if (entry.expiry < Date.now()) {
-      this.cache.delete(key);
-      return undefined;
-    }
-    // Move to end (most recently used)
-    this.cache.delete(key);
-    this.cache.set(key, entry);
-    return entry.value;
-  }
-
-  set(key: K, value: V): void {
-    if (this.cache.has(key)) {
-      this.cache.delete(key);
-    } else if (this.cache.size >= this.maxSize) {
-      // Delete oldest (first entry)
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey !== undefined) {
-        this.cache.delete(firstKey);
-      }
-    }
-    this.cache.set(key, { value, expiry: Date.now() + this.ttl });
-  }
-
-  delete(key: K): void {
-    this.cache.delete(key);
-  }
-}
-
-const structureCache = new LRUCache<string, Array<{ id: string; level?: string; title?: string; page_start?: number; page_end?: number; textbook_id?: string; children?: unknown[] }>>(CACHE_MAX_SIZE, CACHE_TTL_MS);
-const curriculumCache = new LRUCache<string, Array<{ id: string; level: string; title: string; page_start: number; page_end: number; textbook_id?: string }>>(CACHE_MAX_SIZE, CACHE_TTL_MS);
-const sectionEmbeddingCache = new LRUCache<string, Map<string, number[]>>(CACHE_MAX_SIZE, CACHE_TTL_MS);
-
-export function invalidateStructureCache(userId: string): void {
-  structureCache.delete(`structure:${userId}`);
-  curriculumCache.delete(`curriculum:${userId}`);
-}
-
-interface StructureNode {
-  level: string;
-  title: string;
-  page_start: number;
-  page_end: number;
-  children?: StructureNode[];
-}
-
-interface MatchResult {
-  matched: boolean;
-  textbook_id: string;
-  section_title: string;
-  page_start: number;
-  page_end: number;
-  ambiguous: boolean;
-  candidates?: string[];
-}
-
-function fuzzyMatch(query: string, title: string): number {
-  const q = query.toLowerCase().trim();
-  const t = title.toLowerCase().trim();
-
-  if (t.includes(q) || q.includes(t)) return 1.0;
-
-  const qWords = q.split(/\s+/);
-  const tWords = t.split(/\s+/);
-  let matches = 0;
-  for (const qw of qWords) {
-    for (const tw of tWords) {
-      if (tw.includes(qw) || qw.includes(tw)) {
-        matches++;
-        break;
-      }
-    }
-  }
-  return qWords.length > 0 ? matches / qWords.length : 0;
-}
-
-function matchTreeRecursive(
-  node: StructureNode,
-  query: string,
-  textbookId: string
-): Array<{ score: number; section: MatchResult }> {
-  const results: Array<{ score: number; section: MatchResult }> = [];
-
-  if (node.level !== "root" && node.level !== "content") {
-    const score = fuzzyMatch(query, node.title);
-    results.push({
-      score,
-      section: {
-        matched: true,
-        textbook_id: textbookId,
-        section_title: node.title,
-        page_start: node.page_start,
-        page_end: node.page_end,
-        ambiguous: false,
-      },
-    });
-  }
-
-  if (node.children) {
-    for (const child of node.children) {
-      results.push(...matchTreeRecursive(child, query, textbookId));
-    }
-  }
-
-  return results;
-}
-
-export async function matchStructureTree(
-  userId: string,
-  question: string
-): Promise<MatchResult | null> {
-  const cacheKey = `structure:${userId}`;
-  const cached = structureCache.get(cacheKey);
-
-  let textbooks;
-  if (cached) {
-    textbooks = cached;
-  } else {
-    const { data } = await supabase
-      .from("textbooks")
-      .select("id, structure_tree")
-      .eq("user_id", userId)
-      .eq("status", "completed");
-    textbooks = data || [];
-    structureCache.set(cacheKey, textbooks);
-  }
-
-  if (!textbooks || textbooks.length === 0) return null;
-
-  let bestMatch: MatchResult | null = null;
-  let bestScore = 0;
-
-  for (const textbook of textbooks) {
-    const tree = (textbook as unknown as { structure_tree?: StructureNode }).structure_tree;
-    if (!tree || !tree.children) continue;
-
-    const matches = matchTreeRecursive(tree, question, textbook.id);
-
-    for (const { score, section } of matches) {
-      if (score > bestScore) {
-        bestScore = score;
-        bestMatch = { ...section };
-      } else if (score === bestScore && score > 0.3 && bestMatch) {
-        if (!bestMatch.candidates) {
-          bestMatch.candidates = [bestMatch.section_title];
-        }
-        bestMatch.candidates.push(section.section_title);
-        bestMatch.ambiguous = true;
-      }
-    }
-  }
-
-  if (bestScore < 0.3) {
-    return {
-      matched: false,
-      textbook_id: "",
-      section_title: "",
-      page_start: 0,
-      page_end: 0,
-      ambiguous: false,
-    };
-  }
-
-  return bestMatch;
-}
-
-/**
- * Match the query against the inferred CURRICULUM map (textbook_sections:
- * units and lessons with exact page ranges). Preferred over the raw
- * structure tree — lesson boundaries come from merged evidence, not font
- * sizes alone.
- */
-export async function matchCurriculumSection(
-  userId: string,
-  question: string
-): Promise<MatchResult | null> {
-  const cacheKey = `curriculum:${userId}`;
-  let sections = curriculumCache.get(cacheKey);
-
-  if (!sections) {
-    const { data } = await supabase
-      .from("textbook_sections")
-      .select(
-        `id, level, title, page_start, page_end, textbooks!inner (id, user_id, status)`
-      )
-      .eq("level", "lesson")
-      .eq("textbooks.user_id", userId)
-      .eq("textbooks.status", "completed")
-      .order("order_index");
-    sections = (data || []).map((row: Record<string, unknown>) => ({
-      id: row.id as string,
-      level: row.level as string,
-      title: row.title as string,
-      page_start: row.page_start as number,
-      page_end: row.page_end as number,
-      textbook_id: (row.textbooks as { id?: string })?.id || "",
-    })) as NonNullable<typeof sections>;
-    curriculumCache.set(cacheKey, sections as NonNullable<typeof sections>);
-  }
-
-  if (!sections || sections.length === 0) return null;
-
-  let bestMatch: MatchResult | null = null;
-  let bestScore = 0;
-
-  for (const section of sections) {
-    const score = fuzzyMatch(question, section.title);
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = {
-        matched: true,
-        textbook_id: section.textbook_id || "",
-        section_title: section.title,
-        page_start: section.page_start,
-        page_end: section.page_end,
-        ambiguous: false,
-      };
-    } else if (score === bestScore && score > 0.3 && bestMatch) {
-      if (!bestMatch.candidates) {
-        bestMatch.candidates = [bestMatch.section_title];
-      }
-      bestMatch.candidates.push(section.title);
-      bestMatch.ambiguous = true;
-    }
-  }
-
-  if (bestScore < 0.3) {
-    return {
-      matched: false,
-      textbook_id: "",
-      section_title: "",
-      page_start: 0,
-      page_end: 0,
-      ambiguous: false,
-    };
-  }
-
-  return bestMatch;
-}
-
-/**
- * Cosine similarity for embedding vectors (assumes normalized vectors).
- */
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-  let dot = 0;
-  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
-  return dot;
-}
-
-/**
- * Semantic matching of curriculum sections using embeddings.
- * Computes or reuses cached embeddings for section titles, then finds
- * the best match via cosine similarity. Falls back to fuzzy matching
- * if embedding generation fails.
- */
-export async function matchCurriculumSectionSemantic(
-  userId: string,
-  question: string,
-  queryEmbedding: number[]
-): Promise<MatchResult | null> {
-  const cacheKey = `curriculum:${userId}`;
-  let sections = curriculumCache.get(cacheKey);
-
-  if (!sections) {
-    const { data } = await supabase
-      .from("textbook_sections")
-      .select(
-        `id, level, title, page_start, page_end, textbooks!inner (id, user_id, status)`
-      )
-      .eq("level", "lesson")
-      .eq("textbooks.user_id", userId)
-      .eq("textbooks.status", "completed")
-      .order("order_index");
-    sections = (data || []).map((row: Record<string, unknown>) => ({
-      id: row.id as string,
-      level: row.level as string,
-      title: row.title as string,
-      page_start: row.page_start as number,
-      page_end: row.page_end as number,
-      textbook_id: (row.textbooks as { id?: string })?.id || "",
-    })) as NonNullable<typeof sections>;
-    curriculumCache.set(cacheKey, sections as NonNullable<typeof sections>);
-  }
-
-  if (!sections || sections.length === 0) return null;
-
-  // Get or compute section title embeddings
-  const embCacheKey = `embeddings:${userId}`;
-  let titleEmbeddings = sectionEmbeddingCache.get(embCacheKey);
-  if (!titleEmbeddings) {
-    try {
-      const { generateEmbeddings } = await import("../rag/embedding-service.js");
-      const titles = sections.map((s) => s.title);
-      const embeddings = await generateEmbeddings(titles);
-      if (embeddings && embeddings.length === titles.length) {
-        const map = new Map<string, number[]>();
-        sections.forEach((s, i) => map.set(s.id, embeddings[i]));
-        titleEmbeddings = map;
-        sectionEmbeddingCache.set(embCacheKey, map);
-      }
-    } catch (err) {
-      log.warn("Semantic matching: embedding generation failed, falling back to fuzzy", {
-        error: (err as Error).message,
-      });
-    }
-  }
-
-  let bestMatch: MatchResult | null = null;
-  let bestScore = 0;
-
-  for (const section of sections) {
-    // Combine fuzzy (0..1) + semantic (0..1) with weights
-    const fuzzyScore = fuzzyMatch(question, section.title);
-    let semanticScore = 0;
-    if (titleEmbeddings) {
-      const emb = titleEmbeddings.get(section.id);
-      if (emb) semanticScore = Math.max(0, cosineSimilarity(queryEmbedding, emb));
-    }
-    // Weighted: 40% fuzzy, 60% semantic (semantic more robust for paraphrases)
-    const score = 0.4 * fuzzyScore + 0.6 * semanticScore;
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = {
-        matched: true,
-        textbook_id: section.textbook_id || "",
-        section_title: section.title,
-        page_start: section.page_start,
-        page_end: section.page_end,
-        ambiguous: false,
-      };
-    } else if (score === bestScore && score > 0.3 && bestMatch) {
-      if (!bestMatch.candidates) {
-        bestMatch.candidates = [bestMatch.section_title];
-      }
-      bestMatch.candidates.push(section.title);
-      bestMatch.ambiguous = true;
-    }
-  }
-
-  if (bestScore < 0.3) {
-    return {
-      matched: false,
-      textbook_id: "",
-      section_title: "",
-      page_start: 0,
-      page_end: 0,
-      ambiguous: false,
-    };
-  }
-
-  return bestMatch;
-}
+export { invalidateStructureCache } from "./textbook-cache.js";
+export type { MatchResult } from "./textbook-matching.js";
+export { matchStructureTree, matchCurriculumSection, matchCurriculumSectionSemantic, fuzzyMatch } from "./textbook-matching.js";
 
 export async function searchTextbookChunks(args: {
   userId: string;
@@ -394,9 +30,6 @@ export async function searchTextbookChunks(args: {
   const { userId, textbookId, query, queryEmbedding, pageStart, pageEnd, matchCount = 10 } = args;
   const matchThreshold = TEXTBOOK_CONFIG.MATCH_THRESHOLD;
 
-  // ── Late-interaction: two-layer retrieval ────────────────────────────
-  // Layer 1: match page summaries (high recall, coarse page selection)
-  // Layer 2: hybrid search only within matched pages (precise chunks)
   let effectivePageStart = pageStart;
   let effectivePageEnd = pageEnd;
 
@@ -423,7 +56,7 @@ export async function searchTextbookChunks(args: {
         });
       }
     } catch {
-      // Page summaries table may not exist yet — fall back to unfiltered search
+      // Page summaries table may not exist yet
     }
   }
 
@@ -481,9 +114,6 @@ export async function searchTextbookChunks(args: {
 
   let results = (vectorData as unknown[]) || [];
 
-  // Cross-encoder reranking: re-score top candidates with a learned model
-  // (Cohere rerank-multilingual-v3.0 or token-overlap fallback).  This
-  // typically improves top-5 recall by 10-25% on educational QA benchmarks.
   if (RERANKER_CONFIG.ENABLE_TEXTBOOK_RERANK && results.length > 2) {
     try {
       const { rerankDocuments } = await import("../rag/document-reranker.js");
@@ -549,8 +179,6 @@ export async function getFiguresForChunks(
     data.map(async (fig: { image_url?: string; [key: string]: unknown }) => {
       const imageUrl: string = fig.image_url || "";
 
-      // R2 figures: stored either as a bare object key ("textbooks/…") or as
-      // a legacy public URL — always served via a short-lived presigned URL.
       const r2Key = imageUrl.startsWith("textbooks/")
         ? imageUrl
         : extractR2KeyFromUrl(imageUrl);
@@ -561,7 +189,6 @@ export async function getFiguresForChunks(
         }
       }
 
-      // Supabase storage figures: 1-hour signed URL (private bucket).
       const storageMatch = imageUrl.match(/textbook-images\/(.+)$/);
       if (storageMatch) {
         const storagePath = decodeURIComponent(storageMatch[1]);
@@ -624,9 +251,6 @@ export async function searchTextbooksForUser(args: {
     similarity: number;
   }> = [];
 
-  // Parallelise across textbooks — each search is independent and the RPC
-  // returns empty results for textbooks with no chunks, so the per-book
-  // "has chunks?" pre-check is unnecessary (saves N round-trips).
   const perBookLimit = Math.ceil(matchCount / textbooks.length);
 
   const bookResults = await Promise.allSettled(
@@ -663,13 +287,6 @@ export async function searchTextbooksForUser(args: {
   return allResults.slice(0, matchCount);
 }
 
-/**
- * Enrich retrieved chunks with hierarchical parent-context: section title,
- * preceding context paragraph, and figure captions from the same page.
- *
- * This gives the LLM the "frame, not just the fragment" — the section heading
- * and surrounding narrative that a human would see when reading the page.
- */
 export async function enrichChunksWithContext(
   chunks: Array<{
     id: number; content: string; page_number: number;
@@ -686,7 +303,6 @@ export async function enrichChunksWithContext(
   type EnrichedChunk = typeof chunks[number] & { context_header?: string };
   const enriched: EnrichedChunk[] = chunks.map((c) => ({ ...c }));
 
-  // 1. Fetch section titles for unique structure_paths
   const uniquePaths = [...new Set(chunks.map((c) => c.structure_path).filter(Boolean))];
   const sectionTitles = new Map<string, string>();
 
@@ -704,7 +320,6 @@ export async function enrichChunksWithContext(
     }
   }
 
-  // 2. Fetch figures for unique pages
   const uniquePages = [...new Set(chunks.map((c) => c.page_number))];
   const pageFigures = new Map<number, Array<{ figure_id: string; caption: string }>>();
 
@@ -724,20 +339,17 @@ export async function enrichChunksWithContext(
     }
   }
 
-  // 3. Build enriched chunks with context headers
   for (const chunk of enriched) {
     const parts: string[] = [];
 
-    // Section heading
     const sectionTitle = sectionTitles.get(chunk.structure_path);
     if (sectionTitle) {
       parts.push(`[Section: ${sectionTitle}]`);
     }
 
-    // Figure captions from the same page (even if not explicitly referenced)
     const pageFigs = pageFigures.get(chunk.page_number);
     if (pageFigs && pageFigs.length > 0) {
-      for (const fig of pageFigs.slice(0, 3)) { // cap at 3 figures per chunk
+      for (const fig of pageFigs.slice(0, 3)) {
         if (fig.caption) {
           parts.push(`[Figure ${fig.figure_id}: ${fig.caption}]`);
         }

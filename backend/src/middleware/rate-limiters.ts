@@ -1,238 +1,83 @@
 /**
- * ════════════════════════════════════════════════════════════════════════════════
- * Rate Limiters — per-endpoint rate limiting
+ * Rate Limiters — Provider-Agnostic Implementation
+ * محددات المعدل — تنفيذ مستقل عن المزوّدين
  *
- * By default, limiters use in-memory storage.
- * Set RATE_LIMIT_STORE=redis to enable RedisStore counters shared
- * across server restarts / instances.
+ * This module defines all rate limiters using IRateLimitStore interface.
+ * Stores can be swapped (Redis → Memory, Memcached, etc.) without changing
+ * the limiters themselves.
  *
- * ┌──────────────────────────┬────────┬─────────┬──────────────────────────────┐
- * │ Endpoint                 │ Window │ Max     │ Purpose                      │
- * ├──────────────────────────┼────────┼─────────┼──────────────────────────────┤
- * │ /api/livekit-token       │ 15 min │ 10      │ Prevent LiveKit quota drain  │
- * │ /api/agent/start|stop    │ 5 min  │ 3       │ Prevent agent spam           │
- * │ /api/moderation/report   │ 10 min │ 5       │ Prevent fake mass reports    │
- * │ /api/moderation/*-text   │ 1 min  │ 60      │ Prevent Perspective API drain│
- * │ All other routes         │ 1 min  │ 100     │ General DDoS protection      │
- * └──────────────────────────┴────────┴─────────┴──────────────────────────────┘
- * ════════════════════════════════════════════════════════════════════════════════
+ * Architecture:
+ *   IRateLimitStore (Redis or Memory) → express-rate-limit → Express middleware
+ *
+ * Usage:
+ *   import { globalLimiter, guestIpLimiter } from './middleware/rate-limiters.js';
+ *   app.use(globalLimiter);
  */
 
-import rateLimit, { Store, Options, ClientRateLimitInfo, ipKeyGenerator } from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import type { IRateLimitStore } from './rate-limiting/rate-limit.types.js';
+import { createRedisSlidingWindowStore } from './rate-limiting/sliding-window-redis.js';
+import { createMemoryRateLimitStore } from './rate-limiting/memory-store.js';
 import redis from '../config/redis/client.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('rate-limiter');
+
+// ==========================================
+// Store Initialization
+// ==========================================
+
 const useRedisStore = process.env.RATE_LIMIT_STORE === 'redis';
-const fallbackCounters = new Map<
-  string,
-  {
-    hits: number;
-    resetTimeMs: number;
-    timeout: ReturnType<typeof setTimeout>;
-  }
->();
-const FALLBACK_COUNTERS_MAX_SIZE = 10_000;
-
-// Periodic cleanup interval for fallback counters
-let cleanupInterval: NodeJS.Timeout | null = null;
 
 /**
- * Cleanup stale entries from fallbackCounters
- * Called periodically to prevent memory leaks
+ * Create a rate limit store based on environment configuration.
+ * This is the only place that knows about Redis/Memory.
  */
-function cleanupStaleCounters(): void {
-  const now = Date.now();
-  let cleaned = 0;
-  
-  for (const [key, data] of fallbackCounters.entries()) {
-    if (data.resetTimeMs <= now) {
-      clearTimeout(data.timeout);
-      fallbackCounters.delete(key);
-      cleaned++;
-    }
+function createStore(prefix: string): IRateLimitStore {
+  if (useRedisStore) {
+    log.debug(`Creating Redis store for prefix: ${prefix}`);
+    return createRedisSlidingWindowStore({ client: redis, prefix });
   }
-  
-  if (cleaned > 0) {
-    log.debug(`Cleaned ${cleaned} stale fallback counter entries`);
-  }
+  log.debug(`Creating Memory store for prefix: ${prefix}`);
+  return createMemoryRateLimitStore({ prefix });
 }
 
-/**
- * Start periodic cleanup of fallback counters
- */
-function startCleanupInterval(): void {
-  if (cleanupInterval) return;
-  
-  // Run cleanup every 5 minutes
-  cleanupInterval = setInterval(cleanupStaleCounters, 5 * 60 * 1000);
-  log.info('Started fallback counter cleanup interval');
+// ==========================================
+// Helper: create limiter with store
+// ==========================================
+
+interface LimiterConfig {
+  windowMs: number;
+  max: number;
+  prefix: string;
+  message: Record<string, unknown>;
+  keyGenerator?: (req: { user?: { id?: string }; ip?: string }) => string;
 }
 
-/**
- * Stop periodic cleanup
- */
-function stopCleanupInterval(): void {
-  if (cleanupInterval) {
-    clearInterval(cleanupInterval);
-    cleanupInterval = null;
-    log.info('Stopped fallback counter cleanup interval');
-  }
-}
+function createLimiter(config: LimiterConfig) {
+  const { windowMs, max, prefix, message, keyGenerator } = config;
 
-// Start cleanup interval when module loads
-startCleanupInterval();
-
-// Cleanup on process exit
-if (typeof process !== 'undefined') {
-  process.on('beforeExit', () => {
-    stopCleanupInterval();
-    // Clear all timeouts
-    for (const [, data] of fallbackCounters.entries()) {
-      clearTimeout(data.timeout);
-    }
-    fallbackCounters.clear();
+  return rateLimit({
+    windowMs,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    store: createStore(prefix),
+    passOnStoreError: true,
+    message,
+    ...(keyGenerator ? { keyGenerator } : {}),
   });
 }
 
-/**
- * Sliding Window Log Redis Store
- * Uses Redis Sorted Sets (ZSET) and a custom Lua script to ensure atomicity.
- * It records the timestamp of every request, enabling a perfectly smooth
- * rolling window and eliminating the start-of-minute bursts allowed by fixed windows.
- */
-class SlidingWindowRedisStore implements Store {
-  private redisClient: typeof redis;
-  public prefix: string;
-  public windowMs!: number;
+// ==========================================
+// Rate Limiters
+// ==========================================
 
-  constructor(client: typeof redis, prefix: string) {
-    this.redisClient = client;
-    this.prefix = prefix;
-    // Lua script is defined once at module scope (see below the class definition)
-  }
-
-  init(options: Options): void {
-    this.windowMs = options.windowMs;
-  }
-
-  async increment(key: string): Promise<ClientRateLimitInfo> {
-    const now = Date.now();
-    const member = `${now}-${Math.random().toString(36).substring(2)}`;
-
-    try {
-      const result = await this.redisClient.slidingWindowRateLimit(
-        this.prefix + key,
-        now,
-        this.windowMs,
-        member
-      );
-
-      const [totalHits, resetTimeMs] = result as [number, number];
-      return {
-        totalHits,
-        resetTime: new Date(resetTimeMs)
-      };
-    } catch (error) {
-      log.error('Redis Rate Limit Error, falling back to in-memory logic', { error });
-      const fallbackKey = `fallback_rl_${this.prefix}${key}`;
-      const existing = fallbackCounters.get(fallbackKey);
-
-      if (existing && existing.resetTimeMs > now) {
-        existing.hits += 1;
-        return {
-          totalHits: existing.hits,
-          resetTime: new Date(existing.resetTimeMs)
-        };
-      }
-
-      if (existing) {
-        clearTimeout(existing.timeout);
-      }
-
-      // Evict oldest entries if at capacity to prevent unbounded memory growth
-      if (fallbackCounters.size >= FALLBACK_COUNTERS_MAX_SIZE) {
-        const nowMs = Date.now();
-        let evicted = 0;
-        for (const [k, v] of fallbackCounters) {
-          if (v.resetTimeMs <= nowMs) {
-            clearTimeout(v.timeout);
-            fallbackCounters.delete(k);
-            evicted++;
-            if (fallbackCounters.size < FALLBACK_COUNTERS_MAX_SIZE * 0.8) break;
-          }
-        }
-        log.debug(`Evicted ${evicted} expired fallback counter entries`);
-      }
-
-      const resetTimeMs = now + this.windowMs;
-      const timeout = setTimeout(() => fallbackCounters.delete(fallbackKey), this.windowMs);
-      fallbackCounters.set(fallbackKey, { hits: 1, resetTimeMs, timeout });
-
-      return {
-        totalHits: 1,
-        resetTime: new Date(resetTimeMs)
-      };
-    }
-  }
-
-  async decrement(_key: string): Promise<void> {
-    // Optionally implement decrement if needed, but usually not strictly required for basic rate limiting
-  }
-
-  async resetKey(key: string): Promise<void> {
-    const fallbackKey = `fallback_rl_${this.prefix}${key}`;
-    const existing = fallbackCounters.get(fallbackKey);
-    if (existing) {
-      clearTimeout(existing.timeout);
-      fallbackCounters.delete(fallbackKey);
-    }
-    await this.redisClient.del(this.prefix + key);
-  }
-}
-
-function optionalStore(prefix: string): { store?: Store } {
-  if (!useRedisStore) return {};
-  return { store: new SlidingWindowRedisStore(redis, prefix) };
-}
-
-// Define atomic Lua script on the Redis client once at module load.
-// Previously this was inside the SlidingWindowRedisStore constructor, causing
-// defineCommand to be called 7+ times (once per rate limiter). ioredis does
-// not prevent re-defining a command on the same client.
-redis.defineCommand('slidingWindowRateLimit', {
-  numberOfKeys: 1,
-  lua: `
-    local key = KEYS[1]
-    local now = tonumber(ARGV[1])
-    local window = tonumber(ARGV[2])
-    local member = ARGV[3]
-
-    local clearBefore = now - window
-    redis.call('ZREMRANGEBYSCORE', key, "-inf", clearBefore)
-    redis.call('ZADD', key, now, member)
-    redis.call('PEXPIRE', key, window)
-
-    local currentHits = redis.call('ZCARD', key)
-
-    local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
-    local oldestScore = now
-    if oldest and oldest[2] then
-      oldestScore = tonumber(oldest[2])
-    end
-
-    return { currentHits, oldestScore + window }
-  `
-});
-
-// ─── 1. Global fallback — catch-all for unlisted endpoints ──────────────────
-export const globalLimiter = rateLimit({
+// Global limiter — catch-all for unlisted endpoints.
+export const globalLimiter = createLimiter({
   windowMs: 60 * 1000,       // 1 minute window
   max: 100,                  // max 100 requests per IP per minute
-  standardHeaders: true,
-  legacyHeaders: false,
-  ...optionalStore('rl:global:'),
-  passOnStoreError: true,
+  prefix: 'rl:global:',
   message: {
     error: 'too_many_requests',
     message: 'طلبات كثيرة جداً',
@@ -240,40 +85,28 @@ export const globalLimiter = rateLimit({
   },
 });
 
-// ─── 6. Health endpoint — prevent abuse of health checks ────────────────
-export const healthLimiter = rateLimit({
+// Health endpoint limiter — prevents abuse of health checks.
+export const healthLimiter = createLimiter({
   windowMs: 60 * 1000,
   max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  ...optionalStore('rl:health:'),
-  passOnStoreError: true,
+  prefix: 'rl:health:',
   message: { error: 'Too many health check requests' },
 });
 
-// ─── 2. Proxy endpoint — limit image proxy requests ────────────────────
-export const proxyLimiter = rateLimit({
+// Proxy endpoint limiter — caps image proxy requests.
+export const proxyLimiter = createLimiter({
   windowMs: 60 * 1000,
   max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  ...optionalStore('rl:proxy:'),
-  passOnStoreError: true,
+  prefix: 'rl:proxy:',
   message: { error: 'Too many proxy requests' },
   keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip || ''),
 });
 
-// ─── 7. Guest chat — IP-based limit to prevent cookie-reset abuse ─────────
-// Caps a single IP to 12 guest chat requests per hour. This closes the
-// "delete cookie → reset per-cookie counter" hole: even if a client keeps
-// generating new guest IDs, the IP-based limit still applies.
-export const guestIpLimiter = rateLimit({
+// Guest chat limiter — IP-based cap closing the cookie-reset abuse hole.
+export const guestIpLimiter = createLimiter({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 12,
-  standardHeaders: true,
-  legacyHeaders: false,
-  ...optionalStore('rl:guest-ip:'),
-  passOnStoreError: true,
+  prefix: 'rl:guest-ip:',
   message: {
     error: 'too_many_requests',
     message: 'Too many guest requests. Please try again later.',
@@ -282,17 +115,11 @@ export const guestIpLimiter = rateLimit({
   keyGenerator: (req) => ipKeyGenerator(req.ip || ''),
 });
 
-// ─── 8. Guest status — lightweight limiter for GET /api/guest/status ──────
-// The status endpoint is read-only and non-sensitive. A generous limit
-// prevents polling abuse while allowing the frontend to poll quota state
-// without hitting rate limits.
-export const guestStatusLimiter = rateLimit({
+// Guest status limiter — generous cap for the read-only /api/guest/status poll.
+export const guestStatusLimiter = createLimiter({
   windowMs: 60 * 1000, // 1 minute window
   max: 60,              // 60 requests per minute per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  ...optionalStore('rl:guest-status:'),
-  passOnStoreError: true,
+  prefix: 'rl:guest-status:',
   message: {
     error: 'too_many_requests',
     message: 'Too many requests. Please try again later.',
@@ -301,16 +128,11 @@ export const guestStatusLimiter = rateLimit({
   keyGenerator: (req) => ipKeyGenerator(req.ip || ''),
 });
 
-// ─── 9. Message feedback — prevent rating spam on POST /api/feedback/message
-// Per-user (falls back to IP for unauthenticated hits). Generous enough for
-// normal toggling across a conversation, tight enough to stop bulk writes.
-export const feedbackLimiter = rateLimit({
+// Feedback limiter — per-user cap on message feedback ratings to stop spam.
+export const feedbackLimiter = createLimiter({
   windowMs: 60 * 1000, // 1 minute window
   max: 30,             // 30 requests per minute per user
-  standardHeaders: true,
-  legacyHeaders: false,
-  ...optionalStore('rl:feedback:'),
-  passOnStoreError: true,
+  prefix: 'rl:feedback:',
   message: {
     error: 'too_many_requests',
     message: 'Too many feedback submissions. Please slow down.',
@@ -319,14 +141,11 @@ export const feedbackLimiter = rateLimit({
   keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip || ''),
 });
 
-// ─── 7. Chat attachment uploads — protect R2 storage & bandwidth ──────────
-export const uploadLimiter = rateLimit({
+// Upload limiter — protects R2 storage and bandwidth from attachment spam.
+export const uploadLimiter = createLimiter({
   windowMs: 15 * 60 * 1000, // 15 minute window
   max: 30,                  // 30 uploads per user per window
-  standardHeaders: true,
-  legacyHeaders: false,
-  ...optionalStore('rl:upload:'),
-  passOnStoreError: true,
+  prefix: 'rl:upload:',
   message: {
     error: 'too_many_requests',
     message: 'Too many file uploads. Please wait a few minutes and try again.',
@@ -334,3 +153,11 @@ export const uploadLimiter = rateLimit({
   },
   keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip || ''),
 });
+
+// ==========================================
+// Exports for backward compatibility
+// ==========================================
+
+export type { IRateLimitStore } from './rate-limiting/rate-limit.types.js';
+export { createRedisSlidingWindowStore } from './rate-limiting/sliding-window-redis.js';
+export { createMemoryRateLimitStore } from './rate-limiting/memory-store.js';

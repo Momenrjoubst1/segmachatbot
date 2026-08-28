@@ -8,7 +8,7 @@ import cors from "cors";
 import helmet from "helmet";
 
 import { appConfig, isAllowedCorsOrigin } from "./config/app.config.js";
-import { authMiddleware } from "./middleware/auth.middleware.js";
+import { authMiddleware, initDefaultAuthMiddleware } from "./middleware/auth.middleware.js";
 import { globalLimiter, healthLimiter, proxyLimiter } from "./middleware/rate-limiters.js";
 import { requestIdMiddleware } from "./middleware/request-id.js";
 import { logger, initSentry, log } from "./utils/logger.js";
@@ -36,9 +36,7 @@ import { studyRoutes } from "./routes/study.routes.js";
 import { initializeBM25FromDB } from "./services/rag/bm25-search.js";
 import { warmUpReranker } from "./services/rag/document-reranker.js";
 
-// ==========================================
-// Startup validation
-// ==========================================
+// Startup validation and config summary helpers.
 function logStartupConfigSummary(): void {
   const providersAvailable: string[] = [];
   if (process.env.AZURE_API_KEY || process.env.AZURE_OPENAI_API_KEY) providersAvailable.push("Azure");
@@ -93,14 +91,17 @@ warmUpReranker().catch((err) => {
 
 testRedisConnection();
 initializeBM25FromDB();
+
+// Initialize default auth middleware (Supabase + Redis providers)
+await initDefaultAuthMiddleware();
+log.info("Auth middleware initialized (Supabase + Redis)");
+
 logStartupConfigSummary();
 
 const app = express();
 app.set("trust proxy", appConfig.trustProxyHops);
 
-// Helmet sets: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection,
-// Referrer-Policy, Strict-Transport-Security, X-DNS-Prefetch-Control,
-// X-Download-Options, X-Permitted-Cross-Domain-Policies, Cross-Origin-*.
+// Helmet sets default security headers (content-type sniffing, framing, HSTS, referrer).
 app.use(helmet());
 app.use(requestIdMiddleware);
 
@@ -142,7 +143,14 @@ app.use("/api/voice", authMiddleware, voiceRoutes);
 app.use("/api/tools", authMiddleware, toolsRoutes);
 app.use("/api/study", authMiddleware, studyRoutes);
 
-if (process.env.NODE_ENV === "development") {
+// Dev routes: require both NODE_ENV=development AND ENABLE_DEV_ROUTES=true
+// This double-gate prevents accidental exposure in staging/production.
+const devRoutesEnabled =
+  process.env.NODE_ENV === "development" && process.env.ENABLE_DEV_ROUTES === "true";
+
+if (devRoutesEnabled) {
+  logger.info("Dev routes enabled (ENABLE_DEV_ROUTES=true)");
+
   app.post("/api/dev/reprocess/:id", authMiddleware, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
@@ -240,6 +248,13 @@ app.get("/api/health", healthLimiter, async (_req: Request, res: Response) => {
       aiProviders: { available: providers, count: providers.length },
     },
   });
+});
+
+// OpenAPI spec endpoint — serves the API documentation
+app.get("/api/docs/openapi.yaml", (_req: Request, res: Response) => {
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.setHeader("Content-Type", "text/yaml; charset=utf-8");
+  res.sendFile("openapi.yaml", { root: "../docs" });
 });
 
 app.use(

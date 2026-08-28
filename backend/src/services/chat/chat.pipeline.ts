@@ -1,33 +1,8 @@
-﻿/**
- * Chat Pipeline â€” Orchestrator
- *
- * Composes the per-step modules in `pipeline/`.  Each step has a single
- * responsibility and is independently testable; this file is just the
- * glue that wires them together.
- *
- * Steps:
- *  1. validateAndPrepareRequest      â†’ request validation
- *  2. processAndModerate              â†’ message processing + moderation
- *  3. fetchUserCoursesContext         â†’ student courses
- *  4. detectUserIntent                â†’ intent classification
- *  5. runRagPipeline                  â†’ RAG retrieval
- *  6. buildMemoryContext              â†’ memory context
- *  6b. assembleSystemPrompt           â†’ system prompt assembly
- *  7. resolveThread                   â†’ thread management
- *  8. persistLastUserMessage          â†’ persist user message
- *  9. manageContextWindow             â†’ summarisation / trimming
- * 10. runUIFastPasses                 â†’ UI action fast-passes
- *     generateAndStreamResponse       â†’ final LLM streaming
- */
+﻿// Chat pipeline orchestrator that wires the per-step modules together.
 
 import type { Request, Response } from "express";
 import { log, summarizeMessageForLog, getProviderAndModel, createProviderClient } from "../../routes/chat/chat-shared.js";
 import { generateAndStreamResponse } from "./response-generator.service.js";
-import { getToolDefinitions } from "../../tools/tool-definitions-aggregator.js";
-import { isWebSearchAvailable } from "../../tools/web/search/index.js";
-import { isEmailAvailable } from "../../tools/email/send/index.js";
-import type { ToolDefinition } from "../../tools/shared/types.js";
-import { getToolsRequiringUserId } from "../../tools/tool-metadata.js";
 import { withTimeout, TIMEOUTS } from "../../utils/timeout-wrapper.js";
 import { StepEventEmitter } from "./step-event-emitter.js";
 import { getTextbookQAModel, getVisionModel } from "./model-router.js";
@@ -46,113 +21,19 @@ import { getMediaRequirements, supportsMedia, getMediaFallbackModel, hasOversize
 import { runWithMediaRegistry } from "./media-registry.js";
 import { manageContextWindow } from "./pipeline/summarization.js";
 import { runUIFastPasses } from "./pipeline/ui-fastpass.js";
-import { injectUIActionToStream, panelOpenArtifacts } from "./ui-action-emitter.js";
 import type { CoreMessage } from "./moderation.service.js";
 
-function cleanSourceName(source?: string): string {
-  if (!source) return "Knowledge Base";
-  return source
-    .replace(/^Textbook:\s*/i, "")
-    .replace(/\.pdf$/i, "")
-    .replace(/[_-]/g, " ")
-    .trim() || "Knowledge Base";
-}
+// Extracted helper functions
+import { buildEnabledTools } from "./pipeline/tool-router.js";
+import { cleanSourceName, extractText } from "./pipeline/utils.js";
 
-/** Builds the `enabledTools` map for the response generator. Filtered by intent to prevent token overflows. */
-function buildEnabledTools(
-  userId: string,
-  intent?: string,
-  hasTextbookChunks?: boolean,
-  streamHooks?: { res?: Response; activeThreadId?: string | null },
-  webSearchEnabled = true,
-): Record<string, ToolDefinition> {
-  // Resolved per call: tool modules register their metadata during initTools(),
-  // which may run after this module is first imported.
-  const TOOLS_NEEDING_USER_ID: ReadonlySet<string> = new Set(getToolsRequiringUserId());
-  // For small talk or knowledge queries without specific tool needs, send NO tools to save tokens
-  if (intent === "small_talk") {
-    return {};
-  }
-
-  // If no specific intent detected, send a minimal tool set to stay under TPM limits
-  const isSpecificIntent = intent && intent !== "small_talk" && intent !== "general";
-
-  const enabled: Record<string, ToolDefinition> = {};
-  for (const [name, def] of Object.entries(getToolDefinitions()) as Array<[string, ToolDefinition]>) {
-    if (name === "web_search" && (!isWebSearchAvailable() || !webSearchEnabled)) continue;
-    if (name === "send_email" && !isEmailAvailable()) continue;
-
-    // Artifact tools must survive the general-intent filter: a request like
-    // "Ø§Ø¹Ù…Ù„ Ù„ÙŠ ØµÙØ­Ø© ÙˆÙŠØ¨" classifies as general but still needs them.
-    const ARTIFACT_TOOLS = new Set(["create_artifact", "update_artifact"]);
-
-    // For general queries, only send essential tools to reduce token usage
-    if (!isSpecificIntent) {
-      const ESSENTIAL_TOOLS = new Set(["get_time", "get_weather", "calculator", "web_search"]);
-      // Education tools always pass when textbook chunks are present
-      const EDUCATION_TOOLS = new Set(["record_quiz_result", "generate_flashcards"]);
-      if (!ESSENTIAL_TOOLS.has(name) && !ARTIFACT_TOOLS.has(name) && !(hasTextbookChunks && EDUCATION_TOOLS.has(name))) continue;
-    }
-
-    if (TOOLS_NEEDING_USER_ID.has(name)) {
-      // Per-request dedupe for the auto-open action below.
-      const openedArtifactIds = new Set<string>();
-      enabled[name] = {
-        ...def,
-        execute: async (args: Record<string, unknown>) => {
-          const result = await def.execute({
-            ...args,
-            __userId: userId,
-            __threadId: streamHooks?.activeThreadId ?? null,
-          });
-          // When a tool produces an artifact mid-stream, pop the artifact panel
-          // open and focus it â€” mirrors Claude's creation flow.
-          if (streamHooks?.res && typeof result === "string") {
-            try {
-              const parsed = JSON.parse(result) as { status?: string; artifact_id?: string };
-              if (
-                parsed?.status === "success" &&
-                parsed.artifact_id &&
-                !openedArtifactIds.has(parsed.artifact_id)
-              ) {
-                openedArtifactIds.add(parsed.artifact_id);
-                injectUIActionToStream(streamHooks.res, panelOpenArtifacts(parsed.artifact_id));
-              }
-            } catch {
-              // non-JSON tool results have no artifacts to focus
-            }
-          }
-          return result;
-        },
-      };
-    } else {
-      enabled[name] = def;
-    }
-  }
-  return enabled;
-}
-
-function extractText(content: CoreMessage["content"]): string {
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((p): p is { type: string; text?: string } => p?.type === "text")
-      .map((p) => p.text ?? "")
-      .join(" ");
-  }
-  return "";
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+// Public API entry point for the chat pipeline.
 
 export async function executeChatPipeline(
   req: Request,
   res: Response,
 ): Promise<void> {
-  // The media registry must span message processing AND the outbound model
-  // fetch â€” AsyncLocalStorage carries it across the whole request.
+  // Run the pipeline inside the media registry so AsyncLocalStorage spans every step.
   return runWithMediaRegistry(() => executeChatPipelineInner(req, res));
 }
 
@@ -193,12 +74,7 @@ async function executeChatPipelineInner(
     log.info("Using model", { model: modelName, provider, effort: selectedEffort });
     let client = createProviderClient(provider as Parameters<typeof createProviderClient>[0], { reasoningTap: true, effort: selectedEffort, modelName });
 
-    // ---- Step 1.5: Media capability routing ----
-    // When the conversation carries video/audio attachments, make sure the
-    // answering model ingests them natively; otherwise swap to the media
-    // fallback (Gemini) BEFORE message processing so media parts are resolved
-    // for the right target. Videos above the inline dataURL cap also route to
-    // Gemini â€” OpenRouter-compatible models cannot fetch video URLs.
+    // Step 1.5: swap to a media-capable fallback model before processing attachments
     const mediaReqs = getMediaRequirements(messages);
     if (mediaReqs.video > 0 || mediaReqs.audio > 0) {
       const oversizedVideo =
@@ -249,8 +125,7 @@ async function executeChatPipelineInner(
       }
     );
 
-    // ---- Step 4c: thread-scoped regular-file context (chat attachments
-    // the user declined to promote to materials) ----
+    // Step 4c: load thread-scoped context for attachments kept as regular files
     let threadFileContext = "";
     try {
       const { getThreadFileContext } = await import("./chat-file-router.js");
@@ -335,8 +210,7 @@ async function executeChatPipelineInner(
       }
     }
 
-    // ---- Step 5b: Textbook QA model override ----
-    // When textbook chunks are present, use a stronger model for better answers.
+    // Step 5b: switch to a stronger QA model when textbook chunks are present
     if (ragResult.hasTextbookChunks) {
       const textbookModel = getTextbookQAModel();
       if (textbookModel && textbookModel !== modelName) {
@@ -352,10 +226,7 @@ async function executeChatPipelineInner(
       }
     }
 
-    // ---- Step 5c: Vision model routing ----
-    // When the latest user message contains images, ensure the answering
-    // model accepts them natively; otherwise switch to VISION_MODEL so the
-    // image reaches the LLM instead of being degraded to a text description.
+    // Step 5c: switch to a vision-capable model when the message carries images
     if (hasImages) {
       if (!isVisionCapableModel(modelName)) {
         const visionModel = getVisionModel();
@@ -402,9 +273,7 @@ async function executeChatPipelineInner(
       detail: `${promptLength} chars in ${buildTimeMs}ms`,
     } as never);
 
-    // ---- Step 6c: Image grounding instruction ----
-    // When the student photographs a problem AND has textbook material
-    // indexed, instruct the model to prefer book-grounded solving.
+    // Step 6c: append book-grounded solving instructions for photographed questions
     const systemPromptForGeneration =
       hasImages && ragResult.hasTextbookChunks
         ? augmentedSystemPrompt +
@@ -435,9 +304,7 @@ async function executeChatPipelineInner(
     const { activeThreadId, reused } = threadResult;
     metrics.threadReused = reused;
 
-    // ---- Step 7b: chat file routing (material vs regular file) ----
-    // Intercepts PDF attachments: asks the user, promotes to the material
-    // pipeline, or binds the text to this thread. Streams a canned reply.
+    // Step 7b: intercept PDF attachments and route them as material or thread file
     try {
       const { handleChatFileFlow } = await import("./chat-file-router.js");
       const handled = await handleChatFileFlow({ userId, threadId: activeThreadId, messages: messages as Array<{ role: string; content?: string | Array<Record<string, unknown>>; parts?: Array<Record<string, unknown>> }>, res });

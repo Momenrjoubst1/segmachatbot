@@ -4,12 +4,7 @@ import request from 'supertest';
 
 process.env.RATE_LIMIT_STORE = 'memory';
 
-// ── Fake Supabase ───────────────────────────────────────────────────────────
-// The global setup mock lacks maybeSingle/order/limit/lt, so this suite ships
-// its own chainable fake. Select-chains are resolved by table + selected
-// columns; write ops (insert/update/delete) are recorded into state arrays.
-// The auth stub maps the Bearer token to req.user.id so each test gets its own
-// rate-limit bucket.
+// Chainable fake Supabase: selects resolve by table+columns, writes record into state arrays.
 const sb = vi.hoisted(() => {
   type Row = Record<string, any>;
   const state = {
@@ -59,9 +54,9 @@ const sb = vi.hoisted(() => {
 vi.mock('../config/supabase.config.js', () => ({ supabase: sb }));
 
 vi.mock('../utils/logger.js', () => ({
-  log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-  createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+  log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
 
 import feedbackRoutes from '../routes/feedback.routes.js';

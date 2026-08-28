@@ -1,23 +1,4 @@
-/**
- * Chat file router — the "material vs regular file" flow.
- *
- * When a user attaches a PDF in the chat composer:
- *   1. First PDF  → bot asks: add as study material (pipeline + sidebar)
- *      or treat as a regular chat-only file?
- *   2. "Yes" answer → the textbook pipeline starts (progress happens in the
- *      background; the worker posts a "ready" message back into this thread)
- *      and a course entry is created so it shows in the sidebar.
- *   3. "No" answer → the PDF text is extracted once and kept as thread-scoped
- *      context (Redis, 24h) — usable only in this chat, like other bots.
- *
- * Modern clients upload the PDF first via POST /api/chat/attachments and send
- * an `r2://chat-attachments/{userId}/…` reference instead of inline base64 —
- * the reference is resolved here (ownership re-checked against the caller).
- * Legacy clients still send inline base64, which is staged to R2 as before.
- *
- * All three intercept the pipeline and stream a canned bot reply directly
- * (same plain-text protocol as the response-cache-hit path).
- */
+// Routes attached PDFs: asks material-vs-regular, promotes to materials, or binds text to the thread.
 import crypto from "crypto";
 import { supabase } from "../../config/supabase.config.js";
 import redis from "../../config/redis/client.js";
@@ -26,187 +7,17 @@ import { uploadR2Object, downloadR2ObjectToBuffer, deleteR2ObjectsByPrefix } fro
 import { enqueueTextbookJob } from "../textbook/textbook-queue.js";
 import { matchMaterialOpenRequest } from "../../tools/education/find-materials/match-materials.js";
 import type { Response } from "express";
-
-/** Minimal AI SDK message shape used by the chat pipeline. */
-interface ChatMsg {
-  role: string;
-  content?: string | Array<{ type?: string; text?: string; mimeType?: string; mediaType?: string; filename?: string; fileName?: string; data?: string; url?: string; base64?: string; file?: { type?: string; mimeType?: string; name?: string; data?: string; url?: string; base64?: string } }>;
-  parts?: Array<{ type?: string; text?: string; mimeType?: string; mediaType?: string; filename?: string; fileName?: string; data?: string; url?: string; base64?: string; file?: { type?: string; mimeType?: string; name?: string; data?: string; url?: string; base64?: string } }>;
-}
+import type { ChatMsg, PendingFile, ThreadFile } from "./file-router-types.js";
+import { classifyAnswer, extractPdfAttachment, lastUserText, persistAndStreamReply, extractPdfText } from "./file-router-helpers.js";
 
 const log = createLogger("chat-file-router");
 
-const PENDING_TTL_SECONDS = 3600; // decision window: 1 hour
+const PENDING_TTL_SECONDS = 3600;
 const THREAD_FILE_TTL_SECONDS = 24 * 3600;
-const MAX_PDF_BYTES = 500 * 1024 * 1024;
 const MAX_THREAD_FILE_CHARS = 180_000;
 
 const PENDING_KEY = (userId: string) => `chatfile:pending:${userId}`;
 const THREAD_FILE_KEY = (threadId: string) => `chatfile:thread:${threadId}`;
-
-const PDF_PROCESSOR_URL = process.env.PDF_PROCESSOR_URL || "http://localhost:8000";
-
-interface PendingFile {
-  r2Key: string;
-  fileName: string;
-  createdAt: number;
-}
-
-interface ThreadFile {
-  fileName: string;
-  text: string;
-}
-
-// ── answer classification (bilingual) ───────────────────────────────────────
-
-const YES_RE = /(مادة|مواد|اكيد|أكيد|اي|أي|نعم|ايوه|أيوه|اضفه|أضفه|ضيفه|ضيفوا|ارفعه|أرفعه|ثبت|خزن|احفظه|احفظه|yes|yeah|yep|sure|add it|material)/i;
-const NO_RE = /(ملف عادي|عادي|بس|لا|لأ|مش مادة|مو مادة|just.*(file|read)|regular|normal file|no\b)/i;
-
-function classifyAnswer(text: string): "yes" | "no" | "ambiguous" {
-  const yes = YES_RE.test(text);
-  const no = NO_RE.test(text);
-  if (yes && !no) return "yes";
-  if (no && !yes) return "no";
-  if (yes && no) return "ambiguous";
-  return "ambiguous";
-}
-
-// ── attachment extraction ───────────────────────────────────────────────────
-
-interface PdfAttachment {
-  fileName: string;
-  /** Decoded PDF bytes (inline-base64 flow, or fetched from R2 for references). */
-  bytes: Buffer;
-  /** Set when the file was pre-uploaded by the client — no re-staging needed. */
-  r2Key?: string;
-}
-
-const R2_REF_PREFIX = (userId: string) => `r2://chat-attachments/${userId}/`;
-
-async function extractPdfAttachment(messages: ChatMsg[], userId: string): Promise<PdfAttachment | null> {
-  const lastUser = [...messages].reverse().find((m) => m?.role === "user");
-  if (!lastUser) return null;
-
-  const parts = Array.isArray(lastUser.content)
-    ? lastUser.content
-    : Array.isArray(lastUser.parts)
-      ? lastUser.parts
-      : [];
-  if (!Array.isArray(parts) || parts.length === 0) return null;
-
-  for (const part of parts) {
-    if (!part || typeof part !== "object") continue;
-    const mimeType: string =
-      part.mimeType || part.mediaType || part.file?.type || part.file?.mimeType || "";
-    const fileName: string = part.filename || part.fileName || part.file?.name || "";
-    const isPdf = mimeType === "application/pdf" || fileName.toLowerCase().endsWith(".pdf");
-    if (!isPdf) continue;
-
-    const rawData: string =
-      part.data || part.url || part.base64 || part.file?.data || part.file?.url || part.file?.base64 || "";
-    if (!rawData || typeof rawData !== "string") continue;
-
-    // ── modern flow: client-uploaded R2 reference ──
-    if (rawData.startsWith("r2://")) {
-      if (!rawData.startsWith(R2_REF_PREFIX(userId))) {
-        log.warn("Rejected cross-user chat attachment reference", { userId });
-        continue;
-      }
-      try {
-        const key = rawData.slice("r2://".length);
-        const bytes = await downloadR2ObjectToBuffer(key);
-        if (bytes.length === 0 || bytes.length > MAX_PDF_BYTES) continue;
-        if (bytes.subarray(0, 4).toString("latin1") !== "%PDF") continue; // sniff magic
-        return { fileName: fileName || "file.pdf", bytes, r2Key: key };
-      } catch {
-        continue;
-      }
-    }
-
-    // ── legacy flow: inline base64 data URL ──
-    const b64 = rawData.includes(",") ? rawData.split(",")[1] : rawData;
-    try {
-      const bytes = Buffer.from(b64, "base64");
-      if (bytes.length === 0 || bytes.length > MAX_PDF_BYTES) continue;
-      if (bytes.subarray(0, 4).toString("latin1") !== "%PDF") continue; // sniff magic
-      return { fileName: fileName || "file.pdf", bytes };
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-
-function lastUserText(messages: ChatMsg[]): string {
-  const lastUser = [...messages].reverse().find((m) => m?.role === "user");
-  if (!lastUser) return "";
-  const parts = Array.isArray(lastUser.content) ? lastUser.content : Array.isArray(lastUser.parts) ? lastUser.parts : [];
-  if (Array.isArray(parts) && parts.length > 0) {
-    return parts
-      .filter((p) => p?.type === "text" || !p?.type)
-      .map((p) => p?.text || "")
-      .join(" ")
-      .trim();
-  }
-  return typeof lastUser.content === "string" ? lastUser.content.trim() : "";
-}
-
-// ── canned reply streaming (same wire format as the cache-hit path) ────────
-
-async function persistAndStreamReply(
-  res: Response,
-  threadId: string,
-  messages: ChatMsg[],
-  reply: string
-): Promise<void> {
-  // persist the exchange so it survives thread switches
-  const userText = lastUserText(messages);
-  if (userText) {
-    await supabase.from("chat_messages").insert([{ session_id: threadId, role: "user", content: userText }]);
-  }
-  await supabase.from("chat_messages").insert([{ session_id: threadId, role: "assistant", content: reply, model: "canned" }]);
-
-  if (!res.headersSent) {
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-  }
-  res.write(reply);
-  res.end();
-}
-
-// ── regular-file text extraction (thread-scoped) ───────────────────────────
-
-async function extractPdfText(bytes: Buffer): Promise<string> {
-  const os = await import("os");
-  const path = await import("path");
-  const fs = await import("fs/promises");
-
-  const tmpPath = path.join(os.tmpdir(), `chatfile_${crypto.randomBytes(8).toString("hex")}.pdf`);
-  await fs.writeFile(tmpPath, bytes);
-  try {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (process.env.PDF_PROCESSOR_TOKEN) {
-      headers["Authorization"] = `Bearer ${process.env.PDF_PROCESSOR_TOKEN}`;
-    }
-    const r = await fetch(`${PDF_PROCESSOR_URL}/extract-text`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ pdf_path: tmpPath }),
-      signal: AbortSignal.timeout(120_000),
-    });
-    if (!r.ok) {
-      throw new Error(`extract-text failed (${r.status})`);
-    }
-    const data = (await r.json()) as { text: string };
-    return data.text || "";
-  } finally {
-    await fs.unlink(tmpPath).catch(() => {});
-  }
-}
-
-// ── main router ────────────────────────────────────────────────────────────
 
 export async function handleChatFileFlow(args: {
   userId: string;
@@ -221,14 +32,11 @@ export async function handleChatFileFlow(args: {
   const pending: PendingFile | null = pendingRaw ? JSON.parse(pendingRaw) : null;
   const userText = lastUserText(messages);
 
-  // ── case 1: new PDF attached — supersedes any stale pending decision ──
   if (attachment) {
     let r2Key: string;
     if (attachment.r2Key) {
-      // Modern flow — the client already staged it under chat-attachments/.
       r2Key = attachment.r2Key;
     } else {
-      // Legacy inline-base64 flow — stage it now.
       if (pending) {
         await deleteR2ObjectsByPrefix(`pending/${userId}/`).catch(() => {});
       }
@@ -237,7 +45,7 @@ export async function handleChatFileFlow(args: {
       const uploaded = await uploadR2Object(r2Key, attachment.bytes, "application/pdf");
       if (!uploaded) {
         log.warn("Failed to stage chat PDF", { userId });
-        return false; // fall through to normal chat (bot can't decide flow)
+        return false;
       }
     }
 
@@ -260,15 +68,8 @@ export async function handleChatFileFlow(args: {
 
   if (!pending) return false;
 
-  // ── case 2: user answered — route by decision ──
-  // An explicit "open/show material X" phrasing contains «مادة» and would
-  // fool the yes-classifier into promoting the pending file. It is not an
-  // answer — fall through so the pipeline's material fast-pass serves it
-  // while the pending decision stays alive until TTL.
   const answer = classifyAnswer(userText);
   if (answer === "ambiguous" || matchMaterialOpenRequest(userText)) {
-    // not a clear yes/no (or an open-request) — let the normal pipeline
-    // handle the message; the pending decision stays alive until TTL
     return false;
   }
 
@@ -276,12 +77,10 @@ export async function handleChatFileFlow(args: {
   await redis.del(PENDING_KEY(userId));
 
   if (answer === "yes") {
-    // ── material path: create course + textbook row + enqueue ──
     try {
       const bytes = await downloadR2ObjectToBuffer(r2Key);
       const fileHash = crypto.createHash("sha256").update(bytes).digest("hex");
 
-      // sidebar entry: a course named after the file
       const courseName = fileName.replace(/\.pdf$/i, "").substring(0, 80) || "مادة جديدة";
       const { data: course } = await supabase
         .from("student_courses")
@@ -334,7 +133,6 @@ export async function handleChatFileFlow(args: {
     }
   }
 
-  // ── answer === "no": regular thread-scoped file ──
   try {
     const bytes = await downloadR2ObjectToBuffer(r2Key);
     let text = "";
@@ -373,7 +171,6 @@ export async function handleChatFileFlow(args: {
   }
 }
 
-/** Thread-scoped regular-file context, injected into the system prompt. */
 export async function getThreadFileContext(threadId: string | undefined): Promise<string> {
   if (!threadId) return "";
   try {
@@ -381,10 +178,7 @@ export async function getThreadFileContext(threadId: string | undefined): Promis
     if (!raw) return "";
     const file: ThreadFile = JSON.parse(raw);
     const preview = file.text.substring(0, MAX_THREAD_FILE_CHARS);
-    return (
-      `\n\n[ATTACHED FILE CONTEXT — "${file.fileName}" (this thread only)]\n` +
-      preview
-    );
+    return `\n\n[ATTACHED FILE CONTEXT — "${file.fileName}" (this thread only)]\n` + preview;
   } catch {
     return "";
   }

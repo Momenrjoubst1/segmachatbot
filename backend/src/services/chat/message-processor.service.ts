@@ -1,15 +1,5 @@
-/**
- * Message Processor Service
- *
- * Extracted from chat.routes.ts — handles all image/file processing logic:
- * - Base64 image detection & formatting
- * - CoreMessages mapping from raw request messages
- * - File pre-processing (extract text from attachments)
- * - Image pre-processing (vision analysis or fallback)
- * - Message flattening after processing
- */
+// Image/file pre-processing that turns raw request messages into LLM-ready coreMessages.
 
-import { generateText } from "ai";
 import {
   log,
   createProviderClient,
@@ -18,120 +8,14 @@ import type { CoreMessage } from "./moderation.service.js";
 import { resolveMediaPart, ownedR2Key } from "./media-router.js";
 import { downloadR2ObjectToBuffer } from "../textbook/r2-client.js";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// Extracted helper functions
+import { isImagePart, formatImageAsDataUrl } from "./message-processor/image-helpers.js";
+import { isVisionCapableModel, performVisionAnalysis } from "./message-processor/vision-analysis.js";
 
-const isBase64Image = (data: string): boolean => {
-  if (!data) return false;
-  const base64 = data.includes(",") ? data.split(",")[1]! : data;
-  const clean = base64.trim().substring(0, 15);
-  return (
-    clean.startsWith("iVBORw") ||
-    clean.startsWith("/9j/") ||
-    clean.startsWith("UklGR") ||
-    clean.startsWith("R0lGOD")
-  );
-};
+// Re-export for backward compatibility
+export { isVisionCapableModel } from "./message-processor/vision-analysis.js";
 
-/** Vision fallback analyses must answer in the user's language, not English. */
-const visionReplyLanguage = (userText: string): string =>
-  /[\u0600-\u06FF]/.test(userText)
-    ? "Reply in Arabic."
-    : "Reply in the same language as the user's question.";
-
-const isImagePart = (p: Record<string, unknown>): boolean => {  if (p.type === "image") return true;
-  const file = p.file as Record<string, unknown> | undefined;
-  const mime = (p.mimeType as string) || (file?.type as string) || "";
-  if (mime.startsWith("image/")) return true;
-  const filename = (p.filename as string) || (file?.name as string) || "";
-  const ext = filename.split(".").pop()?.toLowerCase() || "";
-  if (["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp"].includes(ext))
-    return true;
-
-  const rawData =
-    (p.image as string) ||
-    (p.url as string) ||
-    (p.data as string) ||
-    (p.base64 as string) ||
-    (file?.url as string) ||
-    (file?.data as string) ||
-    (file?.base64 as string) ||
-    "";
-  return isBase64Image(rawData);
-};
-
-const formatImageAsDataUrl = (
-  data: string,
-  ext: string,
-  mimeType?: string,
-): string => {
-  if (!data) return "";
-  if (data.startsWith("data:image/")) return data;
-
-  let mime = mimeType;
-  if (!mime || !mime.startsWith("image/")) {
-    const clean = data.includes(",")
-      ? data.split(",")[1]!.trim()
-      : data.trim();
-    if (clean.startsWith("iVBORw")) mime = "image/png";
-    else if (clean.startsWith("/9j/")) mime = "image/jpeg";
-    else if (clean.startsWith("UklGR")) mime = "image/webp";
-    else if (clean.startsWith("R0lGOD")) mime = "image/gif";
-    else {
-      mime =
-        ext === "png"
-          ? "image/png"
-          : ext === "webp"
-            ? "image/webp"
-            : ext === "gif"
-              ? "image/gif"
-              : ext === "svg"
-                ? "image/svg+xml"
-                : "image/jpeg";
-    }
-  }
-
-  const base64Data = data.includes(",") ? data.split(",")[1] : data;
-  return `data:${mime};base64,${base64Data}`;
-};
-
-// ---------------------------------------------------------------------------
-// Vision capability
-// ---------------------------------------------------------------------------
-
-/** Model-family patterns that accept image parts natively. */
-const DEFAULT_VISION_MODEL_PATTERNS = [
-  "gpt-4o",
-  "gpt-5",
-  "chatgpt-4o",
-  "gemini",
-  "claude-3",
-  "claude-4",
-  "grok-2-vision",
-  "pixtral",
-];
-
-/**
- * True when the model can receive image parts directly (native vision).
- * Exact names from VISION_NATIVE_MODELS env always win; otherwise we match
- * known vision-capable model families by substring.
- */
-export function isVisionCapableModel(modelName: string): boolean {
-  const configured = (process.env.VISION_NATIVE_MODELS || "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  const haystack = modelName.toLowerCase();
-  if (configured.length > 0) {
-    return configured.includes(haystack) || configured.some((n) => haystack.includes(n));
-  }
-  return DEFAULT_VISION_MODEL_PATTERNS.some((p) => haystack.includes(p));
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+// Public API.
 
 export interface ProcessedMessages {
   coreMessages: CoreMessage[];
@@ -142,18 +26,7 @@ export interface ProcessedMessages {
   imageAnalysisError?: string;
 }
 
-/**
- * Process raw request messages into clean coreMessages ready for the LLM.
- *
- * Steps:
- *  1. Filter & map to coreMessages shape
- *  1.5 Resolve video/audio attachments per the answering model's capabilities
- *      (native file parts / wire sentinels / transcripts) and stage r2://
- *      document refs into extractable base64
- *  2. Extract text from file attachments
- *  3. Flatten messages without non-text parts
- *  4. Run vision analysis for non-native-vision models (or fallback to text)
- */
+// Process raw request messages into clean coreMessages ready for the LLM.
 interface RawMessage {
   role?: string;
   content?: unknown;
@@ -178,7 +51,7 @@ export async function processMessages(
     mediaCount: 0,
   };
 
-  // ---- Step 1: Map raw messages to coreMessages ----
+  // Step 1: map raw messages to coreMessages.
   let hasImages = false;
 
   const coreMessages = messages
@@ -309,12 +182,7 @@ export async function processMessages(
       return msg;
     });
 
-  // ---- Step 1.5: Resolve media attachments per the answering model ----
-  // Video/audio parts arrive as generic file parts carrying r2:// refs.
-  // They are converted here into (a) native AI SDK file parts for Gemini
-  // (inline or Files-API fileUri), (b) wire sentinels for capable
-  // OpenAI-compatible models (rewritten by media-wire on fetch), or
-  // (c) Whisper transcript text for everything else.
+  // Step 1.5: resolve video/audio r2:// refs into native parts, sentinels, or transcripts.
   if (userId) {
     try {
       for (const msg of coreMessages) {
@@ -362,7 +230,7 @@ export async function processMessages(
     }
   }
 
-  // ---- Step 1.7: Stage r2:// document refs into extractable base64 ----
+  // Step 1.7: stage r2:// document refs into extractable base64 data URLs.
   if (userId) {
     for (const msg of coreMessages) {
       if (!Array.isArray(msg.content)) continue;
@@ -382,7 +250,7 @@ export async function processMessages(
     }
   }
 
-  // ---- Step 2: File pre-processing — extract text from attachments ----
+  // Step 2: file pre-processing — extract text from attachments.
   const hasFileParts = coreMessages.some(
     (msg) =>
       Array.isArray(msg.content) &&
@@ -446,9 +314,7 @@ export async function processMessages(
     }
   }
 
-  // ---- Step 3: Flatten messages without non-text parts ----
-  // Native file parts (e.g. Gemini fileUri media) must survive flattening —
-  // only messages with no image AND no file parts collapse to plain strings.
+  // Step 3: flatten messages that have neither image nor file parts to plain strings.
   for (const msg of coreMessages) {
     if (!Array.isArray(msg.content)) continue;
     const nonTextParts = (msg.content as Array<Record<string, unknown>>).filter(
@@ -461,88 +327,14 @@ export async function processMessages(
     }
   }
 
-  // ---- Step 4: Image pre-processing (vision analysis or fallback) ----
-  // Native vision detection is pattern-based (model families, not a stale
-  // exact-name list) and can be extended via VISION_NATIVE_MODELS env
-  // (comma-separated exact model names).
+  // Step 4: vision analysis for non-native-vision models, else text fallback.
   if (hasImages && !isVisionCapableModel(selectedModel)) {
-    try {
-      const visionModelId =
-        process.env.VISION_MODEL_ID?.trim() || "openai/gpt-4o";
-
-      // BUG-8 FIX: removed dead IIFE that always returned empty strings.
-      // Use gpm directly to resolve provider for the vision client.
-      const { getProviderAndModel: gpm } = await import(
-        "../../routes/chat/chat-shared.js"
-      );
-      const { provider: vp, modelName: vn } = gpm(selectedModel);
-      const client = createProviderClient(vp);
-
-      for (const msg of coreMessages) {
-        if (Array.isArray(msg.content)) {
-          const imageParts = msg.content.filter((p: Record<string, unknown>) => p.type === "image");
-          if (imageParts.length === 0) continue;
-          const textParts = msg.content.filter((p: Record<string, unknown>) => p.type === "text");
-          const userText = textParts.map((p: Record<string, unknown>) => p.text).join("\n");
-
-          let visionModel: ReturnType<ReturnType<typeof createProviderClient>["chat"]>;
-          try {
-            if (process.env.OPENROUTER_API_KEY) {
-              const openRouterClient = createProviderClient("openrouter");
-              visionModel = openRouterClient.chat(visionModelId);
-            } else {
-              visionModel = client.chat(vn);
-            }
-          } catch (visionErr) {
-            log.warn('OpenRouter vision model unavailable, using default', { error: (visionErr as Error)?.message });
-            visionModel = client.chat(vn);
-          }
-
-          const textPrompt = userText
-            ? `\n\nUser question: ${userText}\nDescribe all visible details in the image(s) and answer the question if possible. ${visionReplyLanguage(userText)}`
-            : `\n\nDescribe all visible details in the image(s). ${visionReplyLanguage("")}`;
-          const { text: analysis } = await generateText({
-            model: visionModel,
-            messages: [
-              {
-                role: "user",
-                content: [
-                  ...(Array.isArray(msg.content) ? msg.content : []),
-                  { type: "text", text: textPrompt },
-                ],
-              },
-            ],
-            maxRetries: 2,
-          } as Parameters<typeof generateText>[0]);
-          msg.content = `[Attached Image Analysis: ${analysis}]\n\n${userText || "The user attached an image. See analysis above."}`;
-        }
-      }
-      hasImages = false;
-      log.info("Image analysis completed and replaced with text");
-    } catch (imgErr: unknown) {
-      const reason = imgErr instanceof Error ? imgErr.message : String(imgErr);
-      log.warn("Image analysis failed, falling back to text-only", {
-        error: reason,
-      });
+    const visionResult = await performVisionAnalysis(coreMessages, selectedModel);
+    if (!visionResult.success) {
       metrics.imageAnalysisFailed = true;
-      metrics.imageAnalysisError = reason;
-
-      for (const msg of coreMessages) {
-        if (Array.isArray(msg.content)) {
-          const textParts = msg.content.filter((p: Record<string, unknown>) => p.type === "text");
-          const userText = textParts
-            .map((p: Record<string, unknown>) => (p.text as string) || "")
-            .join("\n")
-            .trim();
-          if (userText) {
-            msg.content = `${userText}\n\n[Note: an attached image was dropped because the vision analysis service failed. Please acknowledge this to the user and offer to help based on the text alone.]`;
-          } else {
-            msg.content =
-              "[The user attached an image but the vision analysis service is currently unavailable. Please ask the user to describe the image in text so you can help.]";
-          }
-        }
-      }
+      metrics.imageAnalysisError = visionResult.error;
     }
+    hasImages = false;
   }
 
   metrics.coreMessages = coreMessages;

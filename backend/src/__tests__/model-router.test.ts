@@ -194,14 +194,13 @@ describe('ModelRouter', () => {
     });
 
     it('should force gpt-4o-mini when all fallbacks are open', () => {
-      // Trip breakers for deepseek-v4-flash and all its fallbacks
-      // Actual chain: ["gemini-3.7-flash", "gemini-2.5-flash", "nvidia/nemotron-3.5-lightning-30b-a3b:free", "gpt-4o-mini"]
+      // Trip breakers for deepseek-v4-flash and every model in its fallback chain
       const modelsToTrip = [
         'deepseek-v4-flash',
         'gemini-3.7-flash',
         'gemini-2.5-flash',
         'gemini-2.5-pro',
-        'nvidia/nemotron-3.5-lightning-30b-a3b:free',
+        'nvidia/nemotron-3.5-lightning:free',
         'nvidia/nemotron-3-super-49b-a49b:free',
         'qwen/qwen3.6-27b',
         'glm-5.2',
