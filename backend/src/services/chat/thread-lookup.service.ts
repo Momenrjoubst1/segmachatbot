@@ -1,18 +1,10 @@
-/**
- * Thread Lookup Service — "Thread Summoner" utility for the Octopus system.
- *
- * Searches a user's chat_sessions by fuzzy title match to find a specific
- * past conversation. Used by the fast-pass interceptor in the chat pipeline
- * to instantly navigate to a thread without invoking the LLM.
- */
+// Fuzzy-matches a user's chat sessions by title so the UI can jump to that thread.
 
 import { createLogger } from "../../utils/logger.js";
 
 const log = createLogger("thread-lookup");
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// Result shape for a thread lookup.
 
 export interface ThreadLookupResult {
   /** Whether a matching thread was found. */
@@ -23,21 +15,9 @@ export interface ThreadLookupResult {
   matchedTitle: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Arabic Intent Detection — Broad Verb Patterns
-// ---------------------------------------------------------------------------
+// Arabic imperative verbs signaling an "open thread by title" intent.
 
-/**
- * Comprehensive regex that matches a wide range of Arabic imperative and
- * directional verb phrases used to express "navigate to / open a chat".
- *
- * Covered verbs:
- *   افتح (open) · اذهب/روح/روّح (go) · جيب (bring) · وريني (show me)
- *   خذني/ودّني (take me) · انقلني (move me) · رجّعني (take me back)
- *   دور/ابحث (find/search)
- *
- * Optionally followed by directional connectors: إلى، الى، لـ، ل، على، لي
- */
+// Matches Arabic imperative verbs, with optional connectors, meaning "open a chat".
 const THREAD_INTENT_VERB_REGEX = new RegExp(
   "^(?:" +
     // "افتح" — open
@@ -64,20 +44,9 @@ const THREAD_INTENT_VERB_REGEX = new RegExp(
   ")(?:\\s+|$)",
 );
 
-// ---------------------------------------------------------------------------
-// Title Sanitization — Filler Word Stripping
-// ---------------------------------------------------------------------------
+// Sanitizes the captured text down to the chat title.
 
-/**
- * Ordered list of Arabic filler words that commonly appear between the verb
- * and the actual chat title. Stripped iteratively from the beginning of the
- * extracted text until no more filler remains.
- *
- * Examples of what this removes:
- *   "شات اسمه X"  →  "X"
- *   "المحادثة تبع X"  →  "X"
- *   "موضوع باسم X"  →  "X"
- */
+// Arabic filler words stripped from between the verb phrase and the title.
 const TITLE_FILLER_WORDS: readonly string[] = [
   "شات",
   "محادثه",
@@ -96,23 +65,11 @@ const TITLE_FILLER_WORDS: readonly string[] = [
   "الي",
 ] as const;
 
-/**
- * Directional connector particles that may appear at the start of the
- * extracted text (either standalone or attached to the next word).
- *
- * In Arabic, prepositions like "لـ" (to/for) and "بـ" (with/by) attach
- * directly to the following noun without a space, e.g. "لشات" = "to chat".
- * This regex strips those leading connectors iteratively.
- *
- * Ordered longest-first to prevent partial matches (e.g. "الى" before "ا").
- */
+// Strips leading directional connectors, whether standalone or attached to the next word.
 const CONNECTOR_STRIP_REGEX =
   /^(?:الى|إلى|عن|على|ل[ـ]?|ب[ـ]?)\s*/i;
 
-/**
- * Iteratively strip leading filler words from the raw extracted text
- * until the actual chat title remains.
- */
+// Iteratively strip leading filler words until only the chat title remains.
 function sanitizeSearchTitle(raw: string): string {
   let title = raw.trim();
   let changed = true;

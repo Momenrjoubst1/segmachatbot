@@ -1,25 +1,4 @@
-/**
- * Prompt Architecture — بنية المطالبة
- *
- * Modular system prompt builder. Each layer is independent and can be
- * toggled or customized. The final system prompt is assembled from
- * these layers in a defined order:
- *
- *  1. Base Persona     — identity & roles
- *  2. Identity Guard   — prevents identity leakage
- *  3. Formatting Rules — Markdown & bilingual rules
- *  4. User Courses     — student course context (optional)
- *  5. Tool Instructions — only for enabled tools (optional)
- *  6. RAG Instructions  — retrieved context (optional)
- *  7. Memory Context    — conversation memory (optional)
- *  8. Multi-Agent       — main agent drafting mode (optional)
- *
- * Key improvement goals:
- * - Reduce total token usage by ~20% (remove redundant instructions)
- * - Tool instructions only included when relevant
- * - Easy to test individual layers
- * - Easy to A/B test different persona variations
- */
+// Modular system prompt builder combining persona, tools, RAG, memory, and multi-agent layers.
 
 import { buildBasePersona } from './base-persona.js';
 import { buildIdentityGuard } from './identity-guard.js';
@@ -74,11 +53,7 @@ export interface PromptBuildOptions {
   abTest?: ABTestConfig;
 }
 
-/**
- * Trims the system prompt to fit within the token budget.
- * Uses a simple character-based approximation (1 token ≈ 4 chars).
- * Preserves layer order, truncating from the end (optional layers first).
- */
+// Trim the system prompt to a token budget via character approximation.
 export function trimToTokenBudget(prompt: string, maxTokens: number): string {
   const maxChars = maxTokens * 4;
   if (prompt.length <= maxChars) return prompt;
@@ -94,10 +69,7 @@ export function trimToTokenBudget(prompt: string, maxTokens: number): string {
   return result || prompt.slice(0, maxChars);
 }
 
-/**
- * Resolves A/B test variant for a user.
- * Uses deterministic hashing for consistent assignment.
- */
+// Resolve a user's A/B test variant deterministically from their user ID.
 function resolveABVariant(config: ABTestConfig): PersonaVariant {
   if (config.forceVariant) return config.forceVariant;
   if (config.variant && config.variant !== 'auto') return config.variant;
@@ -113,9 +85,7 @@ function resolveABVariant(config: ABTestConfig): PersonaVariant {
   return variants[Math.abs(hash) % variants.length];
 }
 
-/**
- * Builds persona with A/B test variant applied.
- */
+// Build the persona matching the selected A/B test variant.
 function buildPersonaWithVariant(variant: PersonaVariant, language?: 'ar' | 'en'): string {
   switch (variant) {
     case 'concise':
@@ -199,10 +169,7 @@ Adhere to the following roles in your responses:
 - Share relevant growth mindset framing.`;
 }
 
-/**
- * Builds the complete system prompt from modular layers.
- * Each layer is independent and can be toggled/customized.
- */
+// Build the final system prompt from the enabled modular layers.
 export function buildSystemPrompt(options: PromptBuildOptions): string {
   // Resolve A/B variant if configured
   const variant = options.abTest ? resolveABVariant(options.abTest) : 'default';
@@ -227,8 +194,7 @@ export function buildSystemPrompt(options: PromptBuildOptions): string {
   let budgetResult: BudgetAllocationResult | undefined;
 
   if (options.modelId) {
-    // Model-aware context budgeting: allocate tokens per layer based on the
-    // model's real context window, trimming lowest-priority layers first.
+    // Allocate tokens per layer from the model's context window, lowest priority first.
     budgetResult = applyBudget(
       calculateContextBudget(
         {

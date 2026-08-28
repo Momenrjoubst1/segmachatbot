@@ -9,8 +9,7 @@ import { trLog, createProviderClient } from "./chat-shared.js";
 
 const router = Router();
 
-// ─── Translation / Auto-Correct endpoint ───────────────────────────────────
-// Used by ChatInput.tsx smart-translate feature
+// Smart-translate endpoint: rate limiter, prompt builder, and translation providers.
 const translateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 30,

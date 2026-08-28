@@ -1,4 +1,4 @@
-/** Sanity-check vision routing decisions. Run from backend/: npx tsx scripts/vision-routing-check.mts */
+// Sanity-check script for vision model routing decisions.
 import "dotenv/config";
 
 async function main() {

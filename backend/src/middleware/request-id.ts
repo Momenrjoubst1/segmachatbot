@@ -16,8 +16,6 @@ export function requestIdMiddleware(req: Request, res: Response, next: NextFunct
   req.headers['x-request-id'] = requestId;
   res.setHeader('X-Request-Id', requestId);
 
-  // Scope the trace context to this request's call chain: every log emitted
-  // while handling it carries the requestId, and concurrent requests stay
-  // isolated (the previous enterWith/disable approach corrupted them).
+  // Scope logs to this request's trace context so they carry the requestId.
   runWithTraceContext({ requestId }, () => next());
 }

@@ -1,19 +1,4 @@
-/**
- * Media wire patch — rewrites sentinel text parts into provider-native
- * content blocks on the outbound OpenAI-compatible request body.
- *
- * Why: the stock @ai-sdk/openai converter throws UnsupportedFunctionalityError
- * on video file parts before fetch is ever called. So the pipeline encodes
- * media as short text sentinels (⟦MEDIA:<id>⟧, see media-registry.ts) that
- * pass through every converter untouched; this fetch wrapper — installed on
- * every OpenAI-compatible provider client — swaps them for the wire blocks
- * documented by OpenRouter:
- *
- *   video → {"type":"video_url","video_url":{"url": "<data-or-https-url>"}}
- *   audio → {"type":"input_audio","input_audio":{"data":"<b64>","format":"wav"|"mp3"}}
- *
- * Bodies without sentinels bypass all parsing (single indexOf check).
- */
+// Rewrites ⟦MEDIA:<id>⟧ sentinel text parts into provider-native blocks on the outbound request body.
 import { createLogger } from "../../utils/logger.js";
 import { getMediaRegistry, MEDIA_SENTINEL_RE, type MediaPayload } from "./media-registry.js";
 
@@ -81,9 +66,7 @@ function rewriteParts(parts: WireContentPart[], registry: Map<string, MediaPaylo
   return out;
 }
 
-/**
- * Wrap a fetch implementation with media-sentinel rewriting.
- */
+// Wrap a fetch implementation with media-sentinel rewriting.
 export function mediaAwareFetch(base?: typeof fetch): typeof fetch {
   const impl = base ?? fetch;
   return async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): Promise<Response> => {

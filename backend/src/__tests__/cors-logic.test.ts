@@ -1,9 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-/**
- * Test CORS logic in isolation (functional tests)
- * These tests verify the CORS configuration logic without module caching issues
- */
+// Tests CORS configuration logic in isolation via pure helper functions
 
 function parseFrontendOrigins(envValue: string | undefined, defaultValue: string = ''): string[] {
   return (envValue || defaultValue)
@@ -100,10 +97,7 @@ describe('CORS Logic', () => {
         [],
         'production'
       );
-      // When origin is literally '*', it matches the array entry '*'
-      // In reality, browsers never send Origin: * so this is theoretical
-      // The important point is that CORS middleware should use specific origins
-      // not wildcards when credentials: true
+      // A literal '*' origin matches the '*' entry in the allowed list
       expect(result).toBe(true); // Array.includes will match
     });
 
@@ -193,8 +187,7 @@ describe('CORS Logic', () => {
       });
 
       it('should not allow wildcard with credentials', () => {
-        // When credentials: true, origin cannot be '*'
-        // Our logic uses exact array matching, so '*' as a string will never match
+        // Exact array matching means a '*' origin string can never match
         const result = testIsAllowedCorsOrigin('https://any-origin.com', ['*'], [], 'production');
         expect(result).toBe(false);
       });

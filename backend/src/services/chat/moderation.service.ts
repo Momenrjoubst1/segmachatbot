@@ -1,25 +1,11 @@
-/**
- * Moderation Service
- *
- * Extracted from chat.routes.ts — content moderation logic:
- * - Input moderation (Supabase Edge Function: check-content-moderation)
- * - Output moderation (block flagged AI responses)
- * - MAX_MESSAGE_CHARS length check
- *
- * Two modes:
- *  - `moderateInput()`  — runs INSIDE the chat pipeline (Step 3)
- *  - `moderateText()`   — exposed via POST /api/moderation/full for
- *                         standalone moderation requests from clients
- */
+// Content moderation for chat input/output and standalone requests, via a Supabase Edge Function.
 
 import { createLogger } from "../../utils/logger.js";
 import { MAX_MESSAGE_CHARS } from "../../config/constants.js";
 
 const log = createLogger("moderation");
 
-// ==========================================
-// Types
-// ==========================================
+// Message and moderation result types.
 
 export interface CoreMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
@@ -50,9 +36,7 @@ interface SupabaseModerationResponse {
   riskScore?: number;
 }
 
-// ==========================================
-// Internal helpers
-// ==========================================
+// Moderator invocation helpers.
 
 import { extractText } from '../../utils/message-utils/extract-text.js';
 
@@ -80,14 +64,9 @@ async function invokeModerator(content: string): Promise<SupabaseModerationRespo
   }
 }
 
-// ==========================================
-// Public API â€” used by chat pipeline
-// ==========================================
+// Public API used by the chat pipeline.
 
-/**
- * Check the LAST user message in a `coreMessages` array for length and
- * content policy violations. Returns a new array with censored content.
- */
+// Check the last user message for length and policy violations, censoring flagged content.
 export async function moderateInput(
   coreMessages: CoreMessage[],
 ): Promise<ModerateInputResult> {
@@ -118,8 +97,7 @@ export async function moderateInput(
   const modResult = await invokeModerator(lastUserText);
 
   if (!modResult) {
-    // Default: fail-closed in production (block content when moderator is down).
-    // Set MODERATION_FAIL_OPEN=true to explicitly opt-out (not recommended).
+    // Fail-closed when the moderator is down unless MODERATION_FAIL_OPEN=true.
     const failOpen = process.env.MODERATION_FAIL_OPEN === 'true';
     const isTest = process.env.NODE_ENV === 'test';
 
@@ -173,10 +151,7 @@ export async function moderateInput(
   return { blocked: false, messages: coreMessages };
 }
 
-/**
- * Check an AI response for content policy violations.
- * Returns the (possibly replaced) safe text.
- */
+// Check an AI response for policy violations, returning safe text when blocked.
 export async function moderateOutput(
   text: string,
   userId: string,
@@ -196,18 +171,9 @@ export async function moderateOutput(
   return text;
 }
 
-// ==========================================
-// Public API â€” exposed via /api/moderation route
-// ==========================================
+// Public API exposed via the /api/moderation route.
 
-/**
- * Full standalone moderation check.  Combines:
- *  - Length + injection + abuse detection (inputValidator)
- *  - Supabase Edge Function call
- *
- * Returns a structured result the client can use to decide whether
- * to surface the message, censor it, or block it entirely.
- */
+// Full standalone moderation combining local validation with the Edge Function call.
 export async function moderateFull(
   content: string,
 ): Promise<ModerateFullResult> {
@@ -233,8 +199,7 @@ export async function moderateFull(
   // Supabase moderation
   const modResult = await invokeModerator(content);
   if (!modResult) {
-    // Moderator unavailable — fail-closed by default (block content).
-    // Set MODERATION_FAIL_OPEN=true to explicitly opt-out (not recommended).
+    // Fail-closed when the moderator is down unless MODERATION_FAIL_OPEN=true.
     const failOpen = process.env.MODERATION_FAIL_OPEN === 'true';
     const isTest = process.env.NODE_ENV === 'test';
 

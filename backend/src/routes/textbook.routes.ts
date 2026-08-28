@@ -17,7 +17,7 @@ const router = Router();
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 
-// Multer config: store in uploads/{userId}/
+// Multer disk storage: temp files in os.tmpdir with sanitized names.
 const storage = multer.diskStorage({
   destination: async (_req, _file, cb) => {
     cb(null, os.tmpdir());
@@ -65,7 +65,7 @@ function guessMimeType(fileName: string): string {
   return map[ext] || "application/octet-stream";
 }
 
-// ─── Direct file upload (bypasses Supabase Storage) ─────────────────────
+// Direct multipart file upload (bypasses Supabase Storage).
 router.post("/upload-file", upload.single("file"), async (req: Request, res: Response) => {
   let tmpPath: string | null = null;
   try {
@@ -101,9 +101,7 @@ router.post("/upload-file", upload.single("file"), async (req: Request, res: Res
     // Compute file hash (streamed — a 500MB upload must not be buffered)
     const fileHash = await hashFileStreaming(file.path);
 
-    // Dedup is strictly user-scoped. A cross-user match must NOT create a
-    // "completed" record without chunks — the search RPCs are user-scoped
-    // (migration 013), so such a book could never actually be searched.
+    // Dedup is strictly user-scoped; cross-user matches are not searchable.
     const { data: existing } = await supabase
       .from("textbooks")
       .select("id, status")
@@ -153,11 +151,7 @@ router.post("/upload-file", upload.single("file"), async (req: Request, res: Res
       return;
     }
 
-    // Persist the source PDF permanently:
-    // - R2 configured: `r2://<key>` — survives restarts, enables reprocessing
-    //   and on-demand page rendering, works across containers.
-    // - R2 not configured (local dev): keep the multer tmp file and point at
-    //   it; the processor is told not to delete it so reprocess still works.
+    // Persist the PDF to R2 as r2://<key>, or keep the local tmp file in dev.
     let fileUrl: string;
     if (isR2Configured()) {
       const r2Key = `textbooks/${userId}/${textbook.id}/source.pdf`;
@@ -223,7 +217,7 @@ router.post("/upload-file", upload.single("file"), async (req: Request, res: Res
   }
 });
 
-// ─── URL-based upload (original flow via Supabase Storage) ───────────────
+// URL-based upload via Supabase Storage.
 router.post("/upload", async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -253,10 +247,7 @@ router.post("/upload", async (req: Request, res: Response) => {
     // Use content hash for dedup (frontend hashes file bytes), fallback to URL hash
     const fileHash = file_content_hash || crypto.createHash("sha256").update(file_url).digest("hex");
 
-    // Check dedup: is there already a completed textbook with this hash
-    // OWNED BY THIS USER? Dedup must be user-scoped: file hashes are
-    // client-supplied, so a cross-user match would leak another user's
-    // structure_tree/total_pages to whoever guesses or knows the hash.
+    // Dedup only against completed textbooks owned by this requesting user.
     const { data: existing } = await supabase
       .from("textbooks")
       .select("id, status, file_name")
@@ -317,9 +308,7 @@ router.post("/upload", async (req: Request, res: Response) => {
   }
 });
 
-// ─── Material viewer: resolve a browser-displayable URL for the source file
-// (ownership-checked). `r2://` keys become short-lived presigned GET URLs so
-// the in-app viewer can load the original PDF without exposing public links.
+// Resolve an ownership-checked browser-displayable URL for the source file.
 router.get("/:id/file-url", async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -382,9 +371,7 @@ router.get("/:id/file-url", async (req: Request, res: Response) => {
   }
 });
 
-// ─── Material download proxy (ownership-checked stream). Used for the
-// viewer's download button — authenticated fetch → blob, so it works for
-// r2/local/external sources alike regardless of bucket CORS settings.
+// Ownership-checked download stream for r2/local/external sources alike.
 router.get("/:id/file", async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -452,7 +439,7 @@ router.get("/:id/file", async (req: Request, res: Response) => {
   }
 });
 
-// ─── Curriculum map (units → lessons → topics + questions + glossary) ────
+// Curriculum map: section tree plus section/question counts.
 router.get("/:id/curriculum", async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -518,7 +505,7 @@ router.get("/:id/curriculum", async (req: Request, res: Response) => {
   }
 });
 
-// ─── Questions of a book (quiz-ready) ─────────────────────────────────────
+// Quiz-ready questions of a book.
 router.get("/:id/questions", async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -563,7 +550,7 @@ router.get("/:id/questions", async (req: Request, res: Response) => {
   }
 });
 
-// ─── Glossary of a book ───────────────────────────────────────────────────
+// Glossary of a book.
 router.get("/:id/glossary", async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -642,7 +629,7 @@ router.get("/:id/status", async (req: Request, res: Response) => {  try {
   }
 });
 
-// ─── SSE: real-time progress stream (replaces polling) ───────────────────
+// SSE stream of live processing progress.
 router.get("/:id/progress", async (req: Request, res: Response) => {
   const userId = req.user?.id;
   if (!userId) {
@@ -823,13 +810,10 @@ router.delete("/:id", async (req: Request, res: Response) => {
       }
     }
 
-    // Mirror deletion on Cloudflare R2 — figure objects live under a
-    // per-user/per-textbook prefix and would otherwise remain publicly
-    // fetchable forever after the textbook is deleted.
+    // Delete the textbook's R2 objects or they stay publicly fetchable.
     await deleteR2ObjectsByPrefix(`textbooks/${userId}/${id}/`);
 
-    // Chat-originated materials keep their source PDF under pending/ —
-    // delete that copy too or it becomes an orphan.
+    // Chat-originated PDFs live under pending/ — delete that copy too.
     if (textbook.file_url?.startsWith("r2://pending/")) {
       await deleteR2ObjectsByPrefix(textbook.file_url.replace("r2://", ""));
     }

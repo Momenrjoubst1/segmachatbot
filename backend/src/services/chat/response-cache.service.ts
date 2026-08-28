@@ -1,18 +1,4 @@
-/**
- * Semantic Response Cache — Redis-backed
- * كاش ذكي للردود المتشابهة
- *
- * How it works:
- * 1. Before generating a response, check if a semantically similar question was asked before
- * 2. If found (similarity > threshold), return cached response
- * 3. After generating a new response, cache it for future use
- *
- * Bypass conditions:
- * - User has personal context (courses, memory)
- * - Question references specific thread history
- * - Tool usage is required
- * - RAG returned personalized results
- */
+// Redis-backed semantic response cache: replays answers to similar questions, bypassed when personalized.
 
 import { createLogger } from '../../utils/logger.js';
 import redis from '../../config/redis/client.js';
@@ -20,9 +6,7 @@ import { createHash } from 'crypto';
 
 const log = createLogger('response-cache');
 
-// ==========================================
-// Types
-// ==========================================
+// Cache entry and result types
 
 export interface CachedResponse {
   question: string;
@@ -63,9 +47,7 @@ export interface CacheMetadata {
   userId?: string;
 }
 
-// ==========================================
-// Configuration
-// ==========================================
+// Cache configuration and key helpers
 
 const DEFAULT_CONFIG = {
   enabled: process.env.RESPONSE_CACHE_ENABLED !== 'false',
@@ -87,12 +69,7 @@ function getItemKey(key: string, userId?: string): string {
   return userId ? `${CACHE_PREFIX}user:${userId}:${key}` : `${CACHE_PREFIX}global:${key}`;
 }
 
-// ---------------------------------------------------------------------------
-// Serialised write-lock
-// ---------------------------------------------------------------------------
-// Node.js is single-threaded, but async I/O means two concurrent `cacheResponse`
-// calls can interleave at await points.  We chain each write onto the previous
-// one so that the READ-MUTATE-WRITE sequence for the index is never split.
+// Serialised write-lock: chains writes so concurrent index updates never interleave at awaits.
 let _writeLock: Promise<unknown> = Promise.resolve();
 
 function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
@@ -101,14 +78,10 @@ function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
   return next;
 }
 
-// ==========================================
-// Cache Implementation
-// ==========================================
+// Cache implementation
 
 class ResponseCacheService {
-  /**
-   * Check if we should bypass the cache entirely
-   */
+  // Checks whether the request is personalized enough to bypass the cache.
   shouldBypassCache(options: CacheBypassOptions): CacheBypassReason | null {
     if (options.hasPersonalContext) return { bypass: true, reason: 'personal_context' };
     if (options.hasTextbookChunks) return { bypass: true, reason: 'textbook_chunks' };
@@ -117,10 +90,7 @@ class ResponseCacheService {
     return null;
   }
 
-  /**
-   * Check cache for a similar question
-   * Uses cosine similarity on embeddings stored in Redis
-   */
+  // Checks Redis for a similar question using cosine similarity on embeddings.
   async checkCache(
     queryEmbedding: number[],
     queryText: string,
@@ -185,11 +155,7 @@ class ResponseCacheService {
     }
   }
 
-  /**
-   * Store a response in the cache.
-   * Writes are serialised via `withWriteLock` so that concurrent callers
-   * never overwrite each other's index update.
-   */
+  // Stores a response under the write lock so index updates can't overwrite each other.
   async cacheResponse(
     queryText: string,
     queryEmbedding: number[],
@@ -228,8 +194,7 @@ class ResponseCacheService {
           DEFAULT_CONFIG.ttl,
         );
 
-        // Read the latest index inside the lock so we always see the
-        // most up-to-date version written by the previous chained call.
+        // Read the latest index inside the lock to see prior chained writes.
         let index: Array<{ key: string; embedding: number[]; question: string }> = [];
         const indexKey = getIndexKey(userId);
         const indexData = await redis.get(indexKey);
@@ -269,10 +234,7 @@ class ResponseCacheService {
     });
   }
 
-  /**
-   * Invalidate all cache entries whose question text contains the given pattern.
-   * Useful after a knowledge-base update for a specific topic.
-   */
+  // Invalidates all cache entries whose question text contains the given pattern.
   async invalidateByPattern(pattern: string, userId?: string): Promise<number> {
     if (!pattern) return 0;
     return withWriteLock(async () => {
@@ -311,9 +273,7 @@ class ResponseCacheService {
     });
   }
 
-  /**
-   * Get cache stats.
-   */
+  // Gets cache size, limit, and oldest entry timestamp.
   async getStats(userId?: string): Promise<{ size: number; maxSize: number; oldestEntry: number | null }> {
     try {
       const indexKey = getIndexKey(userId);
@@ -346,9 +306,7 @@ class ResponseCacheService {
     }
   }
 
-  // ==========================================
   // Private helpers
-  // ==========================================
 
   private cosineSimilarity(a: number[], b: number[]): number {
     if (a.length !== b.length || a.length === 0) return 0;

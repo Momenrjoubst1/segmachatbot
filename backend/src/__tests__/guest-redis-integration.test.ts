@@ -1,12 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import Redis from 'ioredis';
 
-// ---------------------------------------------------------------------------
-// Real Redis integration tests for guest quota and transcript
-//
-// Requires a running Redis server on localhost:6380.
-// Tests skip gracefully if Redis is not available.
-// ---------------------------------------------------------------------------
+// Real Redis integration tests for guest quota and transcript; skipped when Redis is unavailable.
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6380';
 const WINDOW_SECONDS = 86400; // 24h
@@ -16,7 +11,7 @@ const TRANSCRIPT_PREFIX = 'guest:transcript:test:';
 let redis: Redis | null = null;
 let redisAvailable = false;
 
-// ─── Lua scripts (match production code exactly) ──────────────────────────
+// Lua scripts mirroring the production quota and transcript logic
 
 const FIXED_WINDOW_LUA = `
   local key = KEYS[1]
@@ -78,7 +73,7 @@ const TRANSCRIPT_APPEND_LUA = `
   return #bounded
 `;
 
-// ─── Setup / Teardown ──────────────────────────────────────────────────────
+// Connect to Redis, register the Lua commands, and reset state between tests
 
 beforeAll(async () => {
   try {
@@ -125,7 +120,7 @@ beforeEach(async () => {
   if (allKeys.length > 0) await redis.del(...allKeys);
 });
 
-// ─── Quota: Lua fixed-window ───────────────────────────────────────────────
+// Guest quota behavior of the Lua fixed-window script
 
 describe('Real Redis — Guest Quota (Lua fixed-window)', () => {
   it('should anchor TTL on first request', async () => {
@@ -215,7 +210,7 @@ describe('Real Redis — Guest Quota (Lua fixed-window)', () => {
   });
 });
 
-// ─── Transcript: fixed-window TTL ──────────────────────────────────────────
+// Transcript writes keep a fixed-window TTL
 
 describe('Real Redis — Guest Transcript (fixed-window TTL)', () => {
   it('should anchor TTL on first write, not slide on append', async () => {
@@ -311,7 +306,7 @@ describe('Real Redis — Guest Transcript (fixed-window TTL)', () => {
   });
 });
 
-// ─── readGuestCount pattern ────────────────────────────────────────────────
+// readGuestCount pattern: GET the counter plus its remaining TTL
 
 describe('Real Redis — readGuestCount (GET + TTL)', () => {
   it('should return count=0 for new guest', async () => {
@@ -340,7 +335,7 @@ describe('Real Redis — readGuestCount (GET + TTL)', () => {
   });
 });
 
-// ─── decrementGuestCount pattern ───────────────────────────────────────────
+// decrementGuestCount pattern: DECR rolls the count back without extending TTL
 
 describe('Real Redis — decrementGuestCount (DECR rollback)', () => {
   it('should decrement count without extending TTL', async () => {

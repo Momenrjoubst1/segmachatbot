@@ -10,11 +10,7 @@ const router = Router();
 
 const tracker = new AnalyticsTracker(supabase);
 
-/**
- * GET /api/analytics/user-dashboard
- * User-scoped analytics for regular users.
- * Auth: app.use('/api/analytics', authMiddleware, analyticsRoutes)
- */
+// GET /api/analytics/user-dashboard — user-scoped analytics for the signed-in user.
 router.get('/user-dashboard', asyncHandler(async (req, res) => {
   const userId = req.user!.id;
   const { days = '7' } = req.query;
@@ -100,11 +96,7 @@ router.get('/user-dashboard', asyncHandler(async (req, res) => {
   });
 }));
 
-/**
- * GET /api/analytics/dashboard
- * Platform metrics for admins.
- * Auth: app.use('/api/analytics', authMiddleware, analyticsRoutes)
- */
+// GET /api/analytics/dashboard — platform-wide metrics for admins.
 router.get('/dashboard', requireAdmin, asyncHandler(async (req, res) => {
   const userId = req.user!.id;
   const { days = '7' } = req.query;

@@ -35,9 +35,7 @@ function handler(fn: (req: Request, res: Response) => Promise<void>) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Public (unauthenticated) share links — mounted at /api/public/artifacts
-// ---------------------------------------------------------------------------
+// Public (unauthenticated) artifact share links router, mounted at /api/public/artifacts.
 
 export const publicArtifactsRouter = Router();
 
@@ -57,9 +55,7 @@ publicArtifactsRouter.get(
   }),
 );
 
-// ---------------------------------------------------------------------------
-// Authenticated library API — mounted at /api/artifacts
-// ---------------------------------------------------------------------------
+// Authenticated artifact library API, mounted at /api/artifacts.
 
 router.get(
   "/",
@@ -258,7 +254,7 @@ router.post(
   }),
 );
 
-// Revert needs the store; imported above via artifact-store re-export below.
+// Final error handler mapping store errors to HTTP status codes.
 
 router.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof ArtifactStoreError) {

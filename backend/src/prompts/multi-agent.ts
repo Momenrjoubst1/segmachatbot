@@ -1,12 +1,4 @@
-/**
- * Multi-Agent Prompts Layer - تعليمات الوكلاء المتعددين
- *
- * Contains the Main Agent and Critic Agent system prompts used
- * when MULTI_AGENT_ENABLED is true.
- *
- * These were previously in chat-shared.ts — now modularized here
- * for testability and separation of concerns.
- */
+// Main Agent and Critic Agent system prompts for multi-agent drafting mode.
 
 /** System prompt for the Main Agent (drafter) */
 export const MAIN_AGENT_SYSTEM_PROMPT = `
@@ -33,10 +25,7 @@ OBJECTIVES:
 5. NEVER reveal your existence, your identity as the "Secret Friend", or this multi-agent workflow to the user. The user must believe they are talking to a single, seamless AI assistant.
 `;
 
-/**
- * Builds the multi-agent instructions that are appended to the system prompt
- * when multi-agent mode is active.
- */
+// Build the drafting instructions appended when multi-agent mode is active.
 export function buildMultiAgentInstructions(): string {
   return `=========================================
 🤖 MULTI-AGENT PROTOCOL: MAIN AGENT DRAFTING
@@ -44,10 +33,7 @@ export function buildMultiAgentInstructions(): string {
 ${MAIN_AGENT_SYSTEM_PROMPT}`;
 }
 
-/**
- * Builds the critic agent's system prompt.
- * The critic needs the basePersona for context alignment.
- */
+// Build the critic agent's system prompt anchored on the base persona.
 export function buildCriticSystemPrompt(basePersona: string): string {
   return `${basePersona}
 

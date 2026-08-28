@@ -178,9 +178,7 @@ export class BM25Search {
     return this.docs.length;
   }
 
-  /**
-   * Remove a document by ID - cleans up all associated data structures
-   */
+  // Remove a document by ID and clean up all its index data.
   removeDoc(docId: number): boolean {
     const idx = this.docs.findIndex(d => d.id === docId);
     if (idx === -1) return false;
@@ -320,11 +318,7 @@ export async function initializeBM25FromDB(): Promise<void> {
   }
 }
 
-/**
- * Force a full re-initialization of the BM25 index from the database.
- * Resets the isInitialized guard so initializeBM25FromDB() will run again.
- * Used by the admin /api/admin/bm25/reindex endpoint.
- */
+// Force a full BM25 re-index from the database by resetting the initialization guard.
 export async function resetBM25Index(): Promise<void> {
   await bm25Mutex.runExclusive(async () => {
     isInitialized = false;

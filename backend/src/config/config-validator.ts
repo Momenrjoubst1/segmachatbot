@@ -1,11 +1,4 @@
-/**
- * Configuration Validation Service
- * خدمة التحقق من التكوين
- * 
- * Centralized configuration validation that runs at startup
- * Validates all critical environment variables and configuration settings
- * Fails fast in production to prevent runtime errors
- */
+// Startup validation of critical env vars and config; fails fast in production.
 
 import { createLogger } from '../utils/logger.js';
 
@@ -26,9 +19,7 @@ interface ConfigValidationRule {
 const isProd = process.env.NODE_ENV === 'production';
 const isTest = process.env.NODE_ENV === 'test';
 
-// ==========================================
-// Validation Rules
-// ==========================================
+// Rules checked against the environment at startup.
 
 const validationRules: ConfigValidationRule[] = [
   // Supabase Configuration
@@ -196,9 +187,7 @@ const validationRules: ConfigValidationRule[] = [
   },
 ];
 
-// ==========================================
-// Validation Service
-// ==========================================
+// Run all validation rules and report the combined result.
 
 export function validateConfiguration(): ConfigValidationResult {
   const result: ConfigValidationResult = {

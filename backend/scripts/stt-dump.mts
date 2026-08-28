@@ -1,4 +1,4 @@
-/** Dump STT metering keys from Redis. Run from backend/: npx tsx scripts/stt-dump.mts */
+// Dump STT metering keys from Redis. Run from backend/: npx tsx scripts/stt-dump.mts
 import "dotenv/config";
 import redis from "../src/config/redis/client.js";
 

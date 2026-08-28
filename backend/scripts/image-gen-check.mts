@@ -1,4 +1,4 @@
-/** Live smoke test for the generate_image tool. Run from backend/: npx tsx scripts/image-gen-check.mts */
+// Live smoke test for the generate_image tool. Run from backend/: npx tsx scripts/image-gen-check.mts
 import "dotenv/config";
 
 async function main() {

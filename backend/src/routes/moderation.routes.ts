@@ -1,15 +1,4 @@
-/**
- * Moderation API
- * واجهة الإشراف على المحتوى
- *
- * Endpoints:
- *   POST /api/moderation/check   — quick sync check (in-process, no external calls)
- *   POST /api/moderation/full    — full async check (input-validator + Supabase moderator)
- *   POST /api/moderation/log     — log a moderation decision for analytics
- *   GET  /api/moderation/health  — liveness probe
- *
- * Auth: applied via the global `authMiddleware` mount in `index.ts`.
- */
+// Moderation API routes: quick/full content checks, decision logging, health.
 
 import { Router } from 'express';
 import type { Request, Response } from 'express';
@@ -25,9 +14,7 @@ const log = createLogger('moderation-api');
 
 const router = Router();
 
-// ==========================================
-// Schemas
-// ==========================================
+// Zod schemas for request bodies.
 
 /** Body for POST /api/moderation/log */
 const logDecisionSchema = z.object({
@@ -41,17 +28,9 @@ const logDecisionSchema = z.object({
 
 export type LogDecisionInput = z.infer<typeof logDecisionSchema>;
 
-// ==========================================
-// Routes
-// ==========================================
+// Route handlers.
 
-/**
- * POST /api/moderation/check
- *
- * Quick synchronous check — runs in-process injection/abuse detection only.
- * Use this on the client to validate user input BEFORE sending it to the
- * chat endpoint.  Sub-millisecond latency, no LLM or Supabase calls.
- */
+// POST /api/moderation/check — quick in-process injection/abuse validation.
 router.post(
   '/check',
   asyncHandler(async (req: Request, res: Response) => {
@@ -85,13 +64,7 @@ router.post(
   }),
 );
 
-/**
- * POST /api/moderation/full
- *
- * Full async check — runs injection detection locally AND the Supabase
- * moderation Edge Function.  Use this server-side when a more thorough
- * judgement is needed (e.g. before persisting user-generated content).
- */
+// POST /api/moderation/full — local injection detection plus Supabase moderator.
 router.post(
   '/full',
   asyncHandler(async (req: Request, res: Response) => {
@@ -121,13 +94,7 @@ router.post(
   }),
 );
 
-/**
- * POST /api/moderation/log
- *
- * Persist a moderation decision to the analytics table for review.
- * Clients call this after they make a final allow/censor/block choice
- * (so the platform can learn from borderline cases).
- */
+// POST /api/moderation/log — persist a moderation decision for analytics.
 router.post(
   '/log',
   asyncHandler(async (req: Request, res: Response) => {
@@ -171,13 +138,7 @@ router.post(
   }),
 );
 
-/**
- * GET /api/moderation/health
- *
- * Lightweight liveness probe — reports whether the in-process
- * validator is reachable and the Supabase moderator function is
- * wired.  Admin only for the detailed check.
- */
+// GET /api/moderation/health — liveness probe; detailed check is admin-only.
 router.get(
   '/health',
   asyncHandler(async (req: Request, res: Response) => {

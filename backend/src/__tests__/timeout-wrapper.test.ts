@@ -1,7 +1,4 @@
-/**
- * Timeout Wrapper Tests
- * اختبارات أداة المهلة الزمنية
- */
+// Timeout wrapper tests for withTimeout and withTimeoutFallback helpers.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { withTimeout, withTimeoutFallback } from '../utils/timeout-wrapper.js';

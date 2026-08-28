@@ -4,9 +4,7 @@ import express from 'express';
 import type { Server } from 'http';
 import request from 'supertest';
 
-// ---------------------------------------------------------------------------
-// Mocks — must be set up BEFORE importing the router
-// ---------------------------------------------------------------------------
+// Mocks — must be registered before importing the router
 
 // Ensure in-memory mode (not Redis) for simpler test isolation
 process.env.RATE_LIMIT_STORE = 'memory';
@@ -175,9 +173,7 @@ vi.mock('../utils/timeout-wrapper.js', () => ({
 // Now import the router (after mocks are set up)
 import guestRouter from '../routes/guest.routes.js';
 
-// ---------------------------------------------------------------------------
 // Test helpers
-// ---------------------------------------------------------------------------
 
 function createTestApp(): Server {
   const app = express();
@@ -201,9 +197,7 @@ function createMockTextStream(chunks: string[]) {
   };
 }
 
-// ===========================================================================
 // Integration Tests
-// ===========================================================================
 
 describe('Guest Routes — Integration Tests', () => {
   let server: Server;
@@ -230,9 +224,7 @@ describe('Guest Routes — Integration Tests', () => {
     });
   });
 
-  // -----------------------------------------------------------------------
   // POST /api/guest/chat — validation
-  // -----------------------------------------------------------------------
 
   describe('POST /chat — validation', () => {
     it('should return 400 for empty body', async () => {
@@ -278,9 +270,7 @@ describe('Guest Routes — Integration Tests', () => {
     });
   });
 
-  // -----------------------------------------------------------------------
   // POST /api/guest/chat — quota enforcement
-  // -----------------------------------------------------------------------
 
   describe('POST /chat — quota enforcement', () => {
     it('should set X-Guest-Message-Count header on first request', async () => {
@@ -358,9 +348,7 @@ describe('Guest Routes — Integration Tests', () => {
     });
   });
 
-  // -----------------------------------------------------------------------
   // POST /api/guest/chat — creates guest cookie
-  // -----------------------------------------------------------------------
 
   describe('POST /chat — guest cookie', () => {
     it('should create guest_id cookie when none provided', async () => {
@@ -390,9 +378,7 @@ describe('Guest Routes — Integration Tests', () => {
     });
   });
 
-  // -----------------------------------------------------------------------
   // GET /api/guest/status
-  // -----------------------------------------------------------------------
 
   describe('GET /status', () => {
     it('should return status for new guest', async () => {
@@ -457,9 +443,7 @@ describe('Guest Routes — Integration Tests', () => {
     });
   });
 
-  // -----------------------------------------------------------------------
   // POST /api/guest/chat — conversationHistory ignored
-  // -----------------------------------------------------------------------
 
   describe('POST /chat — conversationHistory handling', () => {
     it('should accept request with conversationHistory and consume quota', async () => {
@@ -500,9 +484,7 @@ describe('Guest Routes — Integration Tests', () => {
           ],
         });
 
-      // Server should have built messages from its own transcript (empty),
-      // NOT from the client-provided conversationHistory.
-      // Expected messages: only the current user message.
+      // Server rebuilds messages from its own transcript, not the client-supplied history
       expect(capturedMessages).toHaveLength(1);
       expect(capturedMessages[0]).toEqual({
         role: 'user',
@@ -517,9 +499,7 @@ describe('Guest Routes — Integration Tests', () => {
   });
 });
 
-// ===========================================================================
 // Unit Tests — schema validation
-// ===========================================================================
 
 describe('Guest Chat Body Schema', () => {
   const GuestChatBodySchema = z.object({
@@ -569,12 +549,7 @@ describe('Guest Chat Body Schema', () => {
   });
 });
 
-// ===========================================================================
-// Redis Mock — tests for fixed-window quota and transcript TTL
-// These tests simulate a real Redis-backed environment by using a mock
-// that accurately models Redis key semantics (separate TTL per key,
-// INCR with anchored TTL, SETNX for first-write detection).
-// ===========================================================================
+// Simulated Redis semantics: per-key TTL, anchored INCR window, SETNX first-write detection
 
 describe('Guest Redis-backed Quota (simulated)', () => {
   // Simulated Redis key store with per-key TTL tracking
@@ -661,8 +636,7 @@ describe('Guest Redis-backed Quota (simulated)', () => {
     const firstTtl = await redis.ttl(key);
     expect(firstTtl).toBeGreaterThan(0);
 
-    // Simulate time passing (but less than window)
-    // Second call: should increment count but NOT extend TTL
+    // After time passes within the window, the second call increments but keeps the TTL
     const [count2, ttl2] = await redis.guestFixedWindowIncr(key, WINDOW_SECONDS);
     expect(count2).toBe(2);
     // ttl2 should still be close to the original window, not reset

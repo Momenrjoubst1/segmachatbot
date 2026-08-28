@@ -1,12 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// ---------------------------------------------------------------------------
-// Chainable Supabase query-builder mock.
-// Every builder method returns the same thenable object, so
-// .insert().select().single(), .update().eq().eq().select().single(),
-// .delete()..., and awaited .select()... chains all resolve to `results[table]`.
-// vi.hoisted keeps the factory's dependencies available at mock time.
-// ---------------------------------------------------------------------------
+// Chainable Supabase query-builder mock; every chained call resolves to results[table].
 
 type QueryResult = { data: unknown; error: { message: string } | null };
 

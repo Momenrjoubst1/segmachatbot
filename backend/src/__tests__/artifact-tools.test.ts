@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// ── Fake Supabase (same minimal shape as artifact-store.test.ts) ────────────
+// Minimal fake Supabase client, same shape as the one used by artifact-store.test.ts.
 const sb = vi.hoisted(() => {
   type Row = Record<string, any>;
   const tables: Record<string, Row[]> = { artifacts: [], artifact_versions: [] };

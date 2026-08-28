@@ -317,8 +317,7 @@ export const GooeySearchBar = () => {
   };
 
   useEffect(() => {
-    // Skip the initial render so the search bar does not auto-focus on mount
-    // and steal focus from other inputs (e.g. the chat composer).
+    // Skip the initial render so the search bar does not steal focus on mount
     if (isInitialMount.current) {
       isInitialMount.current = false;
       return;

@@ -1,19 +1,12 @@
-/**
- * Base Persona Layer - الشخصية الأساسية
- * Core identity and behavioral rules for Sigma AI
- */
+// Base persona layer — core identity and behavioral rules for Sigma AI.
 
 export interface BasePersonaOptions {
   language?: 'ar' | 'en';
 }
 
-/**
- * Builds the base persona — who Sigma is and what roles it serves.
- * This is the foundational layer of the system prompt.
- */
+// Build the base persona — who Sigma is and the roles it serves.
 export function buildBasePersona(_options?: BasePersonaOptions): string {
-  // Language currently doesn't alter the persona text (Sigma is bilingual),
-  // but the option is here for future A/B testing of persona variations.
+  // Language doesn't alter the bilingual persona text; option kept for future variants.
 
   return `# Identity — الهوية
 

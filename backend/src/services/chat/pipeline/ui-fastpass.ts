@@ -1,11 +1,4 @@
-/**
- * Step 10a — UI Action fast-passes
- *
- * Detects user intents that map directly to UI actions and injects them
- * into the stream BEFORE the model starts generating.  Provides instant
- * UI feedback (open calendar, open email, jump to thread) without
- * waiting for the LLM.
- */
+// Injects instant UI actions (open calendar, email, jump to thread) before the LLM responds.
 
 import { Response } from "express";
 import { log } from "../../../routes/chat/chat-shared.js";
@@ -50,17 +43,9 @@ function extractUserText(coreMessages: CoreMessage[]): string {
   return "";
 }
 
-// ── Material open fast-pass ─────────────────────────────────────────────────
-// "افتح مادة الفيزياء" / "بدي كتاب الكيمياء" / "show my materials" —
-// deterministic open of a library textbook without waiting for the LLM.
-// The phrasing matcher lives in the pure find-materials module (shared with
-// the chat-file-router guard) so it stays unit-testable in one place.
+// Material open fast-pass: deterministically opens a library textbook without the LLM.
 
-/**
- * Stream a canned material-card reply using the same wire protocol as the
- * response-cache-hit path (`0:"..."` deltas), and persist the exchange so
- * the cards survive thread reloads.
- */
+// Streams a canned material-card reply using the cache-hit wire protocol and persists it.
 async function streamAndPersistMaterialReply(args: {
   res: Response;
   threadId: string | undefined;
@@ -98,11 +83,7 @@ function buildMaterialListReply(matches: MaterialMatch[]): string {
   );
 }
 
-/**
- * Try the material fast-pass. Returns true when it fully handled the
- * request (terminal). A phrasing match with zero results falls through to
- * the LLM so the user still gets a natural answer.
- */
+// Tries the material fast-pass; returns true when it fully handled the request.
 async function runMaterialFastPass(args: {
   res: Response;
   coreMessages: CoreMessage[];
@@ -113,8 +94,7 @@ async function runMaterialFastPass(args: {
   const userText = extractUserText(coreMessages);
   if (!userText) return false;
 
-  // Runs BEFORE the thread-summoner pass below: "افتح مادة X" must open a
-  // material, not be mistaken for a chat-title search.
+  // Runs before the thread-summoner pass so material requests never match chat titles.
   const request = matchMaterialOpenRequest(userText);
   if (!request) return false;
 
@@ -155,7 +135,7 @@ export async function runUIFastPasses(args: {
 }): Promise<UIFastPassResult> {
   const { res, coreMessages, userId, threadId } = args;
 
-  // ---- Material open fast-pass (before thread summoner — see note above) ----
+  // Material open fast-pass (runs before the thread summoner)
   try {
     const handled = await runMaterialFastPass({ res, coreMessages, userId, threadId });
     if (handled) return { injected: true, terminal: true };
@@ -163,7 +143,7 @@ export async function runUIFastPasses(args: {
     log.warn("Material fast-pass failed", { error: (err as Error)?.message });
   }
 
-  // ---- Calendar / Email keywords ----
+  // Calendar / Email keyword fast-passes
   try {
     const text = extractUserText(coreMessages).toLowerCase();
     if (text) {
@@ -180,7 +160,7 @@ export async function runUIFastPasses(args: {
     });
   }
 
-  // ---- Thread summoner fast-pass ----
+  // Thread summoner fast-pass
   try {
     const userText = extractUserText(coreMessages);
     const extracted = userText ? extractThreadSearchTitle(userText) : null;

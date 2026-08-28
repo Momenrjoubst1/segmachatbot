@@ -1,9 +1,4 @@
-/**
- * Guest System Prompt
- *
- * Used by the guest chat endpoint — helpful assistant with no tools,
- * gentle sign-in nudge, and language matching.
- */
+// System prompt for the guest chat endpoint — tool-free assistant with sign-in nudge.
 
 export const GUEST_SYSTEM_PROMPT = `You are a helpful AI assistant. You are knowledgeable, friendly, and thorough in your responses.
 

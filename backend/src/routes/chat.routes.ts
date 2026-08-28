@@ -11,9 +11,7 @@ const router = Router();
 router.post(
   "/",
   chatLimiter,
-  // Apply the stricter new-chat limiter ONLY when continuing a REAL owned
-  // thread. A client-supplied fake threadId must not downgrade the limit —
-  // ownership is verified (Redis-cached, 5-min TTL) before skipping.
+  // Apply the stricter limiter unless the supplied threadId is a verified owned thread.
   async (req, res, next) => {
     try {
       const threadId = req.body?.threadId;

@@ -1,19 +1,4 @@
-/**
- * Sigma voice personas — Arabic + English, ElevenLabs-first (sub-100ms TTFB).
- *
- * Each persona declares BOTH:
- *   - edgeVoice / locale / rate: the legacy Edge Read Aloud fallback (kept
- *     for environments without an ElevenLabs key). Still works through the
- *     existing /api/tts HTTP route.
- *   - elevenLabsVoiceId: the ElevenLabs voice used by the new
- *     /ws/tts-stream WebSocket relay (Live Voice mode). When missing, the
- *     relay falls back to ELEVENLABS_VOICE_ID from env.
- *
- * Set your real ElevenLabs voice IDs in .env (ELEVENLABS_VOICE_ID) or
- * per-persona below. The defaults below are illustrative placeholders
- * that work with the multilingual v2 / flash v2.5 models — replace them
- * with voices from your ElevenLabs Voice Library.
- */
+// Sigma voice personas — Arabic + English, ElevenLabs-first with Edge Read Aloud fallback.
 
 export interface VoicePersona {
   id: string;
@@ -28,46 +13,26 @@ export interface VoicePersona {
   gender: "female" | "male";
   /** Speech rate adjustment, e.g. "+0%" / "-5%". */
   rate: string;
-  /**
-   * ElevenLabs voice id used by the /ws/tts-stream relay. When undefined,
-   * the relay falls back to ELEVENLABS_VOICE_ID from the environment.
-   */
+  // ElevenLabs voice id for the /ws/tts-stream relay; falls back to ELEVENLABS_VOICE_ID env.
   elevenLabsVoiceId?: string;
-  /**
-   * Language hint sent to ElevenLabs. ElevenLabs auto-detects for flash /
-   * multilingual models, but the persona can pin a language for stability.
-   * Accepts ISO-639-1 codes: "ar", "en".
-   */
+  // Language hint pinned to ElevenLabs for stability; ISO-639-1 codes "ar", "en".
   language?: "ar" | "en";
   default?: boolean;
 }
 
-/**
- * ElevenLabs voice IDs sourced from the project's .env so the
- * persona → voice mapping stays in lockstep with the deploy config.
- *
- *   - ELEVENLABS_VOICE_ID      — primary voice (default for all personas
- *                                unless they pin their own ID)
- *   - ELEVENLABS_VOICE_ID_ALT  — secondary voice (used for the English
- *                                personas below, or whatever locale the
- *                                user wants as the "alternate")
- *
- * When you add a new cloned voice in your ElevenLabs Voice Library, copy
- * its id into .env and add a new persona below that references it.
- */
+// ElevenLabs voice IDs sourced from .env so the persona mapping matches deploy config.
 const ENV_PRIMARY = process.env.ELEVENLABS_VOICE_ID?.trim() ?? "";
 const ENV_ALT = process.env.ELEVENLABS_VOICE_ID_ALT?.trim() ?? "";
 
 const ELEVENLABS_VOICES = {
-  /** Primary — Bella, soft warm female. Verified working on the FREE plan
-   *  via API with Arabic through eleven_flash_v2_5 (2026-08-24). */
+  // Primary — Bella, soft warm female; free-plan verified for Arabic.
   primary: ENV_PRIMARY || "EXAVITQu4vr4xnSDxMaL",
   /** Alternate — Adam, deep narrative male. Free-plan verified. */
   alt: ENV_ALT || "pNInz6obpgDQGcFmaJgB",
 } as const;
 
 export const VOICE_PERSONAS: VoicePersona[] = [
-  // ─── Arabic (default) ─────────────────────────────────────────────
+  // Arabic personas (Sana is the default).
   {
     id: "sana",
     nameAr: "سيجما",
@@ -92,9 +57,7 @@ export const VOICE_PERSONAS: VoicePersona[] = [
     locale: "ar-SA",
     gender: "male",
     rate: "-4%",
-    // Male personas take the alternate (Adam) voice so switching personas
-    // is actually audible on the ElevenLabs path — the primary env voice
-    // is female, and pointing every persona at it made them sound alike.
+    // Male personas take the alternate (Adam) voice so persona switches are audible.
     elevenLabsVoiceId: ELEVENLABS_VOICES.alt || undefined,
     language: "ar",
   },
@@ -126,7 +89,7 @@ export const VOICE_PERSONAS: VoicePersona[] = [
     language: "ar",
   },
 
-  // ─── English (uses Adam — free-plan verified) ──────────────────
+  // English persona (uses Adam).
   {
     id: "english-alt",
     nameAr: "إنجليزي",
@@ -159,11 +122,7 @@ export function isValidPersonaId(id: string): boolean {
   return VOICE_PERSONAS.some((p) => p.id === id);
 }
 
-/**
- * Resolve the ElevenLabs voice id for a persona: explicit field if set,
- * otherwise ELEVENLABS_VOICE_ID from the environment, otherwise null
- * (caller decides whether to error or fall back to the Edge voice).
- */
+// Resolve a persona's ElevenLabs voice id: explicit field, env default, or null.
 export function resolveElevenLabsVoiceId(
   id: string | undefined | null,
 ): string | null {
@@ -173,16 +132,7 @@ export function resolveElevenLabsVoiceId(
   return envDefault || null;
 }
 
-/**
- * Resolve whatever the client sends as `voiceId` to a concrete ElevenLabs
- * voice id for the /ws/tts-stream relay. Accepts BOTH:
- *   - a persona id ("sana", "hakeem", …) — what the frontend picker sends;
- *   - a raw ElevenLabs voice id — passed through untouched.
- *
- * Before this existed the relay forwarded persona ids verbatim to ElevenLabs,
- * which rejects them as invalid voice ids — every WS session silently fell
- * back to the Edge HTTP route.
- */
+// Resolve client-sent voiceId input (persona id or raw ElevenLabs id) to a concrete voice id.
 export function resolveRelayVoiceInput(
   raw: string | undefined | null,
 ): string | null {

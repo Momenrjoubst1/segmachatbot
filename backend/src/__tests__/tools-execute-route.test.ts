@@ -19,8 +19,7 @@ vi.mock('../utils/logger.js', () => ({
 
 import toolsRoutes from '../routes/tools.routes.js';
 
-// Minimal auth middleware stub that mirrors the real contract:
-// it attaches req.user when a Bearer token is present.
+// Auth middleware stub that attaches req.user when a Bearer token is present.
 const app = express();
 app.use(express.json());
 app.use((req: any, _res: any, next: any) => {

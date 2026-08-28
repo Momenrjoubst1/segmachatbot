@@ -1,13 +1,4 @@
-/**
- * Step 8 — Persist user message
- *
- * Saves only the last user message (the others are part of the
- * in-flight session history being re-sent for context).
- *
- * Attachment file parts are NOT stored inside `content` (they would bloat the
- * row with base64 / large refs). They are recorded in `chat_attachments` via
- * recordMessageAttachments and re-attached when the thread is fetched.
- */
+// Persists the last user message, storing attachment metadata in chat_attachments.
 
 import { createLogger } from "../../../utils/logger.js";
 import {
@@ -20,8 +11,7 @@ import type { CoreMessage } from "./types.js";
 
 /** Compact text for a message whose parts include attachments/media. */
 function sanitizeContent(content: string): string {
-  // Strip r2:// attachment refs and data: URLs from stored content —
-  // metadata lives in chat_attachments, not in the text column.
+  // Strip r2:// refs and data: URLs; attachment metadata lives in chat_attachments.
   return content
     .replace(/r2:\/\/chat-attachments\/[^\s"']+/g, "[attachment]")
     .replace(/data:[a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g, "[inline-data]");

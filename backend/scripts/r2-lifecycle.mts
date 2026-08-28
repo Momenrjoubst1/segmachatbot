@@ -1,14 +1,4 @@
-/**
- * Apply an auto-expiry lifecycle rule to the R2 bucket for chat attachments.
- *
- * Run from backend/:  npx tsx scripts/r2-lifecycle.mts [--days 7] [--prefix chat-attachments/]
- *
- * Requires CLOUDFLARE_API_TOKEN in the environment (an API token with
- * Workers R2 Storage:Edit permission) plus the standard R2_ACCOUNT_ID /
- * R2_BUCKET_NAME. Without a token the script prints the manual dashboard
- * steps instead — R2 lifecycle rules are Cloudflare-API-only and cannot be
- * managed through the S3-compatible credentials.
- */
+// Apply an auto-expiry lifecycle rule to the R2 bucket for chat attachments; needs CLOUDFLARE_API_TOKEN.
 import "dotenv/config";
 
 interface LifecycleRule {

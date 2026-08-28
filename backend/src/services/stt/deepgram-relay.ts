@@ -1,17 +1,4 @@
-/**
- * Deepgram STT Relay Session
- *
- * Manages ONE client dictation session:
- *   browser WS  ⇄  this relay  ⇄  Deepgram live WS (nova-3)
- *
- * - Browser sends binary frames (PCM16 LE @16kHz mono) and a first JSON
- *   config frame {type:"config", sampleRate}.
- * - Relay opens Deepgram with linear16 params, forwards audio verbatim,
- *   converts Deepgram Results into compact {type:"partial"|"final", text}
- *   JSON frames for the client.
- * - Hard limits: session duration, one concurrent session per user, daily
- *   minutes budget in Redis. Audio is piped only — never stored.
- */
+// Relays browser dictation sessions to a Deepgram live STT stream with usage limits; audio is never stored.
 
 import WebSocket from "ws";
 import { createLogger } from "../../utils/logger.js";

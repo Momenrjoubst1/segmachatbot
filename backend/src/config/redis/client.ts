@@ -12,9 +12,7 @@ if (process.env.NODE_ENV === 'production' && !useRealRedis) {
   throw new Error('RATE_LIMIT_STORE must be set to "redis" in production');
 }
 
-// Module augmentation: ioredis addCustomCommand returns `this` typed as Redis,
-// but our sites call the custom commands via dot-access. Declaring them on
-// the Redis interface lets us drop every `(redis as any).customCmd(...)` cast.
+// Declare custom commands on the ioredis interface so call sites need no casts.
 declare module 'ioredis' {
   // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   interface RedisCommander<Context> {

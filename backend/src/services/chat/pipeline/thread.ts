@@ -1,12 +1,4 @@
-/**
- * Step 7 — Thread management
- *
- * Either:
- *  - Verifies the user owns the supplied `threadId`, OR
- *  - Reuses an idempotency-keyed session, OR
- *  - Reuses a recent empty session (defensive fallback for retries), OR
- *  - Creates a brand-new session.
- */
+// Resolves the chat thread: verify ownership, reuse idempotent or empty sessions, or create one.
 
 import { Request } from "express";
 import { ensureThreadOwnership } from "../../../routes/chat/chat-shared.js";
@@ -90,8 +82,7 @@ export async function resolveThread(args: {
 
   // 3) Defensive: reuse a recent empty session
   if (!reusedSessionId) {
-    // Use a per-user mutex to prevent race condition where two concurrent
-    // requests both find and reuse the same empty session
+    // Per-user mutex prevents two concurrent requests reusing the same empty session.
     const mutexKey = `thread:reuse:${userId}`;
     const release = await getThreadReuseMutex(userId).acquire(); // 5s timeout
     try {

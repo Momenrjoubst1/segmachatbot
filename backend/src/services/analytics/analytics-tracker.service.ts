@@ -63,8 +63,7 @@ export class AnalyticsTracker {
   }
 
   async getUserDailyMetrics(userId: string, startDate: Date, endDate: Date): Promise<DailyMetric[]> {
-    // For user-scoped metrics, we'll aggregate from individual events
-    // since analytics_daily_metrics doesn't have user_id column
+    // Aggregate from raw events since the daily-metrics table has no user_id column
     const { data, error } = await this.supabase
       .from("analytics_events")
       .select("*")

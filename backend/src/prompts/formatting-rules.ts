@@ -1,13 +1,6 @@
-/**
- * Formatting Layer - قواعد التنسيق
- * Markdown formatting and language mixing rules
- */
+// Formatting rules layer — Markdown structure and Arabic/English language rules.
 
-/**
- * Builds the formatting rules layer.
- * These rules ensure clean, readable output with proper Markdown
- * and bilingual (Arabic/English) separation.
- */
+// Build the formatting rules layer for clean, readable output.
 export function buildFormattingRules(): string {
   return `# Formatting Rules — قواعد التنسيق
 

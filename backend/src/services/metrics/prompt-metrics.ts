@@ -1,10 +1,4 @@
-/**
- * Prompt Metrics — تتبع مقاييس البرومبت
- *
- * Lightweight structured logging for prompt A/B testing.
- * Every request logs: variant, prompt length, token estimate, build time.
- * Ready for aggregation in Datadog / Grafana / Supabase analytics.
- */
+// Lightweight structured logging of prompt variant metrics for A/B testing.
 
 import { createLogger } from '../../utils/logger.js';
 import { PROMPT_CONFIG } from '../../config/constants.js';
@@ -25,10 +19,7 @@ export interface PromptMetricsPayload {
   multiAgent: boolean;
 }
 
-/**
- * In-memory counters for quick health checks (resets on restart).
- * For persistent analytics, query logs or Supabase.
- */
+// In-memory per-variant counters for quick health checks; reset on restart.
 const counters: Record<PersonaVariant, number> = {
   default: 0,
   concise: 0,

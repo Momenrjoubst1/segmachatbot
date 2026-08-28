@@ -1,8 +1,4 @@
-/**
- * Direct TTS verification — no HTTP/auth needed.
- * Generates one MP3 per persona and validates size + magic bytes.
- * Run: npx tsx scripts/test-tts.ts
- */
+// Direct TTS verification (no HTTP/auth): generates one MP3 per persona and validates size + magic bytes.
 import { mkdirSync, writeFileSync, statSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { VOICE_PERSONAS } from "../src/config/voice-personas.js";

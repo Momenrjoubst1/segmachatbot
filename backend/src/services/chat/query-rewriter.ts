@@ -1,15 +1,4 @@
-/**
- * Query Rewriter — Improves the user's search query before embedding.
- *
- * Strategies:
- *  - direct:         Message is clear and self-contained (>50 chars, is a question)
- *  - contextualized: Short follow-up → prepend context from last assistant message
- *  - expanded:       Add synonyms for key Arabic academic terms
- *  - hyde:           Hypothetical Document Embedding — generate a hypothetical
- *                    answer snippet to improve embedding match
- *
- * No LLM calls — pure heuristic / template-based rewriting for speed.
- */
+// Rewrites the user query before embedding via heuristics (direct, contextualized, expanded, HyDE).
 
 import { createLogger } from "../../utils/logger.js";
 import type { IntentResult } from "./intent-detector.js";
@@ -17,9 +6,7 @@ import { UserIntent } from "./intent-detector.js";
 
 const log = createLogger("query-rewriter");
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// Query rewrite result type
 
 export interface RewrittenQuery {
   original: string;
@@ -27,9 +14,7 @@ export interface RewrittenQuery {
   strategy: "direct" | "contextualized" | "hyde" | "expanded";
 }
 
-// ---------------------------------------------------------------------------
 // Arabic academic term expansion map
-// ---------------------------------------------------------------------------
 
 const EXPANSION_MAP: Record<string, string> = {
   "تسجيل": "تسجيل المواد registration enrollment",
@@ -61,9 +46,7 @@ const EXPANSION_MAP: Record<string, string> = {
   "ساعات": "ساعات معتمدة credit hours",
 };
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 function expandArabicTerms(text: string): string {
   let expanded = text;
@@ -89,19 +72,12 @@ function expandArabicTerms(text: string): string {
 }
 
 function buildHydeSnippet(topic: string): string {
-  // Hypothetical Document Embedding: create a fake "document" that
-  // represents what an ideal answer would look like.  Embedding this
-  // instead of (or alongside) the raw query dramatically improves
-  // semantic match quality because the embedding space of answers is
-  // closer to the embedding space of stored documents than the space
-  // of questions is.
+  // HyDE: build a hypothetical answer snippet whose embedding matches stored documents better.
   const cleanTopic = topic.replace(/[?؟]/g, "").trim();
   return `Document about: ${cleanTopic} at Jordan University of Science and Technology (JUST). This document provides detailed information regarding ${cleanTopic}, including relevant regulations, procedures, and academic guidelines for students at JUST.`;
 }
 
-// ---------------------------------------------------------------------------
 // Main rewrite function
-// ---------------------------------------------------------------------------
 
 export function rewriteQuery(
   userMessage: string,
@@ -112,7 +88,7 @@ export function rewriteQuery(
   const msgLen = msg.length;
   const isQuestion = /[?؟]/.test(msg) || /^(what|how|why|where|when|who|which|ما|كيف|لماذا|أين|متى|هل|من|ماذا|كم)/i.test(msg);
 
-  // ---- Strategy selection ----
+  // Strategy selection
 
   // 1. HyDE for knowledge queries (best semantic match)
   if (

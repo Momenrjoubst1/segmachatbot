@@ -1,7 +1,4 @@
-/**
- * Advanced Memory System Configuration
- * مستوحى من نظام Gemini لكن يعمل مع أي نموذج
- */
+// Advanced memory system configuration.
 
 import { createLogger } from "../utils/logger.js";
 import {
@@ -13,80 +10,72 @@ import {
 const log = createLogger('memory-config');
 
 export const MemoryConfig = {
-  // ==========================================
-  // Context Window Management
-  // ==========================================
+  // Context window management settings.
   contextWindow: {
-    // الحد الأقصى للرسائل قبل التلخيص (نافذة مليون توكن تستوعب تاريخاً أطول بكثير)
+    // Max messages before summarization; the large window holds far more history.
     maxMessages: parseInt(process.env.MEMORY_MAX_MESSAGES || String(MAX_CHAT_HISTORY_MESSAGES)),
 
-    // عدد الرسائل الأولى التي تُحفظ دائماً
+    // First messages always kept in context.
     keepFirstMessages: parseInt(process.env.MEMORY_KEEP_FIRST || String(KEEP_FIRST_MESSAGES)),
 
-    // عدد الرسائل الأخيرة التي تُحفظ دائماً
+    // Last messages always kept in context.
     keepLastMessages: parseInt(process.env.MEMORY_KEEP_LAST || String(KEEP_LAST_MESSAGES)),
     
-    // الحد الأدنى للرسائل قبل بدء التلخيص
+    // Minimum messages before summarization starts.
     minMessagesForSummary: parseInt(process.env.MEMORY_MIN_FOR_SUMMARY || '12'),
   },
 
-  // ==========================================
-  // Smart Summarization
-  // ==========================================
+  // Smart summarization settings.
   summarization: {
-    // تفعيل/تعطيل التلخيص الذكي
+    // Enable or disable smart summarization.
     enabled: process.env.MEMORY_SUMMARIZATION_ENABLED !== 'false',
     
-    // النموذج المستخدم للتلخيص (رخيص وسريع)
+    // Model used for summarization (cheap and fast).
     model: process.env.MEMORY_SUMMARY_MODEL || 'gpt-4o-mini',
     
-    // الحد الأقصى لطول الملخص (tokens)
+    // Maximum summary length in tokens.
     maxSummaryTokens: parseInt(process.env.MEMORY_SUMMARY_MAX_TOKENS || '500'),
     
-    // عدد الرسائل التي تُلخص في كل مرة
+    // Messages included in each summarization pass.
     messagesPerSummary: parseInt(process.env.MEMORY_MESSAGES_PER_SUMMARY || '10'),
     
-    // الحد الأدنى لطول الرسالة لتضمينها في الملخص
+    // Minimum message length to include in a summary.
     minMessageLength: parseInt(process.env.MEMORY_MIN_MESSAGE_LENGTH || '10'),
   },
 
-  // ==========================================
-  // Context Caching
-  // ==========================================
+  // Context caching settings.
   caching: {
-    // تفعيل/تعطيل التخزين المؤقت
+    // Enable or disable context caching.
     enabled: process.env.MEMORY_CACHING_ENABLED !== 'false',
     
-    // مدة الاحتفاظ بالـ cache (بالثواني)
+    // Cache retention period in seconds.
     ttl: parseInt(process.env.MEMORY_CACHE_TTL || '3600'), // ساعة واحدة
     
-    // الحد الأدنى لحجم المحتوى للتخزين المؤقت (characters)
+    // Minimum content size for caching, in characters.
     minContentSize: parseInt(process.env.MEMORY_CACHE_MIN_SIZE || '1000'),
     
-    // الحد الأقصى لحجم الـ cache (MB)
+    // Maximum cache size in MB.
     maxCacheSize: parseInt(process.env.MEMORY_CACHE_MAX_SIZE || '100'),
   },
 
-  // ==========================================
-  // Enhanced Memory Bank
-  // ==========================================
+  // Persistent memory bank settings.
   memoryBank: {
-    // تفعيل/تعطيل الذاكرة الدائمة المحسّنة
+    // Enable or disable the persistent memory bank.
     enabled: process.env.MEMORY_BANK_ENABLED !== 'false',
 
-    // الحد الأقصى لعدد الحقائق المحفوظة لكل مستخدم
+    // Maximum facts stored per user.
     maxFactsPerUser: parseInt(process.env.MEMORY_MAX_FACTS || '100'),
 
-    // الحد الأدنى لعدد الرسائل قبل استخراج الحقائق
+    // Minimum messages before fact extraction runs.
     minMessagesForExtraction: parseInt(process.env.MEMORY_MIN_FOR_EXTRACTION || '6'),
 
-    // الحد الأقصى لعدد مرات الاستخراج في الجلسة الواحدة
+    // Maximum extraction passes per session.
     maxExtractionsPerSession: parseInt(process.env.MEMORY_MAX_EXTRACTIONS || '5'),
 
-    // الحد الأقصى لعمر الحقائق بالأيام قبل التنظيف (90 يوماً افتراضياً)
+    // Fact age limit in days before cleanup.
     maxFactAgeDays: parseInt(process.env.MEMORY_MAX_FACT_AGE_DAYS || '90'),
 
-    // الفئات المدعومة
+    // Supported fact categories.
     categories: [
       'personal',      // معلومات شخصية
       'academic',      // معلومات أكاديمية
@@ -98,54 +87,48 @@ export const MemoryConfig = {
     ] as const,
   },
 
-  // ==========================================
-  // Cross-Session Recall
-  // ==========================================
+  // Cross-session recall settings.
   crossSession: {
-    // تفعيل/تعطيل التذكر عبر المحادثات
+    // Enable or disable recall across chats.
     enabled: process.env.MEMORY_CROSS_SESSION_ENABLED !== 'false',
 
-    // عدد المحادثات السابقة للبحث فيها
+    // Previous chats to search.
     maxPreviousChats: parseInt(process.env.MEMORY_MAX_PREVIOUS_CHATS || '10'),
 
-    // الحد الأقصى لعمر المحادثة للبحث فيها (أيام)
+    // Maximum chat age to search, in days.
     maxChatAgeDays: parseInt(process.env.MEMORY_MAX_CHAT_AGE_DAYS || '30'),
 
-    // الحد الأقصى لعمر إدخالات cross-session بالأيام قبل التنظيف (30 يوماً افتراضياً)
+    // Cross-session entry age in days before cleanup.
     maxEntryAgeDays: parseInt(process.env.MEMORY_CROSS_SESSION_MAX_AGE_DAYS || '30'),
 
-    // عدد النتائج من كل محادثة
+    // Results taken from each previous chat.
     resultsPerChat: parseInt(process.env.MEMORY_RESULTS_PER_CHAT || '3'),
   },
 
-  // ==========================================
-  // Performance & Optimization
-  // ==========================================
+  // Performance and optimization settings.
   performance: {
-    // تفعيل/تعطيل الضغط للرسائل الطويلة
+    // Enable compression of long messages.
     compressionEnabled: process.env.MEMORY_COMPRESSION_ENABLED !== 'false',
     
-    // الحد الأدنى لطول الرسالة للضغط (characters)
+    // Minimum message length that triggers compression.
     compressionThreshold: parseInt(process.env.MEMORY_COMPRESSION_THRESHOLD || '5000'),
     
-    // تفعيل/تعطيل التحميل الكسول للذاكرة
+    // Enable lazy loading of memory.
     lazyLoadingEnabled: process.env.MEMORY_LAZY_LOADING_ENABLED !== 'false',
     
-    // تفعيل/تعطيل التوازي في العمليات
+    // Enable parallel processing of operations.
     parallelProcessing: process.env.MEMORY_PARALLEL_PROCESSING !== 'false',
   },
 
-  // ==========================================
-  // Debugging & Monitoring
-  // ==========================================
+  // Debugging and monitoring settings.
   debug: {
-    // تفعيل/تعطيل سجلات التصحيح
+    // Enable debug logging.
     enabled: process.env.MEMORY_DEBUG === 'true',
     
-    // تفعيل/تعطيل إحصائيات الأداء
+    // Enable performance metrics.
     performanceMetrics: process.env.MEMORY_METRICS === 'true',
     
-    // تفعيل/تعطيل تسجيل العمليات
+    // Enable operation logging.
     logOperations: process.env.MEMORY_LOG_OPERATIONS === 'true',
   },
 };

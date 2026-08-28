@@ -1,10 +1,4 @@
-/**
- * Tool Instructions Layer - تعليمات الأدوات
- * Dynamic tool usage instructions based on which tools are enabled.
- *
- * Key improvement: Only includes instructions for tools that are actually
- * available, reducing token usage when tools are disabled.
- */
+// Build tool usage instructions only for the tool groups that are enabled.
 
 /** All known tool group identifiers */
 export type ToolGroup = 'email' | 'calendar' | 'tasks' | 'web_search' | 'code_executor' | 'fonts' | 'materials' | 'artifact' | 'general';
@@ -220,10 +214,7 @@ function buildMaterialsToolInstructions(): string {
 - Never invent a material:// link yourself. Cards come ONLY from find_materials results.`;
 }
 
-/**
- * Builds the complete tool instructions layer.
- * Only includes instructions for tool groups that are actually enabled.
- */
+// Build the complete tool instructions layer from the enabled tool groups.
 export function buildToolInstructions(enabledTools: string[]): string {
   if (!enabledTools || enabledTools.length === 0) return '';
 

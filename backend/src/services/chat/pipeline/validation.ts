@@ -1,9 +1,4 @@
-/**
- * Step 1 — Request validation
- *
- * Validates the request body against `chatMessageSchema`, normalises
- * the model selection, and prepares the per-request metrics object.
- */
+// Validates the chat request body, normalizes the model, and prepares per-request metrics.
 
 import { chatMessageSchema } from "../../../validators/chat-validation-schemas.js";
 import { log, DEFAULT_MODEL, ALLOWED_MODELS } from "../../../routes/chat/chat-shared.js";
@@ -38,7 +33,7 @@ export function validateAndPrepareRequest(req: {
   body: Record<string, unknown>;
   user?: { id: string };
 }): ValidationStepOutcome {
-  // ---- Schema validation ----
+  // Schema validation
   const validation = chatMessageSchema.safeParse(req.body ?? {});
   if (!validation.success) {
     log.warn("Invalid chat payload", { issues: validation.error.issues });
@@ -54,7 +49,7 @@ export function validateAndPrepareRequest(req: {
     };
   }
 
-  // ---- Auth check ----
+  // Auth check
   const userId = req.user?.id;
   if (!userId) {
     log.warn("Unauthorized POST /api/chat — missing or invalid user");
@@ -74,7 +69,7 @@ export function validateAndPrepareRequest(req: {
     ragEnabled?: boolean;
   };
 
-  // ---- Model resolution ----
+  // Model resolution
   const requestedModel =
     body.model
     || body.config?.modelName
@@ -101,7 +96,7 @@ export function validateAndPrepareRequest(req: {
     };
   }
 
-  // ---- Effort resolution (schema already enum-validated; keep narrow type) ----
+  // Effort resolution (schema already enum-validated)
   const VALID_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
   const selectedEffort = body.effort && (VALID_EFFORTS as readonly string[]).includes(body.effort)
     ? (body.effort as (typeof VALID_EFFORTS)[number])

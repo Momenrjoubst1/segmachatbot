@@ -1,10 +1,4 @@
-/**
- * Daily upload quota for chat attachments.
- *
- * Mirrors the STT daily-minutes pattern: a UTC-day-keyed Redis counter of
- * bytes uploaded, with reserve/release so failed uploads don't consume quota.
- * Redis failure fails OPEN (allow) — metering must never block chat.
- */
+// Daily per-user upload quota kept in Redis; Redis failures fail open.
 import redis from "../../config/redis/client.js";
 import { createLogger } from "../../utils/logger.js";
 
@@ -26,17 +20,12 @@ export interface QuotaReservation {
   release(): Promise<void>;
 }
 
-/**
- * Reserve `bytes` against today's quota.
- * Throws a QuotaExceededError when the user is over the daily limit.
- */
+// Reserve bytes against today's quota, throwing when the user is over the limit.
 export async function reserveUploadBytes(userId: string, bytes: number): Promise<QuotaReservation> {
   let reserved = false;
   try {
     const key = todayKey(userId);
-    // Non-atomic read+write by design (MockRedis lacks MULTI; mirrors STT).
-    // Worst case under a race is a slightly loose counter — acceptable for
-    // metering that must never hard-block.
+    // Deliberately non-atomic read+write: a race only loosens the counter slightly
     const usedRaw = await redis.get(key);
     const used = usedRaw ? parseInt(usedRaw, 10) : 0;
     if (used + bytes > DAILY_BYTES_LIMIT) {

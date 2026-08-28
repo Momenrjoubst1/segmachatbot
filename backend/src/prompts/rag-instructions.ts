@@ -1,9 +1,4 @@
-/**
- * RAG Context Layer - تعليمات السياق المسترجع
- *
- * Builds RAG instructions and injects retrieved context into the system prompt.
- * Handles the case where no context is found gracefully.
- */
+// Build RAG instructions and inject retrieved context into the system prompt.
 
 export interface RAGOptions {
   /** Whether RAG context was retrieved */
@@ -16,11 +11,7 @@ export interface RAGOptions {
   retrievalMethod: 'vector' | 'bm25' | 'hybrid' | 'structure_scope' | 'curriculum';
 }
 
-/**
- * Builds the RAG instructions layer.
- * When no context is found, returns a brief note so the model
- * falls back to its general persona without wasting tokens.
- */
+// Build RAG instructions; return a brief fallback note when no context exists.
 export function buildRAGInstructions(options: RAGOptions): string {
   if (!options.hasContext) {
     return '(Note: No specific knowledge base context was found. Answer based on your general persona.)';

@@ -32,7 +32,7 @@ const createFlashcardsSchema = z.object({
   })).min(1).max(50),
 });
 
-// ── Flashcards ───────────────────────────────────────────────────────────────
+// Flashcard endpoints.
 
 router.get(
   "/flashcards/due-count",
@@ -130,7 +130,7 @@ router.delete(
   })
 );
 
-// ── Study Progress ──────────────────────────────────────────────────────────
+// Study progress endpoints.
 
 router.get(
   "/progress",
@@ -164,7 +164,7 @@ router.post(
   })
 );
 
-// ── Context for system prompt (internal use) ─────────────────────────────────
+// Progress context for the system prompt (internal use).
 router.get(
   "/progress/context",
   asyncHandler(async (req: Request, res: Response) => {
@@ -179,7 +179,7 @@ router.get(
   })
 );
 
-// ── Daily review plan ──────────────────────────────────────────────────────
+// Daily review plan endpoint.
 router.get(
   "/daily-plan",
   asyncHandler(async (req: Request, res: Response) => {
@@ -202,12 +202,10 @@ router.get(
       .order("mastery_level", { ascending: true })
       .limit(5);
 
-    // 3. Suggested questions from textbook_questions
-    // NOTE: schema column is `text` (migration 016), not `question`.
+    // 3. Suggested questions from textbook_questions (schema column is `text`).
     let suggestedQuestions: Array<{ text: string; page_number: number | null; section_path: string | null }> = [];
     if (weakTopics && weakTopics.length > 0) {
-      // PostgREST .or() treats commas/parens as syntax — strip them from
-      // user/LLM-generated topic names before building the filter.
+      // Strip PostgREST filter metacharacters from topic names before .or().
       const safeTopics = weakTopics
         .map((w) => w.topic.replace(/[,()"'\\%]/g, " ").trim())
         .filter((t) => t.length > 1);

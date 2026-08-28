@@ -1,14 +1,4 @@
-/**
- * Media registry — per-request storage for attachment payloads referenced by
- * text sentinels.
- *
- * The stock @ai-sdk/openai converter throws on video file parts before the
- * fetch layer ever sees them. To keep streamText/tools/streaming intact we
- * encode media as a short text sentinel (`⟦MEDIA:<id>⟧`) that survives every
- * converter, and carry the real payload in an AsyncLocalStorage registry that
- * the wire-patch fetch wrapper reads when rewriting the serialized JSON body
- * into provider-native blocks (video_url / input_audio).
- */
+// Per-request registry mapping ⟦MEDIA:<id>⟧ sentinel texts to attachment payloads.
 import { AsyncLocalStorage } from "async_hooks";
 import crypto from "crypto";
 

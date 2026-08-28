@@ -1,4 +1,4 @@
-/** Live check: primary model routing + fallback chain. Run from backend/: npx tsx scripts/model-routing-check.mts */
+// Live check: primary model routing + fallback chain. Run from backend/: npx tsx scripts/model-routing-check.mts
 import "dotenv/config";
 
 async function main() {

@@ -2,46 +2,25 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('chat-title-config');
 
-/**
- * إعدادات نظام التسمية التلقائية للمحادثات
- * Chat Auto-Titling Configuration
- */
+// Chat auto-titling configuration.
 
 export const ChatTitleConfig = {
-  /**
-   * تفعيل/تعطيل النظام بالكامل
-   * Enable/Disable the entire system
-   */
+  // Enable or disable the whole auto-titling system.
   enabled: process.env.CHAT_AUTO_TITLING_ENABLED !== 'false',
 
-  /**
-   * عدد الرسائل المطلوبة لتفعيل التسمية
-   * Number of messages required to trigger titling
-   */
+  // Messages required before titling triggers.
   minMessagesCount: parseInt(process.env.CHAT_TITLE_MIN_MESSAGES || '2'),
 
-  /**
-   * الحد الأقصى لطول العنوان (بالأحرف)
-   * Maximum title length in characters
-   */
+  // Maximum title length in characters.
   maxTitleLength: parseInt(process.env.CHAT_TITLE_MAX_LENGTH || '100'),
 
-  /**
-   * عدد الـ tokens المسموح بها للنموذج
-   * Max tokens for AI model
-   */
+  // Max tokens allowed for the AI model.
   maxTokens: parseInt(process.env.CHAT_TITLE_MAX_TOKENS || '20'),
 
-  /**
-   * درجة الحرارة للنموذج (0-1)
-   * Temperature for AI model (0-1)
-   */
+  // Sampling temperature for the AI model (0-1).
   temperature: parseFloat(process.env.CHAT_TITLE_TEMPERATURE || '0.7'),
 
-  /**
-   * العناوين الافتراضية التي يجب استبدالها
-   * Default titles that should be replaced
-   */
+  // Default titles that should be replaced.
   defaultTitles: [
     'New Chat',
     'محادثة جديدة',
@@ -53,10 +32,7 @@ export const ChatTitleConfig = {
     'شات',
   ],
 
-  /**
-   * أولوية النماذج المستخدمة
-   * Priority order of AI models to use
-   */
+  // Priority order of AI models to try.
   modelPriority: [
     { provider: 'bigmodel', model: 'glm-5.2', envKey: 'BIGMODEL_API_KEY' },
     { provider: 'azure', model: 'gpt-4o-mini', envKey: 'AZURE_OPENAI_API_KEY' },
@@ -65,46 +41,25 @@ export const ChatTitleConfig = {
     { provider: 'groq', model: 'qwen/qwen3.6-27b', envKey: 'GROQ_API_KEY' },
   ],
 
-  /**
-   * Timeout للعملية (بالميلي ثانية)
-   * Timeout for the operation in milliseconds
-   */
+  // Timeout for the operation in milliseconds.
   timeout: parseInt(process.env.CHAT_TITLE_TIMEOUT || '10000'),
 
-  /**
-   * عدد المحاولات في حالة الفشل
-   * Number of retry attempts on failure
-   */
+  // Number of retry attempts on failure.
   retryAttempts: parseInt(process.env.CHAT_TITLE_RETRY_ATTEMPTS || '2'),
 
-  /**
-   * تأخير بين المحاولات (بالميلي ثانية)
-   * Delay between retry attempts in milliseconds
-   */
+  // Delay between retry attempts in milliseconds.
   retryDelay: parseInt(process.env.CHAT_TITLE_RETRY_DELAY || '1000'),
 
-  /**
-   * تفعيل التسجيل المفصل
-   * Enable verbose logging
-   */
+  // Enable verbose logging.
   verboseLogging: process.env.CHAT_TITLE_VERBOSE_LOGGING === 'true',
 
-  /**
-   * تفعيل التخزين المؤقت (Cache)
-   * Enable caching of generated titles
-   */
+  // Enable caching of generated titles.
   enableCache: process.env.CHAT_TITLE_ENABLE_CACHE !== 'false',
 
-  /**
-   * مدة صلاحية الـ Cache (بالثواني)
-   * Cache TTL in seconds
-   */
+  // Cache TTL in seconds.
   cacheTTL: parseInt(process.env.CHAT_TITLE_CACHE_TTL || '86400'), // 24 hours
 
-  /**
-   * System Prompt المستخدم
-   * System prompt for AI model
-   */
+  // System prompt for the AI model.
   systemPrompt: process.env.CHAT_TITLE_SYSTEM_PROMPT || `أنت خبير محترف في تلخيص المحادثات وتحسين تجربة المستخدم (UX). ستصلك رسائل من بداية محادثة بين مستخدم وبوت ذكي. مهمتك الوحيدة هي قراءة السياق وتوليد عنوان ذكي، دقيق، ومبتكر يعبر عن جوهر المحادثة.
 
 **قواعد مهمة جداً:**
@@ -124,10 +79,7 @@ export const ChatTitleConfig = {
 - إذا كان السؤال: "كيف أستعد للامتحان؟" → العنوان: "الاستعداد للامتحان"
 - إذا كان السؤال: "ما هي عاصمة فرنسا؟" → العنوان: "عاصمة فرنسا"`,
 
-  /**
-   * التحقق من صحة الإعدادات
-   * Validate configuration
-   */
+  // Validate the configuration values.
   validate(): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
@@ -170,10 +122,7 @@ export const ChatTitleConfig = {
     };
   },
 
-  /**
-   * طباعة الإعدادات الحالية
-   * Print current configuration
-   */
+  // Log the current configuration values.
   print(): void {
     log.info('📋 Chat Auto-Titling Configuration:');
     log.info('  ✓ Enabled:', this.enabled);
@@ -200,17 +149,17 @@ export const ChatTitleConfig = {
   }
 };
 
-// التحقق من الإعدادات عند التحميل
+// Print the config on load when verbose logging is enabled.
 if (ChatTitleConfig.verboseLogging) {
   ChatTitleConfig.print();
 }
 
-// تصدير دالة مساعدة للتحقق من التفعيل
+// Report whether auto-titling is enabled and its config is valid.
 export function isChatTitlingEnabled(): boolean {
   return ChatTitleConfig.enabled && ChatTitleConfig.validate().valid;
 }
 
-// تصدير دالة للحصول على النموذج المتاح
+// Return the first model in priority order whose API key is present.
 export function getAvailableModel(): { provider: string; model: string } | null {
   for (const modelConfig of ChatTitleConfig.modelPriority) {
     if (process.env[modelConfig.envKey]) {

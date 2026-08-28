@@ -1,10 +1,4 @@
-/**
- * Shared types for the chat pipeline.
- *
- * All steps in the pipeline accept and return these structures so the
- * orchestrator (`chat.pipeline.ts`) can compose them without leaking
- * internal implementation details.
- */
+// Shared types the chat pipeline steps exchange with the orchestrator.
 
 import type { Request, Response } from "express";
 import type { ChatMessageInput } from "../../../validators/chat-validation-schemas.js";
@@ -12,20 +6,13 @@ import type { CoreMessage } from "../moderation.service.js";
 import type { IntentResult } from "../intent-detector.js";
 import type { CacheMetadata } from "../response-cache.service.js";
 
-// ==========================================
 // Core message shape
-// ==========================================
 
 export type { CoreMessage };
 
-// ==========================================
 // Pipeline context
-// ==========================================
 
-/**
- * Request-scoped metrics tracked across all pipeline steps.
- * Each step mutates the appropriate fields as it runs.
- */
+// Request-scoped metrics tracked across all pipeline steps.
 export interface RequestMetrics {
   startTime: number;
   model: string;

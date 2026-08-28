@@ -1,11 +1,4 @@
-/**
- * Chat attachments store — metadata persistence + extraction.
- *
- * The binary lives in R2; this module records one `chat_attachments` row per
- * attached file so thread history can restore attachments after reload, and
- * powers usage reporting. Extraction walks the raw UIMessage parts sent by the
- * client (file parts carrying `r2://chat-attachments/{userId}/…` refs).
- */
+// Chat attachments store: persists chat_attachments rows and extracts r2:// refs.
 import { createLogger } from "../../utils/logger.js";
 
 const log = createLogger("attachments-store");
@@ -33,11 +26,7 @@ interface RawPartLike {
 
 const R2_REF_PREFIX = "r2://chat-attachments/";
 
-/**
- * Extract attachment metadata from a user message's raw parts. Only accepts
- * r2:// references produced by the upload endpoint — inline base64 payloads
- * are ignored here (legacy flow never had persistence).
- */
+// Extract r2:// attachment metadata from raw message parts, ignoring inline base64.
 export function extractAttachmentRefs(parts: unknown): AttachmentMeta[] {
   if (!Array.isArray(parts)) return [];
   const out: AttachmentMeta[] = [];
@@ -82,10 +71,7 @@ function guessKind(mimeType: string, fileName: string): AttachmentKind {
   return "document";
 }
 
-/**
- * Persist attachment rows for a stored chat message. Best-effort: a failed
- * insert logs a warning and never breaks the chat response.
- */
+// Best-effort persist of attachment rows for a stored chat message.
 export async function recordMessageAttachments(args: {
   userId: string;
   sessionId: string;

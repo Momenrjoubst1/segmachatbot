@@ -1,10 +1,4 @@
-/**
- * Step 9 — Context window management
- *
- * When token usage crosses 70% of the model window, summarises the
- * middle of the conversation history.  Falls back to simple trimming
- * if the summarizer is disabled or fails.
- */
+// Summarizes the middle of the conversation when token usage crosses 70% of the model window.
 
 import { memLog } from "../../../routes/chat/chat-shared.js";
 import { summarizer } from "../../memory/summarizer.service.js";

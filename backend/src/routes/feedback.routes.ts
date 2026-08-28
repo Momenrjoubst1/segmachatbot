@@ -38,18 +38,7 @@ router.post('/', asyncHandler(async (req, res) => {
   res.json({ success: true });
 }));
 
-// ── Message-level feedback (thumbs up/down on assistant messages) ──────────
-// Source of truth is the message_feedback table (migration 028); the legacy
-// chat_messages.feedback SMALLINT column is kept in sync for compatibility.
-//
-// Semantics:
-//   - First rating           → INSERT   { action: 'created' }
-//   - Rating switched        → UPDATE   { action: 'updated' }
-//   - Same type re-submitted → DELETE   { action: 'removed' }  (toggle off)
-//
-// Ownership is enforced by joining through chat_sessions.user_id — a user can
-// only rate messages inside their own threads. Snapshots of the rated exchange
-// are captured server-side at rating time; clients never supply them.
+// Message-level feedback: stored prompt/response snapshots are capped at this length.
 const SNAPSHOT_MAX_LENGTH = 8000;
 
 router.post(
@@ -75,8 +64,7 @@ router.post(
       ? { reason_category: null, comment: null }
       : { reason_category: reasonCategory ?? null, comment: comment ?? null };
 
-    // Ownership + snapshot source: fetch the rated message directly with its
-    // session owner. Non-assistant messages are not rateable.
+    // Fetch the rated message with its session owner; only assistant messages are rateable.
     const { data: messageRow, error: ownershipError } = await supabase
       .from('chat_messages')
       .select('id, session_id, content, model, created_at, chat_sessions!inner(user_id)')
@@ -98,8 +86,7 @@ router.post(
     const responseSnapshot = messageRow.content.slice(0, SNAPSHOT_MAX_LENGTH);
     const modelVersion = messageRow.model || 'unknown';
 
-    // Existing rating (for toggle detection) and the prompt snapshot (the user
-    // question that preceded this answer) are independent — fetch in parallel.
+    // Fetch the existing rating (toggle check) and prior user question in parallel.
     const [existingResult, promptResult] = await Promise.all([
       supabase
         .from('message_feedback')
@@ -188,7 +175,7 @@ router.post(
       log.error('Legacy feedback column sync failed', { error: syncError.message });
     }
 
-    // ── Retrieval feedback loop: negative feedback → log miss ──────────────
+    // On negative feedback, log a passive retrieval miss for learning.
     if (!isPositive && promptSnapshot !== null) {
       try {
         await supabase.from('retrieval_feedback').insert({
@@ -211,8 +198,7 @@ router.post(
   }),
 );
 
-// ── Retrieval quality feedback (thumbs up/down on RAG answers) ──────────
-// Writes to retrieval_feedback table for active learning analysis.
+// Retrieval quality feedback (thumbs up/down on RAG answers) payload schema.
 const retrievalFeedbackSchema = z.object({
   textbookId: z.string().uuid().optional(),
   queryText: z.string().min(1).max(2000),

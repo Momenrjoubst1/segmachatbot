@@ -1,9 +1,4 @@
-/**
- * Step 4b — Intent detection
- *
- * Heuristic-based (no LLM) intent classifier.  Lets the pipeline skip the
- * expensive RAG + tool setup when the user is just making small talk.
- */
+// Heuristic intent-detection step; lets the pipeline skip RAG/tool setup for small talk.
 
 import { ragLog } from "../../../routes/chat/chat-shared.js";
 import { detectIntent, type IntentResult, UserIntent } from "../intent-detector.js";

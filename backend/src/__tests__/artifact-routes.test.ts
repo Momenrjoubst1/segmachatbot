@@ -2,8 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
-// Route-level tests mock the store module itself — the store has its own
-// dedicated suite (artifact-store.test.ts) against a fake PostgREST client.
+// Route-level tests mock the store module itself; the store has its own dedicated suite.
 const store = vi.hoisted(() => ({
   createArtifact: vi.fn(),
   getArtifact: vi.fn(),
@@ -200,8 +199,7 @@ describe('public artifacts route (no auth)', () => {
   });
 
   it('never exposes private artifacts even when unauthenticated', async () => {
-    // getPublicArtifact only resolves rows with visibility='public' (SQL-level
-    // guard) — the route adds no bypass around it.
+    // getPublicArtifact only returns rows with visibility='public'; the route adds no bypass.
     store.getPublicArtifact.mockResolvedValue(null);
     const res = await request(buildApp()).get(`/api/public/artifacts/${ARTIFACT_ID}`);
     expect(res.status).toBe(404);

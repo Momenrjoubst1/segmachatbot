@@ -1,9 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// ── Fake Supabase ────────────────────────────────────────────────────────────
-// Minimal in-memory PostgREST-ish client covering the query shapes the
-// artifact store uses: select/eq/order/limit/range chains, maybeSingle/single,
-// insert/update/delete (thenable), including insert→select→single.
+// Minimal in-memory fake Supabase client covering the query shapes the store uses.
 const sb = vi.hoisted(() => {
   type Row = Record<string, any>;
   const tables: Record<string, Row[]> = { artifacts: [], artifact_versions: [] };

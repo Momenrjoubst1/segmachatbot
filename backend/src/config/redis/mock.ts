@@ -1,8 +1,4 @@
-/**
- * ═════════════════════════════════════════=====═══════════════════════════════
- * Mock Redis Client — In-memory fallback for development without Redis
- * ════════════════════════════════════════════════════════════════════════════════
- */
+// In-memory Redis client used when no real Redis is available.
 
 import { createLogger } from '../../utils/logger.js';
 
@@ -399,7 +395,7 @@ class MockRedis {
     return Math.max(0, Math.ceil((expiry - Date.now()) / 1000));
   }
 
-  // ── Custom Lua-script-backed commands (declared in client.ts) ──────────────
+  // Custom Lua-script-backed commands (declared in client.ts).
 
   /** Sliding-window rate limit via ZSET. Returns [hits, oldestExpiryMs]. */
   async slidingWindowRateLimit(

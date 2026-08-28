@@ -9,8 +9,7 @@ describe('Moderation Fail-Closed Behavior', () => {
     process.env = { ...originalEnv };
     delete process.env.MODERATION_FAIL_OPEN;
     delete process.env.MODERATION_FAIL_CLOSED;
-    // vitest sets NODE_ENV=test, which forces fail-closed.
-    // For FAIL_OPEN tests, we need to remove this.
+    // vitest sets NODE_ENV=test which forces fail-closed; FAIL_OPEN tests must remove it.
   });
 
   afterEach(() => {

@@ -1,10 +1,4 @@
-/**
- * Step 6b — System Prompt Assembly
- *
- * Combines the base persona, RAG context, memory context, user courses
- * context, formatting rules, and tool instructions into the final
- * system prompt.
- */
+// Assembles the final system prompt from persona, RAG, memory, courses, and tools.
 
 import { buildBasePersona } from "../../../prompts/base-persona.js";
 import { buildSystemPrompt, resolveABVariant, buildPersonaWithVariant, type PromptBuildOptions, type PersonaVariant } from "../../../prompts/index.js";

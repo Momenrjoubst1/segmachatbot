@@ -1,11 +1,4 @@
-/**
- * Steps 2 + 3 — Message processing and input moderation.
- *
- * `processMessages()` converts the AI SDK message shape to the
- * `ModelMessage` shape used downstream, optionally analysing images.
- * `moderateInput()` checks the last user message for length / content
- * policy violations and (when needed) censors flagged parts.
- */
+// Message processing (Step 2) and input moderation (Step 3) of the chat pipeline.
 
 import { processMessages, type ProcessedMessages } from "../message-processor.service.js";
 import { moderateInput, type CoreMessage } from "../moderation.service.js";
@@ -27,7 +20,7 @@ export async function processAndModerate(
   metrics: RequestMetrics,
   userId?: string,
 ): Promise<InputProcessingResult> {
-  // ---- Step 2: process messages ----
+  // Step 2: process the raw messages into coreMessages.
   const processed: ProcessedMessages = await processMessages(messages, selectedModel, userId);
   let coreMessages: CoreMessage[] = processed.coreMessages as CoreMessage[];
 
@@ -36,7 +29,7 @@ export async function processAndModerate(
     metrics.imageAnalysisError = processed.imageAnalysisError;
   }
 
-  // ---- Step 3: moderate input ----
+  // Step 3: moderate the input messages.
   const modResult = await moderateInput(coreMessages);
   if (modResult.blocked) {
     return {

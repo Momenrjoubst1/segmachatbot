@@ -1,21 +1,4 @@
-/**
- * Media router — capability-aware routing of chat attachments.
- *
- * Decides, per answering model, how each attached video/audio/document reaches
- * the LLM:
- *   - gemini-* models   → native file parts (inline dataURL or Gemini Files API
- *                          fileUri staged server-side for large media).
- *   - capable OpenAI-compatible models (e.g. stealth/ox-alpha via OpenRouter)
- *                       → short text sentinels whose payloads are rewritten
- *                         into `video_url` / `input_audio` blocks on the wire
- *                         (see media-wire.ts) — the stock @ai-sdk/openai
- *                         converter throws on video parts, so it never sees them.
- *   - audio elsewhere   → Groq Whisper transcript injected as text context.
- *
- * Capabilities come from MODEL_MEDIA_CAPABILITIES env JSON, e.g.
- *   {"stealth/ox-alpha":["video","audio"],"gemini-*":["video","audio"]}
- * Defaults cover the gemini family plus ox-alpha.
- */
+// Capability-aware routing of chat attachments (native parts, sentinels, or transcripts).
 import crypto from "crypto";
 import { createLogger } from "../../utils/logger.js";
 import redis from "../../config/redis/client.js";
@@ -26,9 +9,7 @@ import { downloadR2ObjectToBuffer, statR2Object } from "../textbook/r2-client.js
 
 const log = createLogger("media-router");
 
-// ── resolution caches ───────────────────────────────────────────────────────
-// Media refs are re-sent with every turn of a conversation; cache expensive
-// resolutions so repeat turns don't re-transcribe.
+// Cache expensive media resolutions — refs repeat across conversation turns.
 
 async function cachedTranscript(
   r2Key: string,
@@ -52,7 +33,7 @@ async function cachedTranscript(
   return transcript;
 }
 
-// ── capabilities ────────────────────────────────────────────────────────────
+// Per-model media capabilities.
 
 const DEFAULT_CAPABILITIES: Record<string, Array<"video" | "audio">> = {
   "gemini-*": ["video", "audio"],
@@ -93,7 +74,7 @@ export function getMediaFallbackModel(): string {
 /** Wire strategy for OpenAI-compatible video payloads. */
 const DATA_URL_MAX_BYTES = Number(process.env.MEDIA_DATA_URL_MAX_BYTES || 100 * 1024 * 1024);
 
-// ── requirements detection ──────────────────────────────────────────────────
+// Detection of required media types in messages.
 
 interface RawMsgLike {
   role?: string;
@@ -126,7 +107,7 @@ export function getMediaRequirements(messages: unknown): MediaRequirements {
   return reqs;
 }
 
-// ── r2 reference helpers ────────────────────────────────────────────────────
+// Helpers for r2://chat-attachments references.
 
 const R2_REF_PREFIX = "r2://chat-attachments/";
 
@@ -148,7 +129,7 @@ function partRawData(part: Record<string, unknown>): string {
   );
 }
 
-// ── resolution ──────────────────────────────────────────────────────────────
+// Resolution of attachments into model-ready parts.
 
 export interface ResolvedMediaPart {
   /** AI SDK file part (gemini path) — google maps it natively. */
@@ -159,9 +140,7 @@ export interface ResolvedMediaPart {
   text?: string;
 }
 
-/**
- * Resolve one video/audio attachment for the given answering model.
- */
+// Resolve one video/audio attachment for the given answering model.
 export async function resolveMediaPart(args: {
   part: Record<string, unknown>;
   userId: string;
@@ -185,7 +164,7 @@ export async function resolveMediaPart(args: {
     return { text: `[${kind}: ${filename} — unavailable]` };
   }
 
-  // ── Gemini: native file parts, large media staged via the Files API ──
+  // Gemini: native file parts, large media staged via the Files API.
   if (targetModel.toLowerCase().startsWith("gemini")) {
     const staged = await stageMediaForGemini(r2Key, mimeType, filename);
     if (staged) {
@@ -199,8 +178,7 @@ export async function resolveMediaPart(args: {
     return { text: `[${kind}: ${filename} — could not be processed]` };
   }
 
-  // ── Audio on other providers: native only when wav/mp3 small enough,
-  //    otherwise a transcript any model can use. ──
+  // Audio elsewhere: inline wav/mp3 when small enough, else a transcript.
   if (kind === "audio") {
     const nativeFormat = mimeType.includes("wav") ? "wav" : mimeType.includes("mpeg") || mimeType.includes("mp3") ? "mp3" : null;
     const size = await statR2Object(r2Key);
@@ -223,11 +201,7 @@ export async function resolveMediaPart(args: {
     return { text: `[Audio attachment: ${filename} — could not be transcribed]` };
   }
 
-  // ── Video on OpenAI-compatible capable models: sentinel + wire rewrite.
-  // Live-probed against OpenRouter: ox-alpha routes dataURL video but
-  // REJECTS https URLs ("No endpoints found that support video URLs"), so
-  // presigned URLs are never used — anything above the inline cap should
-  // have been swapped to Gemini at pipeline step 1.5.
+  // Video on capable models: dataURL sentinel + wire rewrite; https video URLs are rejected.
   const size = await statR2Object(r2Key);
   if (size !== null && size > DATA_URL_MAX_BYTES) {
     log.warn("Oversized video reached inline resolution — missed step-1.5 swap", { r2Key, size });
@@ -245,12 +219,7 @@ export async function resolveMediaPart(args: {
   }
 }
 
-/**
- * True when any attached video exceeds MEDIA_DATA_URL_MAX_BYTES — such
- * conversations must be answered by a Files-API-capable model (Gemini),
- * because OpenRouter-compatible models cannot fetch video URLs and cannot
- * hold arbitrarily large inline payloads.
- */
+// True when any attached video exceeds MEDIA_DATA_URL_MAX_BYTES, forcing a Files-API model.
 export async function hasOversizedVideo(messages: unknown, userId: string): Promise<boolean> {
   if (!Array.isArray(messages)) return false;
   for (const m of messages as RawMsgLike[]) {

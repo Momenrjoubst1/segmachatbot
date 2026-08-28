@@ -1,10 +1,4 @@
-/**
- * End-to-end STT relay test (headless, no browser):
- *   WS connect -> /ws/stt  ->  stream a real 440 Hz tone for 4 s
- *   -> assert relay "ready" + at least one transcript frame from Deepgram.
- * Run from backend/ AFTER restarting the backend:
- *   npx tsx scripts/stt-relay-e2e.mts
- */
+// End-to-end STT relay test: connect to /ws/stt, stream a 440 Hz tone, assert ready + Deepgram transcripts.
 import "dotenv/config";
 import WebSocket from "ws";
 

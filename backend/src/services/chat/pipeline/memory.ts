@@ -1,9 +1,4 @@
-/**
- * Step 6 — Memory context
- *
- * Builds the consolidated memory context string (facts + cross-session
- * recall + recent context) for inclusion in the system prompt.
- */
+// Builds the consolidated memory context string (facts, recall, recent turns) for the system prompt.
 
 import { memLog } from "../../../routes/chat/chat-shared.js";
 import { unifiedMemory } from "../../memory/unified-memory.js";

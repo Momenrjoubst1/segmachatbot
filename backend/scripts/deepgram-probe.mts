@@ -1,9 +1,4 @@
-/**
- * Direct Deepgram live-WS probe using EXACTLY the relay's parameters.
- * Sends 1.5s of silence PCM16@16k and prints every event, including close
- * codes/reasons - proves whether model/language params are accepted.
- * Run from backend/: npx tsx scripts/deepgram-probe.mts [lang]
- */
+// Direct Deepgram live-WS probe with the relay's exact params; prints events and close codes.
 import "dotenv/config";
 import WebSocket from "ws";
 

@@ -1,11 +1,6 @@
-/**
- * Centralized Constants - جميع الأرقام السحرية في مكان واحد
- * يمنع تكرار الأرقام ويجعل التعديل سهلاً
- */
+// Centralized constants — single home for the app's magic numbers.
 
-// ==========================================
-// Message / Content Limits
-// ==========================================
+// Message and content length limits.
 export const MAX_MESSAGE_CHARS = 400_000;          // حد طول الرسالة (~100k توكن — يناسب نافذة مليون)
 export const MAX_CHUNK_CHARS = 1_000;              // حد طول القطعة (للـ RAG)
 export const OVERLAP_CHARS = 100;                  // تداخل بين القطع
@@ -16,15 +11,11 @@ export const KEEP_FIRST_MESSAGES = 5;              // رسائل أولى تُح
 export const KEEP_LAST_MESSAGES = 100;             // رسائل أخيرة تُحفظ دائماً
 export const MIN_MESSAGES_FOR_SUMMARY = 12;        // أدنى رسائل قبل التلخيص
 
-// ==========================================
-// PDF Processing
-// ==========================================
+// PDF processing limits.
 export const MAX_PDF_PAGES = 800;                  // أقصى صفحات للـ PDF
 export const MAX_PDF_BYTES = 500 * 1024 * 1024;  // 500 MB
 
-// ==========================================
-// Layout Analysis (PDF)
-// ==========================================
+// PDF layout analysis tuning values.
 export const CAPTION_MAX_DIST = 90.0;
 export const HEADER_ZONE = 0.085;
 export const FOOTER_ZONE = 0.915;
@@ -35,9 +26,7 @@ export const VECTOR_MIN_AREA = 150.0;
 export const VECTOR_CLUSTER_GAP = 6.0;
 export const MAX_VECTOR_CLUSTERS = 60;
 
-// ==========================================
-// Timeouts (ms)
-// ==========================================
+// Timeout values in milliseconds.
 export const TIMEOUTS = {
   LLM_RESPONSE: 120_000,
   EMBEDDING: 60_000,
@@ -55,9 +44,7 @@ export const TIMEOUTS = {
   INTENT_DETECTION: 3_000,
 } as const;
 
-// ==========================================
-// Rate Limiting
-// ==========================================
+// Rate limit windows and caps.
 export const RATE_LIMITS = {
   GLOBAL: { windowMs: 60_000, max: 100 },
   HEALTH: { windowMs: 60_000, max: 30 },
@@ -73,9 +60,7 @@ export const RATE_LIMITS = {
 export const MAX_GUEST_MESSAGES = 4;
 export const GUEST_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-// ==========================================
-// Cache / TTL
-// ==========================================
+// Cache TTL values.
 export const CACHE_TTL = {
   AUTH_SESSION: 300,           // 5 min
   L1_AUTH: 30_000,             // 30 sec
@@ -94,9 +79,7 @@ export const CACHE_TTL = {
   CLEANUP_INTERVAL: 30 * 60_000, // 30 min
 } as const;
 
-// ==========================================
-// Circuit Breaker
-// ==========================================
+// Circuit breaker settings.
 export const CIRCUIT_BREAKER = {
   THRESHOLD: 5,
   RESET_TIMEOUT: 60_000,
@@ -106,9 +89,7 @@ export const CIRCUIT_BREAKER = {
   WORKER_COOLDOWN: 60_000,
 } as const;
 
-// ==========================================
-// RAG / Search
-// ==========================================
+// RAG and search settings.
 export const RAG_CONFIG = {
   MATCH_THRESHOLD: 0.5,
   INITIAL_MATCH_COUNT: 15,
@@ -138,9 +119,7 @@ export const BM25_CONFIG = {
   })(),
 } as const;
 
-// ==========================================
-// Memory
-// ==========================================
+// Memory system limits.
 export const MEMORY_CONFIG = {
   MAX_FACTS_PER_USER: 100,
   MIN_MESSAGES_FOR_EXTRACTION: 6,
@@ -158,18 +137,13 @@ export const MEMORY_CONFIG = {
   },
 } as const;
 
-// ==========================================
-// Textbook
-// ==========================================
+// Textbook pipeline settings.
 export const TEXTBOOK_CONFIG = {
   MAX_FILE_SIZE: 500 * 1024 * 1024,  // 500 MB
   EMBEDDING_BATCH_SIZE: 20,
   EMBEDDING_DELAY_MS: 1_000,
   EMBEDDING_MAX_RETRIES: 3,
-  // Embedding dimension target. Must be <= 2000 for pgvector HNSW indexing.
-  // gemini-embedding-001 returns 3072 natively; MRL truncation to 1536 retains
-  // near-identical retrieval quality (see embedding-service fitToTargetDim).
-  // Override via EMBEDDING_TARGET_DIM env var. DB columns must match this value.
+  // Embedding dimension target, capped at 2000 for pgvector HNSW indexing; override via env.
   EXPECTED_DIMENSIONS: parseInt(process.env.EMBEDDING_TARGET_DIM || "1536", 10),
   LOCK_TTL_SECONDS: 1_800,
   JOB_TIMEOUT: 3_600,
@@ -177,17 +151,13 @@ export const TEXTBOOK_CONFIG = {
   MAX_RETRIES: 3,
   SHUTDOWN_TIMEOUT_MS: 30_000,
   MATCH_THRESHOLD: 0.05,
-  // Semantic chunking: re-split chunks at topic boundaries detected by
-  // embedding cosine distance.  Disabled by default (costs ~2x embedding
-  // API calls in the initial pass).
+  // Re-split chunks at topic boundaries via embedding distance; off by default.
   ENABLE_SEMANTIC_CHUNKING: process.env.ENABLE_SEMANTIC_CHUNKING === 'true',
   SEMANTIC_CHUNK_SIM_THRESHOLD: 0.65,  // cosine distance threshold for topic shift
   SEMANTIC_CHUNK_MIN_CHARS: 200,       // don't split chunks smaller than this
 } as const;
 
-// ==========================================
-// File / Image
-// ==========================================
+// File and image limits.
 export const FILE_CONFIG = {
   MAX_PROXY_BYTES: 5 * 1024 * 1024,  // 5 MB
   MAX_CODE_LENGTH: 50_000,
@@ -196,9 +166,7 @@ export const FILE_CONFIG = {
   IMAGE_TOKEN_COST: 85,
 } as const;
 
-// ==========================================
-// Model Router
-// ==========================================
+// Default model routing.
 export const MODEL_CONFIG = {
   DEFAULT_MODEL: 'deepseek-v4-flash',
   FALLBACK_MODEL: 'gpt-4o-mini',
@@ -206,9 +174,7 @@ export const MODEL_CONFIG = {
   SUMMARY_MODEL: 'gpt-4o-mini',
 } as const;
 
-// ==========================================
-// Pagination
-// ==========================================
+// Pagination limits.
 export const PAGINATION = {
   DEFAULT_LIMIT: 20,
   MAX_LIMIT: 100,
@@ -216,9 +182,7 @@ export const PAGINATION = {
   THREADS_DEFAULT_LIMIT: 100,
 } as const;
 
-// ==========================================
-// Prompt / A/B Testing
-// ==========================================
+// Prompt and A/B testing options.
 export const PROMPT_CONFIG = {
   AB_ENABLED: process.env.PROMPT_AB_ENABLED === 'true',
   AB_VARIANT: (process.env.PROMPT_AB_VARIANT as 'default' | 'concise' | 'detailed' | 'motivational' | 'auto' | undefined) ?? 'auto',
@@ -227,9 +191,7 @@ export const PROMPT_CONFIG = {
   METRICS_ENABLED: process.env.PROMPT_METRICS_ENABLED !== 'false',
 } as const;
 
-// ==========================================
-// UI / Frontend
-// ==========================================
+// Frontend timing constants.
 export const UI_CONFIG = {
   TOAST_DURATION: 5_000,
   DRAFT_SAVE_INTERVAL: 5_000,
@@ -237,9 +199,7 @@ export const UI_CONFIG = {
   MESSAGE_CACHE_MAX: 50,
 } as const;
 
-// ==========================================
-// Embedding Provider
-// ==========================================
+// Embedding provider configuration.
 export const EMBEDDING_PROVIDER_CONFIG = {
   RAG_EMBEDDING_PROVIDER: process.env.RAG_EMBEDDING_PROVIDER || 'google',
   BIGMODEL_API_KEY: process.env.BIGMODEL_API_KEY || '',
@@ -256,9 +216,7 @@ export const EMBEDDING_PROVIDER_CONFIG = {
   NVIDIA_EMBEDDING_MODEL: process.env.NVIDIA_EMBEDDING_MODEL || 'nvidia/nv-embedqa-e5-v5',
 } as const;
 
-// ==========================================
-// Reranker
-// ==========================================
+// Reranker configuration.
 export const RERANKER_CONFIG = {
   COHERE_API_KEY: process.env.COHERE_API_KEY || '',
   COHERE_RERANK_MODEL: process.env.COHERE_RERANK_MODEL || 'rerank-multilingual-v3.0',
@@ -266,9 +224,7 @@ export const RERANKER_CONFIG = {
   ENABLE_TEXTBOOK_RERANK: process.env.ENABLE_TEXTBOOK_RERANK !== 'false',
 } as const;
 
-// ==========================================
-// Helper: Get config with env override
-// ==========================================
+// Get a config value with an environment variable override.
 export function getConfig<T>(key: keyof typeof CACHE_TTL, defaultValue: T): T {
   const envKey = key.toUpperCase();
   const envVal = process.env[envKey];

@@ -1,21 +1,4 @@
-/**
- * StepEventEmitter — buffers pipeline step events and serializes them
- * to AI SDK v6 data-step stream chunks.
- *
- * Usage:
- *   const emitter = new StepEventEmitter();
- *   emitter.begin("moderation", "moderation");
- *   await doWork();
- *   emitter.complete("moderation", { result: { type: "text", count: 1 } });
- *   ...
- *   res.write(emitter.toStreamChunks());   // writes `a:{"type":"data-step",...}\n` per event
- *
- * Wire format (AI SDK v6 UI message stream protocol):
- *   a:{"type":"data-step","data":{...event...},"transient":true}\n
- *
- * `transient: true` tells the AI SDK runtime (frontend) NOT to persist these
- * parts in message history. They are only meaningful for the live stream.
- */
+// StepEventEmitter buffers pipeline step events and serializes them as AI SDK v6 data-step chunks.
 
 export type StepKind =
   | "moderation"
@@ -108,8 +91,7 @@ export class StepEventEmitter {
     this.events.push({ id, kind, status: "error", error, ts });
   }
 
-  /** Read-only snapshot of all buffered events. Returns a copy so callers
-   *  cannot mutate internal state. */
+  // Return a defensive copy of all buffered events.
   getEvents(): readonly StepEvent[] {
     return [...this.events];
   }
@@ -119,16 +101,7 @@ export class StepEventEmitter {
     return this.events.length;
   }
 
-  /**
-   * Serialize all buffered events as AI SDK v6 SSE data chunks.
-   *
-   * Wire format (used by the SDK's `JsonToSseTransformStream`):
-   *   data: {"type":"data-step","data":{...event...},"transient":true}\n\n
-   *
-   * Each event becomes exactly one chunk. `transient: true` prevents the
-   * frontend from persisting these into message history — they are only
-   * meaningful for the live stream.
-   */
+  // Serialize buffered events as AI SDK v6 SSE data chunks, marked transient.
   toStreamChunks(): string {
     if (this.events.length === 0) return "";
     const lines: string[] = [];

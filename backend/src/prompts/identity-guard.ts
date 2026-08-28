@@ -1,12 +1,6 @@
-/**
- * Identity Guard Layer - حماية الهوية
- * Prevents the model from revealing its true identity or fabricating model names.
- */
+// Identity guard layer — keeps the model from leaking its real identity or model name.
 
-/**
- * Builds the identity guard layer.
- * This is always included in the system prompt to prevent identity leakage.
- */
+// Build the identity guard layer included in every system prompt.
 export function buildIdentityGuard(): string {
   return `# Identity Guard — حماية الهوية
 

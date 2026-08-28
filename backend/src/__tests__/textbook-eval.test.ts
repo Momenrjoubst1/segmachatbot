@@ -1,19 +1,10 @@
-/**
- * Textbook Search Evaluation Tests
- *
- * Real unit tests for retrieval quality components:
- * - BM25 Arabic normalization & ranking (pure, no DB)
- * - Fuzzy matching vs semantic matching logic
- * - SRS scheduler (SM-2)
- * - Quiz intent detection
- */
+// Textbook search evaluation tests for BM25 normalization, fuzzy matching, SM-2, and quiz intent.
 
 import { describe, it, expect, beforeAll } from "vitest";
 
-// ── 1. BM25 Arabic Normalization Tests ──────────────────────────────────────
+// BM25 Arabic text normalization tests.
 describe("BM25 Arabic Normalization", () => {
-  // Import the internal normalizeArabic function by duplicating logic
-  // (since it's not exported, we test the behavior via BM25Search class)
+  // Local copy of the Arabic normalizer that BM25 ranking applies internally.
 
   const ARABIC_DIACRITICS_RE = /[\u064B-\u065F\u0610-\u061A\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g;
   const TATWEEL_RE = /\u0640/g;
@@ -58,7 +49,7 @@ describe("BM25 Arabic Normalization", () => {
   });
 });
 
-// ── 2. Fuzzy Match Tests ────────────────────────────────────────────────────
+// Fuzzy title matching tests.
 describe("Fuzzy Title Matching", () => {
   function fuzzyMatch(query: string, title: string): number {
     const q = query.toLowerCase().trim();
@@ -100,7 +91,7 @@ describe("Fuzzy Title Matching", () => {
   });
 });
 
-// ── 3. Semantic Score Combination Tests ─────────────────────────────────────
+// Hybrid fuzzy-plus-semantic score combination tests.
 describe("Hybrid Score (Fuzzy + Semantic)", () => {
   it("combines fuzzy and semantic with weights", () => {
     const fuzzy = 0.5;
@@ -122,7 +113,7 @@ describe("Hybrid Score (Fuzzy + Semantic)", () => {
   });
 });
 
-// ── 4. SRS Scheduler (SM-2) Tests ───────────────────────────────────────────
+// SM-2 spaced repetition scheduler tests.
 describe("SM-2 Spaced Repetition Scheduler", () => {
   // Inline SM-2 logic for testing (copied from srs.ts)
   type ReviewQuality = 'again' | 'hard' | 'good' | 'easy';
@@ -192,7 +183,7 @@ describe("SM-2 Spaced Repetition Scheduler", () => {
   });
 });
 
-// ── 5. Quiz Intent Detection Tests ──────────────────────────────────────────
+// Quiz intent detection regex tests.
 describe("Quiz Intent Detection Regex", () => {
   const quizRegex = /(اختبرني|امتحني|أسئلة|اسئلة|تمارين|تدريبات|quiz|test me|practice questions|give me questions|اختبار|مراجعة|امتحان|سؤال|revise|study)/i;
 
@@ -225,7 +216,7 @@ describe("Quiz Intent Detection Regex", () => {
   }
 });
 
-// ── 6. Cosine Similarity ────────────────────────────────────────────────────
+// Cosine similarity tests.
 describe("Cosine Similarity", () => {
   function cosineSimilarity(a: number[], b: number[]): number {
     if (a.length !== b.length) return 0;

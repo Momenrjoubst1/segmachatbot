@@ -1,4 +1,4 @@
-/** Reproduce the 400: test chatMessageSchema against payload shapes. Run from backend/: npx tsx scripts/validate-repro.mts */
+// Reproduce the 400: test chatMessageSchema against payload shapes. Run from backend/: npx tsx scripts/validate-repro.mts
 import "dotenv/config";
 
 async function main() {

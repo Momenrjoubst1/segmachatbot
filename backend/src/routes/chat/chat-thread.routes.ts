@@ -4,13 +4,9 @@ import { ensureThreadOwnership } from "./chat-shared.js";
 
 const router = Router();
 
-// NOTE: POST /threads endpoint removed — threads are now created lazily
-// by the chat pipeline (chat.pipeline.ts Step 7) when the first message is sent.
-// The deprecated frontend `createNewThread` was already a no-op, and leaving
-// this endpoint exposed allowed unauthenticated creation of orphaned sessions.
+// Threads are created lazily by the chat pipeline, so only read/update routes live here.
 
-// Get all threads (optional courseId query param to filter)
-// Supports defensive pagination: ?limit=50&cursor=<ISO-timestamp>
+// List threads with optional courseId filter and cursor pagination.
 router.get("/threads", asyncHandler(async (req, res) => {
   const userId = req.user?.id;
   if (!userId) {
@@ -47,10 +43,7 @@ router.get("/threads", asyncHandler(async (req, res) => {
   res.json(sessions);
 }));
 
-// Get messages for a specific thread
-// Defensive limit: returns the last 100 messages in ascending (chronological) order.
-// For conversations with >100 messages, the oldest messages are omitted from
-// the initial load.  A future "load older messages" endpoint can paginate backwards.
+// Return a thread's messages chronologically, capped by ?limit (default 100).
 router.get("/threads/:id", asyncHandler(async (req, res) => {
   const { id } = req.params;
   const ownership = await ensureThreadOwnership(req, id);
@@ -76,8 +69,7 @@ router.get("/threads/:id", asyncHandler(async (req, res) => {
 
   const chronological = (messages || []).reverse();
 
-  // Hydrate attachment metadata so the client can restore attachments
-  // after reload. Ownership is guaranteed by ensureThreadOwnership above.
+  // Hydrate attachment metadata so the client can restore attachments after reload.
   let attachmentsByMessage = new Map<string, unknown[]>();
   const messageIds = chronological.map((m: { id: string }) => m.id);
   if (messageIds.length > 0) {
@@ -95,10 +87,7 @@ router.get("/threads/:id", asyncHandler(async (req, res) => {
   }));
 }));
 
-// ==========================================
-// Phase 2.4: Conversation Branching
-// ==========================================
-// Branch from a specific message - creates a new thread with history up to that point
+// Branch a thread from a specific message, copying history up to that point.
 router.post("/threads/:id/branch", asyncHandler(async (req, res) => {
   const { id: sourceThreadId } = req.params;
   const { branchFromMessageId } = req.body ?? {};

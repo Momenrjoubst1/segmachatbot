@@ -8,10 +8,7 @@ import { publicPersonas } from "../config/voice-personas.js";
 
 const router = Router();
 
-/**
- * Persona catalog for the voice picker.
- * Public within the authed app — no user data involved.
- */
+// Persona catalog for the voice picker (public, no user data).
 router.get("/voices", (req: Request, res: Response) => {
   const userId = req.user?.id;
   if (!userId) {
@@ -21,14 +18,7 @@ router.get("/voices", (req: Request, res: Response) => {
   res.json({ personas: publicPersonas() });
 });
 
-/**
- * Synthesize one text chunk to MP3 for a persona.
- * Body: { text: string, personaId?: string } — the legacy field name
- * `voiceId` is accepted as an alias (it always held a PERSONA id here;
- * raw ElevenLabs ids belong on the /ws/tts-stream relay).
- * Response: audio/mpeg (or 503 JSON when the upstream service is down —
- * clients degrade gracefully to text-only chat).
- */
+// POST / — synthesize text to persona MP3; legacy voiceId accepted as alias.
 router.post("/", async (req: Request, res: Response) => {
   const userId = req.user?.id;
   if (!userId) {

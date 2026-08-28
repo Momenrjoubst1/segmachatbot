@@ -1,27 +1,11 @@
-/**
- * UI Action Emitter — Backend utility for the "Octopus" Agentic UI system.
- *
- * Provides helpers to inject `<ui_action>` payloads into the text stream
- * so the frontend's stream parser can intercept and execute UI commands
- * in real-time during streaming.
- *
- * Two injection strategies:
- *   1. Fast-pass (deterministic): Pipeline injects UI actions directly into
- *      the SSE response BEFORE the model starts streaming. Used for heuristic
- *      intents that don't need LLM reasoning (e.g., "open calendar").
- *   2. Model-emitted: The LLM includes `<ui_action>` tags in its response
- *      when instructed via system prompt. Used for contextual UI changes
- *      that require reasoning (e.g., "after scheduling, ask to modify").
- */
+// Injects <ui_action> payloads into the SSE stream for the frontend to execute live.
 
 import type { Response } from "express";
 import { createLogger } from "../../utils/logger.js";
 
 const log = createLogger("ui-action-emitter");
 
-// ---------------------------------------------------------------------------
-// Types (must match frontend AgenticUIActionMap)
-// ---------------------------------------------------------------------------
+// Action payload types matching the frontend AgenticUIActionMap.
 
 export interface UIActionPayload {
   target: string;
@@ -29,14 +13,9 @@ export interface UIActionPayload {
   payload: Record<string, unknown>;
 }
 
-// ---------------------------------------------------------------------------
-// Core Utilities
-// ---------------------------------------------------------------------------
+// Helpers that build UI action payloads and tags.
 
-/**
- * Build a `<ui_action>` tag string that the frontend parser will detect.
- * The tag wraps a JSON payload with `target`, `action`, and `payload` fields.
- */
+// Build a <ui_action> tag string wrapping the JSON payload for the frontend parser.
 export function buildUIActionTag(
   target: string,
   action: string,
@@ -45,9 +24,7 @@ export function buildUIActionTag(
   return `<ui_action>${JSON.stringify({ target, action, payload })}</ui_action>`;
 }
 
-/**
- * Build a complete `UIActionPayload` object (useful for type-safe construction).
- */
+// Build a type-safe UIActionPayload object.
 export function createUIAction(
   target: string,
   action: string,
@@ -56,23 +33,9 @@ export function createUIAction(
   return { target, action, payload };
 }
 
-// ---------------------------------------------------------------------------
-// SSE Stream Injection
-// ---------------------------------------------------------------------------
+// Writing UI actions into the SSE response stream.
 
-/**
- * Write a UI action directly to the SSE response stream as a text-delta chunk.
- *
- * The AI SDK's streaming protocol uses `0:"..."` for text deltas. By writing
- * in this format BEFORE `pipeUIMessageStreamToResponse()`, the frontend
- * receives the `<ui_action>` tag as part of the assistant's text content,
- * which the `UIActionStreamParser` strips before rendering.
- *
- * IMPORTANT: Call this AFTER setting response headers but BEFORE the
- * AI SDK begins streaming. The pipeline's Step 10 handles this ordering.
- *
- * @returns `true` if the write succeeded, `false` otherwise.
- */
+// Write a UI action to the SSE stream as a text-delta chunk the parser strips before rendering.
 export function injectUIActionToStream(
   res: Response,
   action: UIActionPayload,
@@ -96,9 +59,7 @@ export function injectUIActionToStream(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Pre-built Actions (commonly used by the pipeline)
-// ---------------------------------------------------------------------------
+// Pre-built UI actions commonly used by the pipeline.
 
 /** Focus the composer and inject text as a follow-up prompt. */
 export function composerSetText(text: string): UIActionPayload {
@@ -140,15 +101,9 @@ export function sidebarOpenThread(threadId: string): UIActionPayload {
   return createUIAction("sidebar", "OPEN_THREAD", { threadId });
 }
 
-// ---------------------------------------------------------------------------
-// System Prompt Snippet (for model-emitted UI actions)
-// ---------------------------------------------------------------------------
+// System prompt snippet enabling model-emitted UI actions.
 
-/**
- * System prompt instructions that tell the LLM when and how to emit
- * `<ui_action>` tags. Append this to the system prompt when you want
- * the model to have the ability to trigger UI actions contextually.
- */
+// Instructions teaching the LLM how to emit <ui_action> tags in its responses.
 export const UI_ACTION_SYSTEM_PROMPT = `
 ## UI Action Protocol (Octopus System)
 

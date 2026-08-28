@@ -8,14 +8,7 @@ import { log } from '../utils/logger.js';
 
 const router = express.Router();
 
-/**
- * POST /api/tools/execute
- *
- * Executes a code snippet in the sandboxed executor (Wandbox) and returns
- * the raw result. Used by the chat code-block "Run" button and the IDE
- * artifact. The executor itself validates the language against its
- * compiler mapping — this route only enforces size + rate limits.
- */
+// POST /api/tools/execute — run a code snippet in the Wandbox sandbox.
 
 const MAX_CODE_LENGTH = 50_000;
 const MAX_STDIN_LENGTH = 10_000;
@@ -26,8 +19,7 @@ const executeSchema = z.object({
   stdin: z.string().max(MAX_STDIN_LENGTH).optional(),
 });
 
-// Code execution shells out to an external sandbox — keep a tight,
-// per-user limit well below the global limiter.
+// Tight per-user limit: execution shells out to an external sandbox.
 export const codeExecuteLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,

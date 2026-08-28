@@ -20,16 +20,9 @@ function isDefaultSessionTitle(title?: string | null): boolean {
   );
 }
 
-/**
- * نظام التسمية التلقائية للمحادثات (Chat Auto-Titling System)
- * 
- * يعمل هذا النظام في الخلفية (Background) لتوليد عناوين ذكية للمحادثات
- * بناءً على أول 3 رسائل في المحادثة دون التأثير على سرعة الشات الرئيسي.
- */
+// Chat auto-titling: generates smart session titles in the background.
 
-/**
- * إنشاء عميل AI بناءً على النموذج المتاح
- */
+// Create an AI client from the first configured provider key.
 function createAIClient() {
   // الأولوية 1: BigModel (ZhipuAI) - GLM-5.2
   if (process.env.BIGMODEL_API_KEY) {
@@ -95,9 +88,7 @@ function createAIClient() {
   throw new Error("No AI API key available for chat title generation");
 }
 
-/**
- * توليد عنوان للمحادثة بناءً على أول 3 رسائل
- */
+// Generate a chat title from the conversation's first few messages.
 async function generateChatTitle(messages: Array<{ role: string; content: string }>): Promise<string> {
   try {
     // التحقق من تفعيل النظام
@@ -182,9 +173,7 @@ async function generateChatTitle(messages: Array<{ role: string; content: string
   }
 }
 
-/**
- * تحديث عنوان المحادثة في قاعدة البيانات
- */
+// Persist the generated title on the chat session row.
 async function updateChatTitle(sessionId: string, title: string): Promise<boolean> {
   try {
     const { supabase } = await import('../services/rag/rag-supabase-client.js');
@@ -216,10 +205,7 @@ async function updateChatTitle(sessionId: string, title: string): Promise<boolea
   }
 }
 
-/**
- * معالج رئيسي: فحص المحادثة وتوليد العنوان إذا لزم الأمر
- * يعمل بشكل غير متزامن في الخلفية
- */
+// Main handler: titles the session in the background when it qualifies.
 async function processChatTitling(sessionId: string): Promise<void> {
   try {
     // التحقق من تفعيل النظام
@@ -286,9 +272,7 @@ async function processChatTitling(sessionId: string): Promise<void> {
       return;
     }
 
-    // 4. Titling window — triggers when message count is between minMessagesCount and minMessagesCount+6
-    //    (e.g. 2–8 messages). Wide window catches quick Q&A (2 messages) and prevents
-    //    missing the trigger when multiple messages are saved in rapid succession.
+    // 4. Trigger only inside the titling window: minMessagesCount..minMessagesCount+6 messages
     const minCount = ChatTitleConfig.minMessagesCount;
     const maxCount = ChatTitleConfig.minMessagesCount + 6;
     if (messageCount === null || messageCount === undefined || messageCount < minCount || messageCount > maxCount) {
@@ -316,8 +300,7 @@ async function processChatTitling(sessionId: string): Promise<void> {
     logger.info(`Generating title for session ${sessionId} with ${messages.length} messages`);
     let newTitle = await generateChatTitle(messages);
 
-    // 7. Smart fallback: if AI failed or returned a default title,
-    //    use the first 50 chars of the first user message as the title.
+    // 7. Fall back to the first user message's opening words when the title is still default
     if (isDefaultSessionTitle(newTitle)) {
       const firstUserMsg = messages.find((m) => m.role === 'user');
       if (firstUserMsg?.content) {
@@ -339,10 +322,7 @@ async function processChatTitling(sessionId: string): Promise<void> {
   }
 }
 
-/**
- * معالج غير متزامن يعمل في الخلفية
- * يتم استدعاؤه بعد حفظ الرسالة دون انتظار النتيجة
- */
+// Fire-and-forget titling trigger called after message persistence.
 export function triggerChatTitlingAsync(sessionId: string): void {
   const lockKey = `titling:lock:${sessionId}`;
 

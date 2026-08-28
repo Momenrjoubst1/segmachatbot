@@ -1,9 +1,4 @@
-/**
- * Chat attachment kind registry — the single source of truth for which file
- * types chat attachments accept, their size tiers, and magic-byte sniffing.
- *
- * Shared by the upload endpoint (validation) and the media router (routing).
- */
+// Registry of accepted chat attachment kinds, their size tiers, and magic-byte sniffers.
 
 export type AttachmentKind = "video" | "audio" | "document" | "text" | "image";
 
@@ -14,10 +9,7 @@ interface KindSpec {
   /** Extension fallback for files the OS cannot type. */
   extensions: string[];
   maxBytes: number;
-  /**
-   * Magic-byte sniff over the first 16 bytes. Text-like formats have no
-   * reliable signature — they return null and are accepted on mime/ext alone.
-   */
+  // Magic-byte sniff over the first 16 bytes; null accepts on mime/ext alone
   sniff: ((head: Buffer) => boolean) | null;
 }
 
@@ -123,11 +115,7 @@ export const KIND_SPECS: Record<AttachmentKind, KindSpec> = {
 /** Ordered list — text before document so .csv/.md resolve consistently. */
 export const KIND_ORDER: AttachmentKind[] = ["video", "audio", "text", "document", "image"];
 
-/**
- * Resolve the kind for a candidate upload. Returns null when no spec accepts it.
- * An explicit mime always wins over filename guessing (audio/webm must not be
- * captured by the video spec just because .webm is listed there).
- */
+// Resolve the upload kind; an explicit mime wins over the extension, null when unaccepted.
 export function detectKind(mimeType: string, fileName: string): AttachmentKind | null {
   const mt = (mimeType || "").split(";")[0].trim().toLowerCase();
   const ext = ("." + (fileName.split(".").pop() || "").toLowerCase()) || "";

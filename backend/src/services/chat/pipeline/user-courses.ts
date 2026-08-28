@@ -1,10 +1,4 @@
-/**
- * Step 4 — User Courses Context
- *
- * Fetches the student's enrolled courses from Supabase and renders them
- * into a Markdown block that gets prepended to the system prompt. The
- * result is cached in Redis for 10 minutes to avoid hammering the DB.
- */
+// Fetches enrolled courses from Supabase and renders a Redis-cached block for the system prompt.
 
 import redis from "../../../config/redis/client.js";
 import { createLogger } from "../../../utils/logger.js";
@@ -49,10 +43,7 @@ export async function fetchUserCoursesContext(userId: string): Promise<string> {
   }
 }
 
-/**
- * Fetch the study-progress weak-topics block for system prompt injection.
- * Cached separately with shorter TTL since it updates frequently.
- */
+// Fetches the study-progress weak-topics block, cached separately with a shorter TTL.
 export async function fetchStudyProgressContext(userId: string): Promise<string> {
   const cacheKey = `user:progress:${userId}`;
   try {

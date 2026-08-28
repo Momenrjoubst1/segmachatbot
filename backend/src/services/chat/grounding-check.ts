@@ -1,23 +1,10 @@
-/**
- * Grounding Check — Verify that the AI response is grounded in retrieved sources.
- *
- * Heuristic approach (no LLM calls):
- *  1. Extract key claims/facts from the response (sentences with specific
- *     numbers, dates, names, or factual statements)
- *  2. Check if those facts appear in the retrieved documents via fuzzy
- *     string matching
- *  3. Track which source documents were actually referenced
- *  4. If groundedPercentage < 30% and there ARE retrieved docs, flag as
- *     potentially hallucinated
- */
+// Heuristic check that an AI response is grounded in the retrieved documents.
 
 import { createLogger } from "../../utils/logger.js";
 
 const log = createLogger("grounding-check");
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// Types describing a grounding result and a retrieved document.
 
 export interface GroundingResult {
   isGrounded: boolean;
@@ -39,13 +26,9 @@ interface RetrievedDoc {
   rerankScore?: number;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// Helper functions used by the grounding check.
 
-/**
- * Split text into sentences.  Handles Arabic (،。) and English punctuation.
- */
+// Split text into sentences across Arabic and English punctuation.
 function splitSentences(text: string): string[] {
   return text
     .split(/[.!?؟。，\n]+/)
@@ -53,10 +36,7 @@ function splitSentences(text: string): string[] {
     .filter((s) => s.length > 10); // Ignore very short fragments
 }
 
-/**
- * Determine whether a sentence is a "claim" — i.e. contains specific
- * factual information (numbers, dates, names) that should be grounded.
- */
+// Flag sentences that state specific facts (numbers, dates, names) needing grounding.
 function isClaim(sentence: string): boolean {
   // Contains numbers (including Arabic-Indic digits)
   if (/\d|[٠-٩]/.test(sentence)) return true;
@@ -81,13 +61,7 @@ function isClaim(sentence: string): boolean {
   return false;
 }
 
-/**
- * Normalise text for fuzzy matching:
- *  - lowercase
- *  - remove diacritics (Arabic tashkeel)
- *  - collapse whitespace
- *  - normalise Arabic alef / ya
- */
+// Normalise text for fuzzy matching: lowercase, strip tashkeel, unify Arabic letters.
 function normalise(text: string): string {
   return text
     .toLowerCase()
@@ -106,18 +80,14 @@ function normalise(text: string): string {
     .trim();
 }
 
-/**
- * Compute the overlap ratio between a claim and a document using n-gram
- * matching.  Returns a value between 0 and 1.
- */
+// Compute the n-gram overlap ratio between a claim and a document.
 function ngramOverlap(claim: string, doc: string, n = 3): number {
   const normClaim = normalise(claim);
   const normDoc = normalise(doc);
 
   if (normClaim.length < n || normDoc.length < n) return 0;
 
-  // Build unique ngram sets for both sides — using Sets ensures each distinct
-  // ngram is counted only once, so the ratio stays in [0, 1].
+  // Dedupe each side's ngrams so the overlap ratio stays within [0, 1]
   const claimNgrams = new Set<string>();
   for (let i = 0; i <= normClaim.length - n; i++) {
     claimNgrams.add(normClaim.substring(i, i + n));
@@ -138,9 +108,7 @@ function ngramOverlap(claim: string, doc: string, n = 3): number {
   return claimNgrams.size > 0 ? matches / claimNgrams.size : 0;
 }
 
-/**
- * Extract a clean source name from a document's metadata.
- */
+// Extract a clean source name from document metadata.
 function getSourceName(doc: RetrievedDoc): string {
   const raw =
     doc.metadata?.source || doc.metadata?.source_url || doc.metadata?.file_name || "";
@@ -152,9 +120,7 @@ function getSourceName(doc: RetrievedDoc): string {
     .trim();
 }
 
-// ---------------------------------------------------------------------------
-// Main grounding check
-// ---------------------------------------------------------------------------
+// Main heuristic check scoring the response against retrieved docs.
 
 export function checkGrounding(
   response: string,
@@ -184,8 +150,7 @@ export function checkGrounding(
     };
   }
 
-  // Strip the "Sources" section from the response before checking —
-  // we only want to verify the body of the answer.
+  // Strip the sources section so only the answer body is checked
   const body = response.replace(
     /---\s*###?\s*📚?\s*المصادر.*$/s,
     "",

@@ -1,4 +1,4 @@
-/** Purge all uploaded textbook files from R2. Run from backend/: npx tsx scripts/r2-purge.mts */
+// Purge all uploaded textbook files from R2. Run from backend/: npx tsx scripts/r2-purge.mts
 import "dotenv/config";
 
 async function main() {

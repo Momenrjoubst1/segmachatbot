@@ -1,16 +1,4 @@
-/**
- * Live media-path probe — run from backend/: npx tsx scripts/media-probe.mts
- *
- * Answers the two open questions before merging the universal-attachments
- * branch:
- *   1. Does stealth/ox-alpha (via OpenRouter) actually accept `video_url`
- *      content blocks — and in which flavor (data URL vs https URL)?
- *   2. Does the Gemini Files API staging path work end-to-end with the
- *      configured R2 bucket (upload → ACTIVE → fileUri)?
- *
- * Uses a small public sample MP4 (~2.8MB). Cleans up after itself: deletes
- * the staged Gemini file and the R2 probe object.
- */
+// Live media-path probe (video_url acceptance + Gemini staging) — run from backend/: npx tsx scripts/media-probe.mts
 import "dotenv/config";
 import fs from "fs";
 import crypto from "crypto";
@@ -30,7 +18,7 @@ async function downloadSample(): Promise<Buffer> {
   return bytes;
 }
 
-// ── OpenRouter probes ───────────────────────────────────────────────────────
+// OpenRouter video_url acceptance probes.
 
 interface ORResult {
   variant: string;
@@ -79,7 +67,7 @@ async function probeOpenRouter(model: string, content: unknown[], variant: strin
   }
 }
 
-// ── Gemini staging probe ────────────────────────────────────────────────────
+// Gemini Files API staging probe over the real R2 upload path.
 
 async function probeGeminiStaging(bytes: Buffer): Promise<void> {
   console.log("\n── Gemini Files API staging (real R2 → Files API path) ──");
@@ -137,7 +125,7 @@ async function probeGeminiStaging(bytes: Buffer): Promise<void> {
   }
 }
 
-// ── main ────────────────────────────────────────────────────────────────────
+// Main flow: download sample, run probes, print recommendation.
 
 async function main() {
   const model = process.env.PROBE_MODEL || process.env.ASSISTANT_DEFAULT_MODEL || "stealth/ox-alpha";
@@ -160,8 +148,7 @@ async function main() {
 
   await probeGeminiStaging(bytes);
 
-  // A 402/403 mentioning credits/balance means the FORMAT was routed — the
-  // provider accepted the block type and only the account balance blocks it.
+  // A 402/403 mentioning credits/balance means the format was routed; only the account balance blocks it.
   const formatSupported = (r: ORResult | undefined): boolean | "credits" =>
     !r ? false : r.ok ? true : /40[23]/.test(r.detail) && /(balance|credits)/i.test(r.detail) ? "credits" : false;
 

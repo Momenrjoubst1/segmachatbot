@@ -1,12 +1,4 @@
-/**
- * Re-embed all textbook chunks at the current EXPECTED_DIMENSIONS target.
- *
- * Usage (from backend/):
- *   npx tsx scripts/reembed-all.mts
- *
- * Requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in backend/.env.
- * Uses the project's own embedding-service (MRL truncation aware).
- */
+// Re-embed all textbook chunks at the current EXPECTED_DIMENSIONS target.
 import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
 

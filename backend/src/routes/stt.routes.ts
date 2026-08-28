@@ -26,26 +26,12 @@ const sttAuxLimiter = rateLimit({
   },
 });
 
-/**
- * Grant-endpoint health. When Deepgram rejects token minting (403/402 =
- * plan/scope policy on this API key), stop ADVERTISING direct mode and
- * stop hammering the endpoint every session start; the relay keeps serving
- * STT unchanged. Policy failures cool down long, transient ones briefly.
- */
+// Grant-endpoint health: policy refusals pause direct-mode advertising via cooldowns.
 const grantHealth = { downUntil: 0 };
 const GRANT_POLICY_COOLDOWN_MS = 10 * 60_000;
 const GRANT_ERROR_COOLDOWN_MS = 60_000;
 
-/**
- * Capability probe for the dictation mic button.
- * 200 {enabled:false} when DEEPGRAM_API_KEY is missing — clients hide the
- * button instead of opening a doomed WebSocket.
- *
- * `direct` advertises the browser→Deepgram path: the client opens the
- * listen socket straight to Deepgram using an ephemeral grant token
- * (/api/stt/token), skipping both relay hops — this halves transcript
- * round-trip latency for users far from the server.
- */
+// GET /api/stt/status — capability probe advertising direct mode when healthy.
 router.get("/status", (req: Request, res: Response) => {
   const userId = req.user?.id;
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
@@ -57,25 +43,12 @@ router.get("/status", (req: Request, res: Response) => {
     provider: "deepgram",
     model: STT_MODEL,
     dailyMinutesLimit: DAILY_MINUTES_LIMIT,
-    // Direct-mode fields are only meaningful when enabled; listenQuery is
-    // everything except sample_rate, which the client appends after it
-    // knows its AudioContext's true post-decimation rate.
+    // Direct fields only when enabled; client appends sample_rate to listenQuery.
     ...(directHealthy ? { direct: true, listenQuery: buildListenQuery() } : {}),
   });
 });
 
-/**
- * GET /api/stt/token — ephemeral Deepgram grant token for DIRECT streaming.
- *
- * All enforcement happens HERE, at grant time:
- *   - daily minutes budget (same gate as the relay), and
- *   - one concurrent session per user via the SAME redis key the relay uses,
- *     so relay and direct sessions block each other symmetrically.
- * The token lives ~30s (Deepgram-side TTL) and grants LISTEN-only access on
- * our project key — no way to read audio or burn transcription beyond a
- * single live session. Disconnect detection is best-effort: usage is
- * reported back by the client via /api/stt/usage instead of socket close.
- */
+// GET /api/stt/token — ephemeral Deepgram grant enforcing quota and concurrency.
 router.get("/token", sttAuxLimiter, async (req: Request, res: Response) => {
   const userId = req.user?.id;
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
@@ -87,9 +60,7 @@ router.get("/token", sttAuxLimiter, async (req: Request, res: Response) => {
     return;
   }
 
-  // Mirror the relay's concurrency contract: one session per user across
-  // BOTH transports (the relay uses this same key). Check-then-set has a
-  // millisecond race window — acceptable for a per-user voice slot.
+  // One session per user across both transports; tiny check-then-set race is fine.
   const existingHolder = await redis.get(`stt:active:${userId}`).catch(() => null);
   if (existingHolder) {
     res.status(4029).json({ error: "already_streaming" });
@@ -112,8 +83,7 @@ router.get("/token", sttAuxLimiter, async (req: Request, res: Response) => {
         status: grantRes.status,
         pauseMinutes: cooldown / 60_000,
       });
-      // Known-policy refusal: answer 200 with no token so browsers don't
-      // paint network-error noise for a fully expected fallback path.
+      // Known-policy refusal answers 200 {token:null}, not a network error.
       if (policy) { res.json({ token: null }); return; }
       res.status(502).json({ error: "grant_failed" });
       return;
@@ -135,11 +105,7 @@ router.get("/token", sttAuxLimiter, async (req: Request, res: Response) => {
   }
 });
 
-/**
- * POST /api/stt/usage — client-reported seconds for DIRECT sessions
- * (there is no relay socket whose lifetime can be metered server-side).
- * Best-effort and clamped; abuse shifts at most the user's own budget.
- */
+// POST /api/stt/usage — best-effort clamped seconds reported by direct clients.
 router.post("/usage", sttAuxLimiter, async (req: Request, res: Response) => {
   const userId = req.user?.id;
   if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }

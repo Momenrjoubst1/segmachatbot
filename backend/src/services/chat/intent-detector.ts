@@ -1,25 +1,10 @@
-/**
- * Intent Detector — Heuristic-based intent classification for chat messages.
- *
- * Determines whether RAG retrieval is needed BEFORE running the expensive
- * embedding + vector search pipeline.  No LLM calls — pure regex / heuristic
- * matching for sub-millisecond latency.
- *
- * Intents:
- *  - KNOWLEDGE_QUERY  → needs RAG (academic questions, university info)
- *  - TOOL_REQUEST     → needs tool execution (email, calendar, search…)
- *  - SMALL_TALK       → greetings, thanks, general chat
- *  - FOLLOW_UP        → follow-up on previous assistant answer
- *  - PERSONAL_QUERY   → about the user's own data (courses, schedule, grades)
- */
+// Heuristic intent detection for chat messages — no LLM calls; decides RAG and tool needs.
 
 import { createLogger } from "../../utils/logger.js";
 
 const log = createLogger("intent-detector");
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// Intent and result types.
 
 export enum UserIntent {
   KNOWLEDGE_QUERY = "knowledge_query",
@@ -37,9 +22,7 @@ export interface IntentResult {
   suggestedQuery?: string; // Rewritten query for RAG
 }
 
-// ---------------------------------------------------------------------------
-// Keyword sets
-// ---------------------------------------------------------------------------
+// Keyword sets per intent.
 
 const TOOL_KEYWORDS_AR = [
   "أرسل", "ارسل", "ابعث", "ابعت", "بعث",
@@ -77,8 +60,7 @@ const SMALL_TALK_PATTERNS_EN = [
 ] as const;
 
 const FOLLOW_UP_PREFIXES_AR = [
-  // BUG-5 FIX: removed bare "و" — it matched almost every Arabic sentence.
-  // Only keep specific interrogative follow-up phrases.
+  // Only interrogative follow-up phrases — bare "و" over-matched.
   "وماذا", "ماذا عن", "وكيف", "ولماذا", "وأين", "ومتى",
   "وهل", "وطيب", "وزين", "وما هو", "وما هي",
 ] as const;
@@ -111,9 +93,7 @@ const QUESTION_INDICATORS_EN = [
   "can", "is", "are", "does", "do", "will", "would",
 ] as const;
 
-// ---------------------------------------------------------------------------
-// Helper — normalise Arabic text (remove tatweel, normalise alef/ya)
-// ---------------------------------------------------------------------------
+// Normalises Arabic text (removes tatweel, unifies alef/ya).
 
 function normaliseArabic(text: string): string {
   return text
@@ -124,9 +104,7 @@ function normaliseArabic(text: string): string {
     .trim();
 }
 
-// ---------------------------------------------------------------------------
-// Scoring helpers
-// ---------------------------------------------------------------------------
+// Scoring helpers for keyword, prefix, and pattern matching.
 
 function containsAny(text: string, keywords: readonly string[]): boolean {
   const lower = text.toLowerCase();
@@ -167,9 +145,7 @@ function isQuestion(text: string): boolean {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main detection function
-// ---------------------------------------------------------------------------
+// Main heuristic detection function.
 
 export async function detectIntent(
   userMessage: string,
@@ -179,7 +155,7 @@ export async function detectIntent(
   const msg = (userMessage ?? "").trim();
   const msgLen = msg.length;
 
-  // ---- 1. SMALL_TALK ----
+  // Detect small talk (short greetings and thanks).
   if (msgLen < 40 && matchesAnyPattern(msg, SMALL_TALK_PATTERNS_AR)) {
     log.info("Intent detected: SMALL_TALK (Ar pattern)", { msg: msg.substring(0, 60) });
     return {
@@ -199,11 +175,9 @@ export async function detectIntent(
     };
   }
 
-  // ---- 2. TOOL_REQUEST ----
+  // Detect tool requests by keyword match.
   if (containsAny(msg, TOOL_KEYWORDS_AR) || containsAny(msg, TOOL_KEYWORDS_EN)) {
-    // If the message contains tool keywords AND is clearly a question about
-    // academic content (e.g., "كيف أحسب المعدل؟"), it could be both.
-    // We lean toward TOOL_REQUEST but still enable RAG for context.
+    // Tool keywords plus an academic question: lean TOOL_REQUEST but enable RAG.
     const alsoQuestion = isQuestion(msg);
     const confidence = alsoQuestion ? 0.65 : 0.88;
 
@@ -221,7 +195,7 @@ export async function detectIntent(
     };
   }
 
-  // ---- 3. PERSONAL_QUERY ----
+  // Detect personal queries about the user's own data.
   if (containsAny(msg, PERSONAL_KEYWORDS_AR) || containsAny(msg, PERSONAL_KEYWORDS_EN)) {
     log.info("Intent detected: PERSONAL_QUERY", { msg: msg.substring(0, 60) });
     return {
@@ -232,7 +206,7 @@ export async function detectIntent(
     };
   }
 
-  // ---- 4. FOLLOW_UP ----
+  // Detect follow-ups on the previous assistant answer.
   const hasRecentAssistant =
     recentMessages.length >= 2 &&
     recentMessages[recentMessages.length - 2]?.role === "assistant";
@@ -270,8 +244,7 @@ export async function detectIntent(
     };
   }
 
-  // ---- 5. KNOWLEDGE_QUERY (default) ----
-  // Anything that looks like a question about university/academic content
+  // Default: knowledge query about university/academic content.
   const isQ = isQuestion(msg);
   const confidence = isQ ? 0.78 : 0.55;
 

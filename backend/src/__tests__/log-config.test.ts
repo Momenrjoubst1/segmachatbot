@@ -47,8 +47,7 @@ describe('getModuleLogLevel', () => {
     const original = process.env.LOG_LEVEL;
     process.env.LOG_LEVEL = 'debug';
 
-    // Re-import to pick up env change
-    // Since module is already loaded, we check current config behavior
+    // Module is already loaded, so just verify the current default level
     expect(['debug', 'info', 'warn', 'error', 'fatal']).toContain(logLevelConfig.default);
 
     process.env.LOG_LEVEL = original || '';

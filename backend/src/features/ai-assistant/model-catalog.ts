@@ -1,9 +1,4 @@
-/**
- * Model Catalog — Backend re-export of model context windows.
- *
- * Re-exports from the local model-context module so that imports
- * from '../../features/ai-assistant/model-catalog.js' resolve correctly.
- */
+// Model catalog — backend re-export of model context windows for stable import paths.
 
 export {
   MODEL_CONTEXT_WINDOWS,
@@ -22,9 +17,7 @@ import type { ModelContextInfo } from '../../services/memory/model-context.js';
 
 export type KnownModelId = keyof typeof MODEL_CONTEXT_WINDOWS;
 
-/**
- * Re-exported alias matching the frontend `getContextWindow` signature.
- */
+// Re-exported alias matching the frontend `getContextWindow` signature.
 export function getContextWindow(modelId: string): number {
   const model = MODEL_CONTEXT_WINDOWS[modelId] as ModelContextInfo | undefined;
   return model?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;

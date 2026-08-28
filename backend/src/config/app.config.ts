@@ -29,13 +29,7 @@ export const appConfig = {
   devExtraOrigins,
   bodyLimit: '10mb',
   nodeEnv,
-  /**
-   * Number of reverse-proxy hops to trust for X-Forwarded-* headers.
-   *   - 0 = trust nothing (use socket IP) - SAFE DEFAULT
-   *   - 1 = trust the immediate upstream (typical for nginx behind a CDN)
-   *   - N = trust N hops back
-   * Set TRUST_PROXY_HOPS in env when running behind reverse proxy / CDN.
-   */
+  // Trust N reverse-proxy hops for X-Forwarded-* headers (TRUST_PROXY_HOPS env).
   trustProxyHops: process.env.TRUST_PROXY_HOPS != null
     ? Number(process.env.TRUST_PROXY_HOPS)
     : 0,

@@ -32,8 +32,7 @@ type AgentEntry =
     }
   | { state: 'stopping'; proc: ChildProcess };
 
-// FIX #2: Reduced from 35s to 30s — tolerates up to 2 missed heartbeats (10s interval)
-// before terminating the zombie agent. Prevents resource waste from hung processes.
+// Heartbeat silence tolerated before an unresponsive agent is terminated.
 const HEARTBEAT_TIMEOUT_MS = 30_000;
 const STARTUP_GRACE_MS = 90_000;
 const INSTANCE_ID = process.env.INSTANCE_ID || randomUUID();
@@ -109,10 +108,7 @@ function getAgentKey(roomName: string, identity?: string): string {
   return identity ? `${roomName}_${identity}` : roomName;
 }
 
-/**
- * Resolve the Python executable. Prefer venv bundled with the repo if present,
- * otherwise fall back to `python` (Windows) / `python3` (Unix) on PATH.
- */
+// Resolve the Python executable, preferring the repo venv over PATH python.
 function resolvePythonBinary(projectRoot: string): string {
   const candidates = process.platform === 'win32'
     ? [
@@ -135,9 +131,7 @@ function resolvePythonBinary(projectRoot: string): string {
   return candidates[candidates.length - 1];
 }
 
-/**
- * Spawn the text agent script as a child process.
- */
+// Sync this instance's agent status into the distributed registry.
 async function syncAgentRuntime(
   agentKey: string,
   status: DistributedAgentStatus,
@@ -213,9 +207,7 @@ async function spawnTextAgent(roomName: string, identity?: string): Promise<bool
     command: commandString,
   });
 
-  // LiveKit Agents CLI expects a subcommand. `connect --room <name>` instructs
-  // the worker to join a specific room immediately — matching this service's
-  // spawn-per-room model.
+  // Join the room immediately via the CLI's connect subcommand.
   const agentProcess = spawn(
     pythonBin,
     commandArgs,
@@ -257,7 +249,7 @@ async function spawnTextAgent(roomName: string, identity?: string): Promise<bool
       pushRecentLine(recentStdout, line);
 
       if (line.includes('[SELF-CHECK]')) {
-        // FIX #5: Capture and log API key self-check results from the agent
+        // Surface API-key self-check results reported by the agent
         try {
           const jsonStr = line.substring(line.indexOf('[SELF-CHECK]') + 12).trim();
           const check = JSON.parse(jsonStr);
@@ -410,8 +402,7 @@ async function _spawnAgent(roomName: string, identity?: string): Promise<'SPAWNE
 
 function terminateAgentProcess(proc: ChildProcess, signal: 'SIGTERM' | 'SIGKILL', agentKey: string) {
   if (process.platform === 'win32' && proc.pid) {
-    // Windows: Use taskkill to cleanly kill the process tree
-    // Always use /F (force) because Python/LiveKit subprocesses resist graceful termination
+    // Windows: force-kill the whole process tree via taskkill
     exec(`taskkill /PID ${proc.pid} /T /F`, (err) => {
       // Ignore errors if process is already dead
       if (err && !err.message.includes('not found')) {

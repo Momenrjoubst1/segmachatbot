@@ -1,4 +1,4 @@
-/** Quick single-embedding smoke test. Run from backend/: npx tsx scripts/embed-test.mts */
+// Quick single-embedding smoke test. Run from backend/: npx tsx scripts/embed-test.mts
 import "dotenv/config";
 
 async function main() {
