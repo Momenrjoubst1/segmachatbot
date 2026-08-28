@@ -47,6 +47,20 @@ async function sendViaProvider(
 async function processTick(): Promise<void> {
   const now = new Date().toISOString();
 
+  // 0. Reclaim rows stuck in "processing" (e.g. the process died between
+  // locking and the terminal update) so they are retried instead of orphaned.
+  const staleCutoff = new Date(Date.now() - 10 * 60_000).toISOString();
+  for (const table of ["email_schedules", "email_jobs"] as const) {
+    const { error: reclaimErr } = await supabase
+      .from(table)
+      .update({ status: "pending", updated_at: now })
+      .eq("status", "processing")
+      .lt("updated_at", staleCutoff);
+    if (reclaimErr) {
+      log.warn(`Could not reclaim stale processing rows in ${table}`, { error: reclaimErr.message });
+    }
+  }
+
   // 1. Pick up pending scheduled emails whose time has arrived
   const { data: schedules, error: fetchErr } = await supabase
     .from("email_schedules")
@@ -87,15 +101,19 @@ async function processTick(): Promise<void> {
 async function processScheduledEmail(schedule: { id: string; user_id: string; to_address: string; subject: string; body?: string; html?: string; cc_addresses?: string[]; bcc_addresses?: string[]; attempts?: number }): Promise<void> {
   const { id, user_id, to_address, subject, body, html, cc_addresses, bcc_addresses, attempts } = schedule;
 
-  // Mark as processing (optimistic lock)
-  const { error: lockErr } = await supabase
+  // Mark as processing (optimistic lock). Supabase reports NO error for an
+  // update that matched zero rows, so the lock must be verified by the
+  // returned row count — an unverified "lock" would allow a second worker
+  // (or a racing tick) to send the same email twice.
+  const { data: locked, error: lockErr } = await supabase
     .from("email_schedules")
     .update({ status: "processing", updated_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("status", "pending");        // only if still pending (prevents double-send)
+    .eq("status", "pending")        // only if still pending (prevents double-send)
+    .select("id");
 
-  if (lockErr) {
-    log.warn("Could not lock scheduled email (already processing?)", { id, error: lockErr.message });
+  if (lockErr || !locked || locked.length === 0) {
+    log.warn("Could not lock scheduled email (already processing?)", { id, error: lockErr?.message });
     return;
   }
 
@@ -146,15 +164,16 @@ async function processScheduledEmail(schedule: { id: string; user_id: string; to
 async function processRetryJob(job: { id: string; user_id: string; to_address: string; subject: string; body?: string; html?: string; cc_addresses?: string[]; bcc_addresses?: string[]; attempts?: number }): Promise<void> {
   const { id, user_id, to_address, subject, body, html, cc_addresses, bcc_addresses, attempts } = job;
 
-  // Optimistic lock
-  const { error: lockErr } = await supabase
+  // Optimistic lock — verified via returned rows (see processScheduledEmail).
+  const { data: locked, error: lockErr } = await supabase
     .from("email_jobs")
     .update({ status: "processing", updated_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .select("id");
 
-  if (lockErr) {
-    log.warn("Could not lock email job", { id, error: lockErr.message });
+  if (lockErr || !locked || locked.length === 0) {
+    log.warn("Could not lock email job", { id, error: lockErr?.message });
     return;
   }
 

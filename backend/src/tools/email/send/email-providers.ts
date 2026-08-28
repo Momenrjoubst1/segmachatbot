@@ -64,7 +64,10 @@ export async function sendEmailViaProvider(
 ): Promise<{ provider: string; success: boolean; error?: string }> {
 
   const from = getFromAddress();
-  const mailOptions: { from: string; to: string; subject: string; text: string; html?: string; cc?: string; bcc?: string; attachments?: Array<{ filename: string; content: string; contentType: string }> } = { from, to, subject, text: body };
+  // Header-injection defense: CR/LF in the subject could smuggle additional
+  // SMTP headers. Strip it at the single provider choke point.
+  const safeSubject = subject.replace(/[\r\n]+/g, " ");
+  const mailOptions: { from: string; to: string; subject: string; text: string; html?: string; cc?: string; bcc?: string; attachments?: Array<{ filename: string; content: string; contentType: string }> } = { from, to, subject: safeSubject, text: body };
   
   if (html) {
     mailOptions.html = html;
