@@ -75,16 +75,15 @@ export function KeyboardShortcutsModal({ open, onOpenChange }: KeyboardShortcuts
         { key: "ctrl+arrowdown", description: t("shortcuts.nextMessage", "Next message") },
       ],
     },
-    {
-      category: t("categories.actions", "Actions"),
-      items: [
-        { key: "ctrl+shift+c", description: t("shortcuts.copyLastMessage", "Copy last assistant message") },
-        { key: "ctrl+shift+e", description: t("shortcuts.toggleSidebar", "Toggle sidebar") },
-        { key: "ctrl+shift+a", description: t("shortcuts.toggleArtifacts", "Toggle artifacts panel") },
-        { key: "ctrl+shift+m", description: t("shortcuts.toggleEmail", "Toggle email history") },
-        { key: "ctrl+shift+k", description: t("shortcuts.toggleCalendar", "Toggle calendar view") },
-      ],
-    },
+{
+        category: t("categories.actions", "Actions"),
+        items: [
+          { key: "ctrl+shift+c", description: t("shortcuts.copyLastMessage", "Copy last assistant message") },
+          { key: "ctrl+shift+e", description: t("shortcuts.toggleSidebar", "Toggle sidebar") },
+          { key: "ctrl+shift+m", description: t("shortcuts.toggleEmail", "Toggle email history") },
+          { key: "ctrl+shift+k", description: t("shortcuts.toggleCalendar", "Toggle calendar view") },
+        ],
+      },
     {
       category: t("categories.composer", "Composer"),
       items: [

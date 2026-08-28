@@ -30,7 +30,6 @@ import { Button } from "@/components/ui/button";
 
 // Lazy load heavy components
 const EmailHistoryPanel = lazy(() => import("../components/EmailHistoryPanel").then(m => ({ default: m.EmailHistoryPanel })));
-const ArtifactPanel = lazy(() => import("@/features/artifacts/ArtifactPanel").then(m => ({ default: m.ArtifactPanel })));
 const FullScreenCalendar = lazy(() => import("@/components/ui/fullscreen-calendar").then(m => ({ default: m.FullScreenCalendar })));
 const SchedulingPanel = lazy(() => import("@/features/calendar/components").then(m => ({ default: m.SchedulingPanel })));
 const TaskList = lazy(() => import("@/features/tasks/components/TaskList"));
@@ -55,10 +54,9 @@ export const Shadcn: FC<{
   onSkipOnboarding?: () => void;
   isGuestMode?: boolean;
 }> = ({ isOnboarded, isCoursesLoadingVisible, coursesError, retryCourses, onActiveCourseChange, onCompleteOnboarding, onSkipOnboarding, isGuestMode = false }) => {
-  const { activeView, onToggleView, artifactPanelOpen, setArtifactPanelOpen, emailHistoryOpen, setEmailHistoryOpen } = useAssistantLayout();
+  const { activeView, onToggleView, emailHistoryOpen, setEmailHistoryOpen } = useAssistantLayout();
   const { t } = useTranslation("errors");
   const { t: tCal } = useTranslation("calendar");
-  const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const { loadThread, goToPreviousThread, goToNextThread } = useChatHistory();
 
@@ -85,10 +83,6 @@ export const Shadcn: FC<{
     const event = new CustomEvent("sigma:toggle-sidebar");
     window.dispatchEvent(event);
   }, []);
-
-  const toggleArtifacts = useCallback(() => {
-    setArtifactPanelOpen(!artifactPanelOpen);
-  }, [artifactPanelOpen, setArtifactPanelOpen]);
 
   const toggleEmail = useCallback(() => {
     setEmailHistoryOpen(!emailHistoryOpen);
@@ -230,16 +224,6 @@ export const Shadcn: FC<{
     setShowScheduler(true);
   }, []);
 
-  useEffect(() => {
-    const openArtifacts = (event: Event) => {
-      const artifactId = (event as CustomEvent<{ artifactId?: string }>).detail?.artifactId;
-      if (artifactId) setActiveArtifactId(artifactId);
-      setArtifactPanelOpen(true);
-    };
-    window.addEventListener("sigma:open-artifacts", openArtifacts);
-    return () => window.removeEventListener("sigma:open-artifacts", openArtifacts);
-  }, [setArtifactPanelOpen]);
-
   useKeyboardShortcuts({
     // General shortcuts
     "ctrl+shift+o": startNewChat,
@@ -275,7 +259,6 @@ export const Shadcn: FC<{
       }
     },
     "ctrl+shift+e": toggleSidebar,
-    "ctrl+shift+a": toggleArtifacts,
     "ctrl+shift+m": toggleEmail,
     "ctrl+shift+k": toggleCalendar,
   });
@@ -296,13 +279,8 @@ export const Shadcn: FC<{
       onToggleView('calendar');
     } else if (action.action === "OPEN_EMAIL") {
       setEmailHistoryOpen(true);
-    } else if (action.action === "OPEN_ARTIFACTS") {
-      if (action.payload?.artifactId) {
-        setActiveArtifactId(action.payload.artifactId);
-      }
-      setArtifactPanelOpen(true);
     }
-  }, [onToggleView, setEmailHistoryOpen, setArtifactPanelOpen]));
+  }, [onToggleView, setEmailHistoryOpen]));
 
   useAgenticAction("composer", useCallback((action) => {
     if (action.action === "SET_TEXT") {
@@ -337,159 +315,147 @@ export const Shadcn: FC<{
 
   return (
     <div className="flex flex-1 flex-col h-full w-full bg-background">
-          <div className="flex flex-1 overflow-hidden relative">
-            <main
-              className="relative flex flex-1 overflow-hidden min-w-0"
-            >
-              {!isGuestMode && activeView === 'calendar' ? (
-                <div className="flex-1 h-full flex overflow-hidden bg-background">
-                  <div className="flex-1 min-w-0 h-full overflow-y-auto custom-scrollbar">
-                    {calendar.isCalendarLoading ? (
-                      <div className="flex items-center justify-center h-full">
-                        <LoadingSpinner size="md" />
-                      </div>
-                    ) : (
-                      <Suspense fallback={<PanelLoading />}>
-                        <ErrorBoundary componentName="FullScreenCalendar">
-                          <FullScreenCalendar
-                            data={calendarData}
-                            onCreateEvent={openCreateAtSelectedDay}
-                            onEditEvent={openEditEvent}
-                            onDeleteEvent={requestDeleteEvent}
-                            onVisibleRangeChange={handleVisibleRangeChange}
-                            onSelectedDayChange={setSelectedDay}
-                          />
-                        </ErrorBoundary>
-                      </Suspense>
-                    )}
-
-                    {/* Scheduling Panel Slide-in */}
-                    {showScheduler && (
-                      <div className="fixed right-0 top-0 bottom-0 w-[420px] max-w-full border-s border-border bg-background z-50 overflow-y-auto shadow-2xl">
-                        <Suspense fallback={<PanelLoading />}>
-                          <ErrorBoundary componentName="SchedulingPanel">
-                            <SchedulingPanel
-                              key={editingEvent?.id ?? "new"}
-                              onSubmit={editingEvent ? handleUpdateEvent : handleCreateEvent}
-                              onDelete={requestDeleteEvent}
-                              onCancel={closeScheduler}
-                              existingEvents={calendar.events}
-                              initialData={
-                                editingEvent ?? {
-                                  start_time: selectedDay.toISOString(),
-                                  end_time: new Date(selectedDay.getTime() + 60 * 60 * 1000).toISOString(),
-                                }
-                              }
-                            />
-                          </ErrorBoundary>
-                        </Suspense>
-                      </div>
-                    )}
+      <div className="flex flex-1 overflow-hidden relative">
+        <main
+          className="relative flex flex-1 overflow-hidden min-w-0"
+        >
+          {!isGuestMode && activeView === 'calendar' ? (
+            <div className="flex-1 h-full flex overflow-hidden bg-background">
+              <div className="flex-1 min-w-0 h-full overflow-y-auto custom-scrollbar">
+                {calendar.isCalendarLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <LoadingSpinner size="md" />
                   </div>
+                ) : (
+                  <Suspense fallback={<PanelLoading />}>
+                    <ErrorBoundary componentName="FullScreenCalendar">
+                      <FullScreenCalendar
+                        data={calendarData}
+                        onCreateEvent={openCreateAtSelectedDay}
+                        onEditEvent={openEditEvent}
+                        onDeleteEvent={requestDeleteEvent}
+                        onVisibleRangeChange={handleVisibleRangeChange}
+                        onSelectedDayChange={setSelectedDay}
+                      />
+                    </ErrorBoundary>
+                  </Suspense>
+                )}
 
-                  {/* Tasks panel — always visible next to the calendar */}
-                  <aside className="hidden md:flex w-72 shrink-0 border-l border-border">
+                {/* Scheduling Panel Slide-in */}
+                {showScheduler && (
+                  <div className="fixed right-0 top-0 bottom-0 w-[420px] max-w-full border-s border-border bg-background z-50 overflow-y-auto shadow-2xl">
                     <Suspense fallback={<PanelLoading />}>
-                      <ErrorBoundary componentName="TaskList">
-                        <TaskList userId={calendarUserId} className="w-full" />
+                      <ErrorBoundary componentName="SchedulingPanel">
+                        <SchedulingPanel
+                          key={editingEvent?.id ?? "new"}
+                          onSubmit={editingEvent ? handleUpdateEvent : handleCreateEvent}
+                          onDelete={requestDeleteEvent}
+                          onCancel={closeScheduler}
+                          existingEvents={calendar.events}
+                          initialData={
+                            editingEvent ?? {
+                              start_time: selectedDay.toISOString(),
+                              end_time: new Date(selectedDay.getTime() + 60 * 60 * 1000).toISOString(),
+                            }
+                          }
+                        />
                       </ErrorBoundary>
                     </Suspense>
-                  </aside>
-                </div>
-              ) : (
-                <Thread
-                  isOnboarded={isOnboarded}
-                  onCompleteOnboarding={onCompleteOnboarding}
-                  onSkipOnboarding={onSkipOnboarding}
-                />
-              )}
-              {isCoursesLoadingVisible && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
-                  <BarsSpinner size={60} className="text-primary" aria-label="Loading courses" />
-                </div>
-              )}
-              {coursesError && !isCoursesLoadingVisible && (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
-                  <div className="flex flex-col items-center gap-4 rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center max-w-md">
-                    <div className="text-destructive text-sm font-medium">{t(LOAD_ERROR_I18N[coursesError as LoadErrorCode])}</div>
-                    {retryCourses && (
-                      <button
-                        onClick={retryCourses}
-                        className="rounded-lg bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20"
-                      >
-                        Retry
-                      </button>
-                    )}
                   </div>
-                </div>
-              )}
-            </main>
-            {!isGuestMode && (
-              <Suspense fallback={<PanelLoading />}>
-                <ErrorBoundary componentName="ArtifactPanel">
-                  <ArtifactPanel
-                    open={artifactPanelOpen}
-                    onClose={() => setArtifactPanelOpen(false)}
-                    activeArtifactId={activeArtifactId}
-                    onRequestOpen={() => setArtifactPanelOpen(true)}
-                  />
-                </ErrorBoundary>
-              </Suspense>
-            )}
-            {!isGuestMode && emailHistoryOpen && (
-              <div className="absolute right-0 top-0 h-full w-96 border-l bg-background z-30 shadow-xl">
+                )}
+              </div>
+
+              {/* Tasks panel — always visible next to the calendar */}
+              <aside className="hidden md:flex w-72 shrink-0 border-l border-border">
                 <Suspense fallback={<PanelLoading />}>
-                  <ErrorBoundary componentName="EmailHistoryPanel">
-                    <EmailHistoryPanel
-                      onClose={() => setEmailHistoryOpen(false)}
-                      onAskBot={(message) => {
-                        setEmailHistoryOpen(false);
-                        const composer = document.querySelector('[data-slot="aui-composer-input"]') as HTMLElement;
-                        if (composer) {
-                          composer.focus();
-                          const textArea = composer.querySelector('[contenteditable]') as HTMLElement;
-                          if (textArea) {
-                            textArea.focus();
-                            document.execCommand('selectAll', false, undefined);
-                            document.execCommand('insertText', false, message);
-                          } else {
-                            // Lexical composer input not found — copy to clipboard as fallback
-                            navigator.clipboard.writeText(message);
-                            toast.info("Message copied to clipboard — paste it into the composer");
-                          }
-                        }
-                      }}
-                    />
+                  <ErrorBoundary componentName="TaskList">
+                    <TaskList userId={calendarUserId} className="w-full" />
                   </ErrorBoundary>
                 </Suspense>
-              </div>
-            )}
-            {/* Keyboard Shortcuts Modal */}
-            <KeyboardShortcutsModal
-              open={shortcutsModalOpen}
-              onOpenChange={setShortcutsModalOpen}
+              </aside>
+            </div>
+          ) : (
+            <Thread
+              isOnboarded={isOnboarded}
+              onCompleteOnboarding={onCompleteOnboarding}
+              onSkipOnboarding={onSkipOnboarding}
             />
-
-            {/* Delete-event confirmation — single choke point for grid + panel */}
-            <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-              <DialogContent className="sm:max-w-[420px]" dir="auto">
-                <DialogHeader>
-                  <DialogTitle>{tCal("deleteTitle")}</DialogTitle>
-                  <DialogDescription>
-                    {tCal("deleteMessage", { title: deleteTarget?.title ?? "" })}
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter className="gap-2">
-                  <Button variant="outline" onClick={() => setDeleteTarget(null)}>
-                    {tCal("keepEvent")}
-                  </Button>
-                  <Button variant="destructive" onClick={confirmDeleteEvent}>
-                    {tCal("delete")}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+          )}
+          {isCoursesLoadingVisible && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
+              <BarsSpinner size={60} className="text-primary" aria-label="Loading courses" />
+            </div>
+          )}
+          {coursesError && !isCoursesLoadingVisible && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
+              <div className="flex flex-col items-center gap-4 rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center max-w-md">
+                <div className="text-destructive text-sm font-medium">{t(LOAD_ERROR_I18N[coursesError as LoadErrorCode])}</div>
+                {retryCourses && (
+                  <button
+                    onClick={retryCourses}
+                    className="rounded-lg bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20"
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </main>
+        {!isGuestMode && emailHistoryOpen && (
+          <div className="absolute right-0 top-0 h-full w-96 border-l bg-background z-30 shadow-xl">
+            <Suspense fallback={<PanelLoading />}>
+              <ErrorBoundary componentName="EmailHistoryPanel">
+                <EmailHistoryPanel
+                  onClose={() => setEmailHistoryOpen(false)}
+                  onAskBot={(message) => {
+                    setEmailHistoryOpen(false);
+                    const composer = document.querySelector('[data-slot="aui-composer-input"]') as HTMLElement;
+                    if (composer) {
+                      composer.focus();
+                      const textArea = composer.querySelector('[contenteditable]') as HTMLElement;
+                      if (textArea) {
+                        textArea.focus();
+                        document.execCommand('selectAll', false, undefined);
+                        document.execCommand('insertText', false, message);
+                      } else {
+                        // Lexical composer input not found — copy to clipboard as fallback
+                        navigator.clipboard.writeText(message);
+                        toast.info("Message copied to clipboard — paste it into the composer");
+                      }
+                    }
+                  }}
+                />
+              </ErrorBoundary>
+            </Suspense>
           </div>
+        )}
+        {/* Keyboard Shortcuts Modal */}
+        <KeyboardShortcutsModal
+          open={shortcutsModalOpen}
+          onOpenChange={setShortcutsModalOpen}
+        />
+
+        {/* Delete-event confirmation — single choke point for grid + panel */}
+        <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+          <DialogContent className="sm:max-w-[420px]" dir="auto">
+            <DialogHeader>
+              <DialogTitle>{tCal("deleteTitle")}</DialogTitle>
+              <DialogDescription>
+                {tCal("deleteMessage", { title: deleteTarget?.title ?? "" })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+                {tCal("keepEvent")}
+              </Button>
+              <Button variant="destructive" onClick={confirmDeleteEvent}>
+                {tCal("delete")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
 };

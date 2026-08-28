@@ -383,7 +383,6 @@ const AssistantAppContent = () => {
             onToggleSidebar={() => actions.toggleSidebar()}
             activeView={state.activeView}
             onToggleView={setActiveView}
-            onToggleArtifacts={() => setArtifactPanelOpen(!state.artifactPanelOpen)}
             onToggleEmailHistory={() => setEmailHistoryOpen(!state.emailHistoryOpen)}
             isGuestMode={isGuestMode}
           />
