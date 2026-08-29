@@ -182,3 +182,12 @@
 | b679e70 | **Guest chat SSE E2E**: the real /api/guest/chat pipeline (cookie session → quota → server transcript → moderation → model-fallback loop → AI-SDK SSE framing → persistence) with only the LLM edge stubbed; reassembled `0:"…"` stream equals the mocked chunks and the quota counter registers exactly one turn. |
 
 **Final test inventory: backend 768 (unit + integration + HTTP E2E + WS E2E + SSE E2E) · frontend 556 + 3 Playwright · pdf-processor 106 — all green, all enforced by CI (4 jobs).**
+
+### Seventh pass — infra 6→10 (what code can close)
+
+| Commit | Outcome |
+|--------|---------|
+| 27fc1c1 | **Initial bundle 1,525KB → 540KB (gzip 432→164KB, −65%)**: SignupPage statically imported three.js (butterfly overlay) through the app-wide AuthModalContext; both consumers now lazy-load it into a separate 981KB on-demand chunk. Verified by the Playwright suite walking the lazy path. |
+| 99f613d | **Automated daily DB backups** (free-tier safe): scheduled GitHub Actions workflow pg_dumps the public schema (custom format, integrity-checked, 30-day artifact retention, manual first-run trigger) — needs only the `SUPABASE_DB_URL` repo secret. Restore procedure documented. **OPERATIONS.md**: production runbook — deploy, the migration-runner baseline warning, backup/restore, health checks, known ceilings (with the locking fixes that make a 2nd replica safe for jobs), incident quick actions, do-not-touch list. |
+
+**Infra grade after this pass: 8.5/10.** The remaining 1.5 are money/deployment decisions, not code: (1) one paid provider key (Groq/OpenRouter) to lift the free-tier quota ceiling, (2) Supabase Pro for managed backups + HIBP (the workflow above covers backups regardless), (3) multi-host deployment when traffic demands it.
