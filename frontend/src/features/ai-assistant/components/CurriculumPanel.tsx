@@ -294,7 +294,14 @@ function QuizMode({
   );
 }
 
-export function CurriculumPanel({ initialTab = "structure" }: { initialTab?: Tab }) {
+export function CurriculumPanel({
+  initialTab = "structure",
+  contentClassName,
+}: {
+  initialTab?: Tab;
+  /** Overrides the inner scroll cap (pass "max-h-none" when hosted in a large scrollable dialog). */
+  contentClassName?: string;
+}) {
   const { t } = useTranslation("study");
   const { textbooks, isLoading: booksLoading } = useTextbooks();
   const completed = textbooks.filter((tb) => tb.status === "completed");
@@ -376,7 +383,7 @@ export function CurriculumPanel({ initialTab = "structure" }: { initialTab?: Tab
         ))}
       </div>
 
-      <div className="max-h-64 overflow-y-auto">
+      <div className={cn("overflow-y-auto", contentClassName ?? "max-h-64")}>
         {isLoading && (
           <p className="py-6 text-center text-xs text-muted-foreground">{t("curriculum.loading")}</p>
         )}

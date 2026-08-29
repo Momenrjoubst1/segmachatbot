@@ -35,7 +35,8 @@ import { FlashcardsStudy } from "../components/chat/FlashcardsStudy";
 import { StudyProgressPanel } from "../components/chat/StudyProgressPanel";
 import { DailyPlanPanel } from "../components/chat/DailyPlanPanel";
 import { useDueFlashcardsCount } from "@/hooks/useStudy";
-import { GraduationCapIcon } from "lucide-react";
+import { GraduationCapIcon, CalendarCheckIcon, LayersIcon, UploadIcon, BarChart3Icon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ThreadList (main export)
@@ -103,8 +104,10 @@ export const ThreadList: FC<{
 
   const [bookUploadCourseId, setBookUploadCourseId] = useState<string | null>(null);
   const [bookUploadDialogOpen, setBookUploadDialogOpen] = useState(false);
-  type StudyTab = "curriculum" | "quiz" | "flashcards" | "progress" | "daily";
+  type StudyTab = "curriculum" | "quiz" | "flashcards" | "progress" | "daily" | "upload";
   const [studyTab, setStudyTab] = useState<StudyTab>("curriculum");
+  // "quiz" is a transient bus value that renders the curriculum panel on its quiz tab
+  const activeTab: StudyTab = studyTab === "quiz" ? "curriculum" : studyTab;
   const { count: dueCount, refresh: refreshDueCount } = useDueFlashcardsCount();
   const { t } = useTranslation("study");
 
@@ -155,8 +158,28 @@ export const ThreadList: FC<{
 
   const handleBookUploadClick = (courseId: string) => {
     setBookUploadCourseId(courseId);
+    setStudyTab("upload");
     setBookUploadDialogOpen(true);
   };
+
+  const uploadCourseName = bookUploadCourseId
+    ? courses.find((c) => c.id === bookUploadCourseId)?.course_name
+    : null;
+
+  // Study Hub navigation — desktop rail + mobile pills share this definition
+  const studyTabs: Array<{ id: StudyTab; label: string; icon: LucideIcon; badge?: number }> = [
+    { id: "daily", label: t("threadList.tabDaily"), icon: CalendarCheckIcon },
+    { id: "flashcards", label: t("threadList.tabFlashcards"), icon: LayersIcon, badge: dueCount },
+    { id: "curriculum", label: t("threadList.tabCurriculum"), icon: BookOpenIcon },
+    { id: "progress", label: t("threadList.tabProgress"), icon: BarChart3Icon },
+    { id: "upload", label: t("threadList.tabUpload"), icon: UploadIcon },
+  ];
+  const dueBadge =
+    dueCount > 0 ? (
+      <span className="flex min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+        {dueCount > 99 ? "99+" : dueCount}
+      </span>
+    ) : null;
 
   const handleSelectThread = useCallback(
     (id: string) => {
@@ -330,91 +353,119 @@ export const ThreadList: FC<{
           )}
         </div>
 
-      {/* Book Upload Dialog */}
+      {/* Study Hub — full-height workspace: header + side rail (desktop) / pills (mobile) + panel */}
       <Dialog open={bookUploadDialogOpen} onOpenChange={setBookUploadDialogOpen}>
         <DialogContent
-          className="bg-white border-[#EBE5DF] text-[#2C2825] sm:max-w-md p-6 gap-6 rounded-2xl"
+          className="flex h-[86vh] max-h-[780px] w-[calc(100%-2rem)] max-w-3xl flex-col gap-0 overflow-hidden rounded-2xl border-[#EBE5DF] bg-white p-0 text-[#2C2825] sm:rounded-2xl"
           style={{ zIndex: 99999 }}
         >
-          <div className="space-y-3">
-            <DialogTitle className="text-lg font-semibold text-[#2C2825]">
-              {bookUploadCourseId
-                ? t("threadList.uploadTitle")
-                : t("threadList.studyHub")}
-            </DialogTitle>
-            <DialogDescription className="text-[#7A736E] text-sm leading-relaxed">
-              {bookUploadCourseId
-                ? t("threadList.uploadDescription")
-                : t("threadList.studyHubDescription")}
-            </DialogDescription>
-          </div>
-
-          <div className="max-h-[60vh] overflow-y-auto space-y-4">
-            <TextbookUpload
-              courseId={bookUploadCourseId || undefined}
-              onUploadComplete={() => {
-                setBookUploadDialogOpen(false);
-                toast.success(t("textbook.uploadedToast"), { duration: 2500 });
-              }}
-            />
-            <div className="space-y-3">
-              {/* Study tools tabs: curriculum / flashcards / progress */}
-              <div className="flex items-center gap-1 rounded-lg bg-[#F9F6F0] p-1">
-                {([
-                    { id: "curriculum", label: t("threadList.tabCurriculum") },
-                    { id: "flashcards", label: t("threadList.tabFlashcards") },
-                    { id: "progress", label: t("threadList.tabProgress") },
-                    { id: "daily", label: t("threadList.tabDaily") },
-                ] as Array<{ id: StudyTab; label: string }>).map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setStudyTab(tab.id)}
-                    className={
-                      "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors " +
-                      ((studyTab === "quiz" ? "curriculum" : studyTab) === tab.id
-                        ? "bg-white text-[#2C2825] shadow-sm"
-                        : "text-[#7A736E] hover:text-[#2C2825]")
-                    }
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-
-              {(studyTab === "curriculum" || studyTab === "quiz") && (
-                <CurriculumPanel
-                  key={studyTab}
-                  initialTab={studyTab === "quiz" ? "quiz" : "structure"}
-                />
-              )}
-              {studyTab === "flashcards" && (
-                <FlashcardsStudy courseId={bookUploadCourseId || undefined} onReviewComplete={refreshDueCount} />
-              )}
-              {studyTab === "progress" && (
-                <StudyProgressPanel
-                  courseId={bookUploadCourseId || undefined}
-                  onTrainTopic={handleTrainTopic}
-                />
-              )}
-              {studyTab === "daily" && (
-                <DailyPlanPanel
-                  onNavigateToFlashcards={() => setStudyTab("flashcards")}
-                  onQuestionSent={() => setBookUploadDialogOpen(false)}
-                  onTrainTopic={handleTrainTopic}
-                />
-              )}
+          {/* Header */}
+          <div className="flex items-center gap-3 border-b border-[#EBE5DF] px-5 py-4 pe-14 rtl:ps-14">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 shadow-sm shadow-amber-500/40">
+              <GraduationCapIcon className="size-6 text-white" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-base font-bold text-[#2C2825]">
+                {t("threadList.studyHub")}
+              </DialogTitle>
+              <DialogDescription className="mt-0.5 truncate text-xs leading-relaxed text-[#7A736E]">
+                {t("threadList.studyHubDescription")}
+              </DialogDescription>
             </div>
           </div>
 
-          <DialogFooter className="flex-row gap-2 sm:gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => setBookUploadDialogOpen(false)}
-              className="flex-1 h-9 bg-transparent text-[#2C2825] hover:bg-[#F9F6F0] transition-colors rounded-lg"
-            >
-              {t("threadList.close")}
-            </Button>
-          </DialogFooter>
+          {/* Mobile: horizontal pills */}
+          <div className="flex gap-1.5 overflow-x-auto border-b border-[#EBE5DF] bg-[#F9F6F0]/60 px-3 py-2 sm:hidden">
+            {studyTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setStudyTab(tab.id)}
+                className={
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors " +
+                  (activeTab === tab.id
+                    ? "bg-white text-[#2C2825] shadow-sm ring-1 ring-[#EBE5DF]"
+                    : "text-[#7A736E] hover:text-[#2C2825]")
+                }
+              >
+                <tab.icon className="size-3.5 shrink-0" />
+                {tab.label}
+                {tab.id === "flashcards" && dueBadge}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex min-h-0 flex-1">
+            {/* Desktop: side rail */}
+            <nav className="hidden w-44 shrink-0 flex-col gap-1 border-e border-[#EBE5DF] bg-[#F9F6F0]/50 p-2.5 sm:flex">
+              {studyTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setStudyTab(tab.id)}
+                  className={
+                    "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors " +
+                    (activeTab === tab.id
+                      ? "bg-white text-[#2C2825] shadow-sm ring-1 ring-[#EBE5DF]"
+                      : "text-[#7A736E] hover:bg-white/70 hover:text-[#2C2825]")
+                  }
+                >
+                  <tab.icon
+                    className={
+                      "size-4 shrink-0 " + (activeTab === tab.id ? "text-amber-500" : "text-[#7A736E]/60")
+                    }
+                  />
+                  <span className="flex-1 text-start">{tab.label}</span>
+                  {tab.id === "flashcards" && dueBadge}
+                </button>
+              ))}
+            </nav>
+
+            {/* Panel content — one tool at a time, full width */}
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <div key={studyTab} className="animate-in fade-in slide-in-from-bottom-1 duration-200">
+                {activeTab === "upload" && (
+                  <div className="space-y-3">
+                    {uploadCourseName && (
+                      <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                        <BookOpenIcon className="size-4 shrink-0" />
+                        {t("threadList.uploadBookFor", { course: uploadCourseName })}
+                      </div>
+                    )}
+                    <TextbookUpload
+                      courseId={bookUploadCourseId || undefined}
+                      onUploadComplete={() => {
+                        setBookUploadDialogOpen(false);
+                        toast.success(t("textbook.uploadedToast"), { duration: 2500 });
+                      }}
+                    />
+                  </div>
+                )}
+                {activeTab === "curriculum" && (
+                  <CurriculumPanel
+                    initialTab={studyTab === "quiz" ? "quiz" : "structure"}
+                    contentClassName="max-h-none"
+                  />
+                )}
+                {activeTab === "flashcards" && (
+                  <FlashcardsStudy courseId={bookUploadCourseId || undefined} onReviewComplete={refreshDueCount} />
+                )}
+                {activeTab === "progress" && (
+                  <StudyProgressPanel
+                    courseId={bookUploadCourseId || undefined}
+                    onTrainTopic={handleTrainTopic}
+                  />
+                )}
+                {activeTab === "daily" && (
+                  <DailyPlanPanel
+                    onNavigateToFlashcards={() => setStudyTab("flashcards")}
+                    onQuestionSent={() => setBookUploadDialogOpen(false)}
+                    onTrainTopic={handleTrainTopic}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
