@@ -207,3 +207,13 @@ Script: `backend/scripts/load-guest.mjs` (reusable: `LOAD_VUS=n LOAD_MSGS=n node
 | Full stream | p50 7.6s · p95 67s (tail = genuine generation time of ~10.9k-char Arabic answers, not system stall) |
 
 Verdict: the system holds real concurrent provider traffic at beta scale with zero degradation. Remaining untested frontier is only scale BEYOND free-tier quotas (paid key → rerun with LOAD_VUS=50).
+
+### Ninth pass — first-load experience (the 6/10 item, closed)
+
+| Commit | Outcome |
+|--------|---------|
+| 27fc1c1 (earlier) | three.js/auth page out of the entry chunk. |
+| 5d9ee74 | **Measured the TRUE eager graph** (index.html refs, not just the entry): 2,687KB raw JS + 186KB CSS. Full Prism bundle (~604KB) rode the eager graph through `artifacts/viewers.tsx` + a dead `syntax-highlighter.ts`; markdown-text now lazy-loads prism-light with an explicit language set and a plain-`<pre>` suspense fallback; dead file removed; `syntax` manualChunks entry dropped (it forced the chunk eager). **Eager JS now 2,084KB.** |
+| 5d9ee74 | **CSP production-voice blocker fixed**: `connect-src` only allowed self + `*.supabase.co` — the Docker deployment would have browser-blocked direct Deepgram dictation (`wss://api.deepgram.com`) and the ElevenLabs agent socket (`wss://api.elevenlabs.io`). Both allowlisted; gzip_comp_level raised to 6. |
+
+**First visit over the wire: ~2.87MB raw uncompressed-era → ~600KB gzipped** (nginx gzip was already on — verified, not assumed). Verified by the Playwright suite (3/3). Remaining next lever (optional, noted with tradeoff): a lazy boundary on the markdown renderer (418KB) — trades a raw-text flash on first thread paint.
