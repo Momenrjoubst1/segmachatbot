@@ -488,6 +488,13 @@ function getSummaryModel() {
       apiKey: azureKey,
       headers: { "api-key": azureKey },
     }).chat(modelId);
+  } else if (process.env.BIGMODEL_API_KEY) {
+    // BigModel's OpenAI-compatible endpoint — OpenRouter accounts without
+    // credits 402 on every summary merge, so prefer BigModel when available.
+    return createOpenAI({
+      baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+      apiKey: process.env.BIGMODEL_API_KEY,
+    }).chat('glm-4-flash');
   } else if (process.env.OPENROUTER_API_KEY) {
     return createOpenAI({
       baseURL: 'https://openrouter.ai/api/v1',

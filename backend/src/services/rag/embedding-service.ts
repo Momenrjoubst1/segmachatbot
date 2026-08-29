@@ -318,7 +318,11 @@ const azureProvider = createAzureProvider();
 const localProvider = createLocalProvider();
 
 const providers: EmbeddingProvider[] = [
-  ...(nvidiaProvider ? [nvidiaProvider] : []),
+  // NVIDIA's default embedding model (nv-embedqa-e5-v5) reached end-of-life on
+  // 2026-08-25 (HTTP 410) and sat FIRST in this chain — every query burned a
+  // failed call + retry before falling through, intermittently blowing the RAG
+  // time budget. Only opt in when a live model is set explicitly via env.
+  ...(process.env.NVIDIA_EMBEDDING_MODEL && nvidiaProvider ? [nvidiaProvider] : []),
   googleProvider,
   ...(bigmodelProvider ? [bigmodelProvider] : []),
   ...(githubProvider ? [githubProvider] : []),
