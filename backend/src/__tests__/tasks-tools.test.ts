@@ -36,9 +36,16 @@ vi.mock('../services/rag/rag-supabase-client.js', () => ({
 }));
 
 // Import AFTER mocks are set up — these self-register into the tool registry.
+// Calendar tools are static too: loading them inside the test exposed its
+// 5s timeout to cold heavy imports (googleapis/ics) whenever the machine was
+// under load — registration itself is synchronous at module evaluation.
 import { getToolSchemas } from '../tools/tool-registry.js';
 import { getToolsRequiringUserId } from '../tools/tool-metadata.js';
 import '../tools/tasks/index.js';
+import '../tools/calendar/create-event/index.js';
+import '../tools/calendar/query/index.js';
+import '../tools/calendar/scheduler/find-optimal-time.js';
+import '../tools/calendar/scheduler/email-to-meeting.js';
 
 const USER_ID = 'user-123';
 const schemas = () => getToolSchemas();
@@ -62,13 +69,7 @@ describe('task tools registration', () => {
     }
   });
 
-  it('marks every calendar tool as requiring a userId', async () => {
-    // Force calendar tool modules to load so their metadata registers.
-    await import('../tools/calendar/create-event/index.js');
-    await import('../tools/calendar/query/index.js');
-    await import('../tools/calendar/scheduler/find-optimal-time.js');
-    await import('../tools/calendar/scheduler/email-to-meeting.js');
-
+  it('marks every calendar tool as requiring a userId', () => {
     const needing = getToolsRequiringUserId();
     for (const name of [
       'create_calendar_event',
