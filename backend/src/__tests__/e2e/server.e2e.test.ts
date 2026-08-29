@@ -52,6 +52,33 @@ vi.mock('../../config/supabase.config.js', () => ({
   },
 }));
 
+// ── Guest-chat LLM edge: streamText is stubbed so the SSE pipeline is
+// exercised end-to-end without any provider traffic.
+vi.mock('ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('ai')>();
+  return {
+    ...actual,
+    streamText: vi.fn(() => ({
+      textStream: (async function* () {
+        yield 'مرحبا ';
+        yield 'بالعالم!';
+      })(),
+    })),
+  };
+});
+
+vi.mock('../../routes/chat/chat-shared.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../routes/chat/chat-shared.js')>();
+  return {
+    ...actual,
+    createProviderClient: vi.fn(() => ({ chat: () => ({ modelId: 'mock' }) })),
+  };
+});
+
+vi.mock('../../services/chat/moderation.service.js', () => ({
+  moderateInput: vi.fn().mockResolvedValue({ blocked: false, error: null }),
+}));
+
 const appMod = await import('../../index.js');
 const app = appMod.default;
 
@@ -109,5 +136,40 @@ describe('E2E · real server surface', () => {
   it('unknown routes → 404 JSON error', async () => {
     const res = await request(app).get('/api/definitely-not-a-route');
     expect(res.status).toBe(404);
+  });
+});
+
+describe('E2E · guest chat SSE over the real app (mocked LLM)', () => {
+  it('POST /api/guest/chat streams 0:"-framed AI-SDK chunks and counts the turn', async () => {
+    const agent = request.agent(app);
+    const res = await agent
+      .post('/api/guest/chat')
+      .set('Content-Type', 'application/json')
+      .set('Accept-Language', 'ar')
+      .send({ message: 'مرحبا' });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('text/plain');
+
+    // Reassemble the AI-SDK UI stream: lines of 0:<json-string>.
+    const text = (res.text.match(/^0:(.*)$/gm) ?? [])
+      .map((line) => JSON.parse(line.slice(2)))
+      .join('');
+    expect(text).toBe('مرحبا بالعالم!');
+
+    // The server-side quota registered exactly one consumed message.
+    const status = await agent.get('/api/guest/status');
+    expect(status.status).toBe(200);
+    expect(status.body.count).toBe(1);
+    expect(status.body.limitReached).toBe(false);
+  });
+
+  it('invalid guest body → 400 before any quota is consumed', async () => {
+    const res = await request(app)
+      .post('/api/guest/chat')
+      .set('Content-Type', 'application/json')
+      .send({ message: '' });
+    expect(res.status).toBe(400);
+    expect(res.body).toBeTruthy();
   });
 });
