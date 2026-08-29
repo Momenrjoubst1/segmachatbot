@@ -28,10 +28,15 @@ jobs:
             echo "::error::SUPABASE_DB_URL secret is not set"; exit 1
           fi
           STAMP=$(date -u +%Y%m%d-%H%M%S)
-          pg_dump "$SUPABASE_DB_URL" \
+          # Supabase runs Postgres 17; the runner's stock client is older and
+          # pg_dump aborts on server version mismatch. Run the version-matched
+          # client tools from the postgres:17 image.
+          docker run --rm -v "$PWD:/out" -w /out postgres:17 \
+            pg_dump "$SUPABASE_DB_URL" \
             --schema=public --no-owner --no-privileges \
             --format=custom --file "sigma-db-${STAMP}.dump"
-          pg_restore --list "sigma-db-${STAMP}.dump" > /dev/null # integrity check
+          docker run --rm -v "$PWD:/out" -w /out postgres:17 \
+            pg_restore --list "sigma-db-${STAMP}.dump" > /dev/null # integrity check
           echo "file=sigma-db-${STAMP}.dump" >> "$GITHUB_OUTPUT"
           ls -lh "sigma-db-${STAMP}.dump"
         id: dump
