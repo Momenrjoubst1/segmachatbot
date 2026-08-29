@@ -173,3 +173,12 @@
 |--------|---------|
 | cacecaf | **True E2E suites** (backend `src/__tests__/e2e/`, run by the normal CI job): `server.e2e` boots the REAL index.ts — full middleware chain (helmet/CORS/global-limiter/auth/error-handler) — asserting health shape, 401s on missing+garbage JWTs across protected routes, dev-route gating, helmet headers, CORS origin rejection, 404 JSON. `ws-auth.e2e` drives REAL sockets: config-frame JWT auth (anon-dev → ready), missing/garbage token → 4401 before ready, binary-before-config → 4401. Auth edges mocked at Supabase getUser only; everything between is the production path. Backend suite: **766/766**. |
 | — | Remaining axis for a future pass: browser-level E2E (Playwright: login → composer → guest chat render) + a provider-backed guest-chat SSE flow with a mocked LLM. |
+
+### Sixth pass — browser E2E + guest SSE flow (completing the testing 9→10)
+
+| Commit | Outcome |
+|--------|---------|
+| aca4829 | **Playwright browser E2E** (`frontend/e2e/`, `npm run test:e2e`, CI job `frontend-e2e`): real Chromium against `vite preview` of the production dist — app shell mounts in guest mode (composer textbox + "Ask Sigma" + free-messages counter, zero page errors), `/login` renders the auth form, unknown routes hit the NotFound boundary. Service workers blocked for hermetic runs; webServer boots the same artifact Docker ships. |
+| b679e70 | **Guest chat SSE E2E**: the real /api/guest/chat pipeline (cookie session → quota → server transcript → moderation → model-fallback loop → AI-SDK SSE framing → persistence) with only the LLM edge stubbed; reassembled `0:"…"` stream equals the mocked chunks and the quota counter registers exactly one turn. |
+
+**Final test inventory: backend 768 (unit + integration + HTTP E2E + WS E2E + SSE E2E) · frontend 556 + 3 Playwright · pdf-processor 106 — all green, all enforced by CI (4 jobs).**
