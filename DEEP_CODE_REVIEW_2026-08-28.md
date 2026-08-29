@@ -217,3 +217,11 @@ Verdict: the system holds real concurrent provider traffic at beta scale with ze
 | 5d9ee74 | **CSP production-voice blocker fixed**: `connect-src` only allowed self + `*.supabase.co` — the Docker deployment would have browser-blocked direct Deepgram dictation (`wss://api.deepgram.com`) and the ElevenLabs agent socket (`wss://api.elevenlabs.io`). Both allowlisted; gzip_comp_level raised to 6. |
 
 **First visit over the wire: ~2.87MB raw uncompressed-era → ~600KB gzipped** (nginx gzip was already on — verified, not assumed). Verified by the Playwright suite (3/3). Remaining next lever (optional, noted with tradeoff): a lazy boundary on the markdown renderer (418KB) — trades a raw-text flash on first thread paint.
+
+### Tenth pass — first-load 9→10 (eager graph to its architectural floor)
+
+| Commit | Outcome |
+|--------|---------|
+| c668594 | UserMarkdown/MarkdownText renderers lazy (plain-text Suspense fallbacks = content-first), idle prefetch at 2.5s pre-warms the chunks, katex/rehype-katex split out of the markdown bucket to ride the lazy markdown-text chunk. Constraint discovered: react-markdown itself stays eager — @assistant-ui/react-markdown imports it internally (framework floor). |
+
+**First-load trajectory across the session: 3,744KB → 1,821KB raw eager (−51%) · ~900KB → ~470KB gzipped over the wire.** On-demand chunks: sign-up 981KB, syntax ~618KB, katex ~270KB — none paid by a first visit. Playwright 3/3 after every step.
