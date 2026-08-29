@@ -3,7 +3,7 @@ import { registerTool } from "../../tool-registry.js";
 import { createToolMetadata } from "../../tool-metadata.js";
 import { supabase } from "../../../services/rag/rag-supabase-client.js";
 import { streamText } from "ai";
-import { openai } from "@ai-sdk/openai";
+import { createOpenAI } from "@ai-sdk/openai";
 import { createLogger } from '../../../utils/logger.js';
 
 const log = createLogger('email-to-meeting');
@@ -19,14 +19,18 @@ createToolMetadata("email_to_meeting", "Convert an email into a calendar meeting
 // ============================================
 async function extractMeetingWithAI(emailContent: string, emailSubject: string): Promise<MeetingData | null> {
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-      log.warn('[Email-to-Meeting] OPENAI_API_KEY not found, falling back to regex');
+      log.warn('[Email-to-Meeting] GROQ_API_KEY not found, falling back to regex');
       return extractMeetingFromEmail(emailContent, emailSubject);
     }
 
+    const groq = createOpenAI({
+      baseURL: "https://api.groq.com/openai/v1",
+      apiKey,
+    });
     const result = await streamText({
-      model: openai('gpt-4o-mini'),
+      model: groq('qwen/qwen3.8-27b'),
       prompt: `Extract meeting information from this email content. The email may be in Arabic or English.
       
 Email Subject: ${emailSubject}

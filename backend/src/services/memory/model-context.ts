@@ -45,43 +45,39 @@ export const DEFAULT_CONTEXT_WINDOW = UNIFIED_CONTEXT_WINDOW;
  *  and routes/chat/chat-shared.ts ALLOWED_MODELS.
  *  maxOutputTokens = provider-enforced completion cap (requests above it get
  *  HTTP 400 on strict providers). Models without it can use the full
- *  MAX_OUTPUT_TOKENS ceiling (64k). */
+ *  MAX_OUTPUT_TOKENS ceiling (64k).
+ *
+ *  Catalog policy (verified live against provider APIs on 2026-08-29):
+ *  every id below answered a real request or appears in the provider's live
+ *  list with free-tier access. Dead ids (ox-alpha, glm-5.2, qwen3-32b,
+ *  gemini-2.5-pro, gemini-3-flash, the gpt-4o family, fireworks, novita
+ *  ling, 6 old NIM ids, cerebras) were pruned — they now fall back to
+ *  DEFAULT_MODEL via the router. */
 export const MODEL_CONTEXT_WINDOWS: Record<string, ModelContextInfo> = {
-  // Baichat (B.AI platform) — base model, full Claude-class output
-  'deepseek-v4-flash': { value: 'deepseek-v4-flash', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'baichat' },
-
-  // OpenRouter — primary chat model, full Claude-class output
-  'stealth/ox-alpha': { value: 'stealth/ox-alpha', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter' },
+  // DeepSeek V4 Flash — served by NVIDIA NIM (deepseek-ai/deepseek-v4-flash-0731).
+  // The public id stays 'deepseek-v4-flash' for thread/UX stability; the
+  // provider resolver in chat-providers.ts maps it to the NIM id.
+  'deepseek-v4-flash': { value: 'deepseek-v4-flash', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'nvidia', maxOutputTokens: 8_192 },
 
   // BigModel (ZhipuAI)
   'glm-4-flash': { value: 'glm-4-flash', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'bigmodel', maxOutputTokens: 4_096 },
-  'glm-5.2': { value: 'glm-5.2', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'bigmodel', maxOutputTokens: 16_384 },
 
   // Google Gemini (direct API — 65k completions supported)
   'gemini-3.7-flash': { value: 'gemini-3.7-flash', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'google' },
+  'gemini-3.5-flash': { value: 'gemini-3.5-flash', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'google' },
   'gemini-2.5-flash': { value: 'gemini-2.5-flash', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'google' },
-  'gemini-2.5-pro': { value: 'gemini-2.5-pro', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'google' },
-  'gemini-3-flash': { value: 'gemini-3-flash', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'google' },
   'gemini-3.1-flash-lite': { value: 'gemini-3.1-flash-lite', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'google' },
-
-  // Azure OpenAI / GitHub Models / OpenRouter
-  'gpt-5.4': { value: 'gpt-5.4', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'azure' },
-  'gpt-4o': { value: 'gpt-4o', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 16_384 },
-  'gpt-4o-mini': { value: 'gpt-4o-mini', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'github', maxOutputTokens: 16_384 },
+  'gemini-3.5-flash-lite': { value: 'gemini-3.5-flash-lite', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'google' },
 
   // Groq (caps verified live via /api/v1/models max_completion_tokens — Groq
   // hard-rejects requests whose max_tokens exceeds these)
   'qwen/qwen3.6-27b': { value: 'qwen/qwen3.6-27b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 16_384 },
   'qwen/qwen3.8-27b': { value: 'qwen/qwen3.8-27b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 16_384 },
-  'qwen/qwen3-32b': { value: 'qwen/qwen3-32b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 32_768 },
   'openai/gpt-oss-120b': { value: 'openai/gpt-oss-120b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 65_536 },
   'openai/gpt-oss-20b': { value: 'openai/gpt-oss-20b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'groq', maxOutputTokens: 65_536 },
 
-  // OpenRouter (free tier — tight completion caps).
-  // Ids verified live against openrouter.ai/api/v1/models; retired ids
-  // (mixtral-8x7b-32768, llama-3.3-70b-versatile, llama-3.1-8b-instant,
-  // llama-4-scout, nemotron-3-super/nano, nemotron-nano-*, gpt-oss-20b:free,
-  // dots3-note-preview, lfm2.5-2.6b, claude-3.5-haiku) were pruned.
+  // OpenRouter (free tier — tight completion caps). Ids verified live
+  // against openrouter.ai/api/v1/models with the free-tier key.
   'google/gemma-4-31b-it:free': { value: 'google/gemma-4-31b-it:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
   'google/gemma-4-26b-a4b-it:free': { value: 'google/gemma-4-26b-a4b-it:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
   'nvidia/nemotron-3-ultra-550b-a55b:free': { value: 'nvidia/nemotron-3-ultra-550b-a55b:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
@@ -89,23 +85,12 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, ModelContextInfo> = {
   'poolside/laguna-s-2.1:free': { value: 'poolside/laguna-s-2.1:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
   'poolside/laguna-xs-2.1:free': { value: 'poolside/laguna-xs-2.1:free', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'openrouter', maxOutputTokens: 8_192 },
 
-  // Fireworks
-  'accounts/fireworks/models/gemma-4-31b-it': { value: 'accounts/fireworks/models/gemma-4-31b-it', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'fireworks', maxOutputTokens: 8_192 },
-
-  // Novita
-  'inclusionai/ling-3.0-tiny': { value: 'inclusionai/ling-3.0-tiny', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'novita', maxOutputTokens: 8_192 },
-
-  // NVIDIA NIM (direct — conservative completion cap)
-  'nvidia/llama-3.1-nemotron-70b-instruct': { value: 'nvidia/llama-3.1-nemotron-70b-instruct', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'nvidia', maxOutputTokens: 8_192 },
-  'nvidia/llama-3.3-70b-instruct': { value: 'nvidia/llama-3.3-70b-instruct', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'nvidia', maxOutputTokens: 8_192 },
-  'nvidia/deepseek-r1': { value: 'nvidia/deepseek-r1', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'nvidia', maxOutputTokens: 8_192 },
-  'meta/llama-3.1-8b-instruct': { value: 'meta/llama-3.1-8b-instruct', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'nvidia', maxOutputTokens: 8_192 },
-  'meta/llama-3.1-70b-instruct': { value: 'meta/llama-3.1-70b-instruct', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'nvidia', maxOutputTokens: 8_192 },
-  'qwen/qwen2.5-72b-instruct': { value: 'qwen/qwen2.5-72b-instruct', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'nvidia', maxOutputTokens: 8_192 },
-
-  // Cerebras
-  'llama-3.3-70b': { value: 'llama-3.3-70b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'cerebras', maxOutputTokens: 8_192 },
-  'llama-3.1-8b': { value: 'llama-3.1-8b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'cerebras', maxOutputTokens: 8_192 },
+  // NVIDIA NIM (direct — conservative completion cap). Ids verified live
+  // against integrate.api.nvidia.com/v1/models with the current key.
+  'nvidia/nemotron-3-super-120b-a12b': { value: 'nvidia/nemotron-3-super-120b-a12b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'nvidia', maxOutputTokens: 8_192 },
+  'nvidia/nemotron-3.5-lightning-30b-a3b': { value: 'nvidia/nemotron-3.5-lightning-30b-a3b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'nvidia', maxOutputTokens: 8_192 },
+  'nvidia/nemotron-3-ultra-550b-a55b': { value: 'nvidia/nemotron-3-ultra-550b-a55b', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'nvidia', maxOutputTokens: 8_192 },
+  'deepseek-ai/deepseek-v4-flash-0731': { value: 'deepseek-ai/deepseek-v4-flash-0731', contextWindow: UNIFIED_CONTEXT_WINDOW, provider: 'nvidia', maxOutputTokens: 8_192 },
 };
 
 /**
@@ -113,7 +98,7 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, ModelContextInfo> = {
  * (and the canonical source of truth for the model allowlist).
  */
 export const DEFAULT_MODEL =
-  process.env.ASSISTANT_DEFAULT_MODEL?.trim() || 'stealth/ox-alpha';
+  process.env.ASSISTANT_DEFAULT_MODEL?.trim() || 'glm-4-flash';
 
 /** Models the pipeline is allowed to run — every id in the catalog. */
 export const ALLOWED_MODELS: string[] = Object.keys(MODEL_CONTEXT_WINDOWS);

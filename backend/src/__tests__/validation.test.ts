@@ -25,12 +25,12 @@ describe('Validation Pipeline Step', () => {
 
     it('should accept request with model selection', () => {
       const result = validateAndPrepareRequest({
-        body: { ...validBody, model: 'gpt-4o' },
+        body: { ...validBody, model: 'openai/gpt-oss-120b' },
         user: { id: 'user-123' },
       });
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.selectedModel).toBe('gpt-4o');
+        expect(result.selectedModel).toBe('openai/gpt-oss-120b');
       }
     });
 
@@ -47,12 +47,12 @@ describe('Validation Pipeline Step', () => {
 
     it('should accept request with data.modelName', () => {
       const result = validateAndPrepareRequest({
-        body: { ...validBody, data: { modelName: 'glm-5.2' } },
+        body: { ...validBody, data: { modelName: 'glm-4-flash' } },
         user: { id: 'user-123' },
       });
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.selectedModel).toBe('glm-5.2');
+        expect(result.selectedModel).toBe('glm-4-flash');
       }
     });
 
@@ -85,12 +85,12 @@ describe('Validation Pipeline Step', () => {
 
     it('should create metrics with correct model', () => {
       const result = validateAndPrepareRequest({
-        body: { ...validBody, model: 'gpt-4o' },
+        body: { ...validBody, model: 'openai/gpt-oss-120b' },
         user: { id: 'user-123' },
       });
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.metrics.model).toBe('gpt-4o');
+        expect(result.metrics.model).toBe('openai/gpt-oss-120b');
         expect(result.metrics.startTime).toBeDefined();
         expect(result.metrics.ragSuccess).toBe(false);
       }

@@ -13,12 +13,9 @@ vi.mock('../../utils/logger.js', () => ({
 
 vi.mock('../../routes/chat/chat-shared.js', () => ({
   getProviderAndModel: vi.fn((modelId: string) => {
-    if (modelId === 'deepseek-v4-flash') return { provider: 'baichat', modelName: modelId };
+    if (modelId === 'deepseek-v4-flash') return { provider: 'nvidia', modelName: 'deepseek-ai/deepseek-v4-flash-0731' };
     if (modelId === 'gemini-3.7-flash') return { provider: 'google', modelName: modelId };
-    if (modelId === 'glm-5.2') return { provider: 'bigmodel', modelName: modelId };
-    if (modelId === 'gpt-5.4') return { provider: 'azure', modelName: modelId };
-    if (modelId === 'gpt-4o') return { provider: 'openrouter', modelName: modelId };
-    if (modelId === 'gpt-4o-mini') return { provider: 'github', modelName: modelId };
+    if (modelId === 'glm-4-flash') return { provider: 'bigmodel', modelName: modelId };
     return { provider: 'groq', modelName: modelId };
   }),
 }));
@@ -158,19 +155,19 @@ describe('ModelRouter', () => {
     it('should return fallback chain for known models', () => {
       const chain = router.getFallbackChain('deepseek-v4-flash');
       expect(chain).toContain('gemini-3.7-flash');
-      expect(chain).toContain('gpt-4o-mini');
-      expect(chain).toContain('gemini-2.5-flash');
+      expect(chain).toContain('qwen/qwen3.6-27b');
+      expect(chain).toContain('glm-4-flash');
     });
 
-    it('should always include gpt-4o-mini as last resort', () => {
+    it('should always include qwen/qwen3.6-27b as last resort', () => {
       const chain = router.getFallbackChain('some-unknown-model');
-      expect(chain).toContain('gpt-4o-mini');
+      expect(chain).toContain('qwen/qwen3.6-27b');
     });
 
-    it('should not duplicate gpt-4o-mini if already in chain', () => {
-      // gpt-4o chain: ["gpt-4o-mini", "qwen/qwen3.6-27b"]
-      const chain = router.getFallbackChain('gpt-4o');
-      const occurrences = chain.filter(m => m === 'gpt-4o-mini');
+    it('should not duplicate qwen/qwen3.6-27b if already in chain', () => {
+      // deepseek chain already ends with qwen3.6 — the terminator must not add another
+      const chain = router.getFallbackChain('deepseek-v4-flash');
+      const occurrences = chain.filter(m => m === 'qwen/qwen3.6-27b');
       expect(occurrences.length).toBe(1);
     });
   });
@@ -193,17 +190,13 @@ describe('ModelRouter', () => {
       expect(result.isFallback).toBe(true);
     });
 
-    it('should force gpt-4o-mini when all fallbacks are open', () => {
-      // Trip breakers for deepseek-v4-flash and every model in its fallback chain
+    it('should force qwen/qwen3.6-27b when all fallbacks are open', () => {
+      // Trip the breaker for deepseek-v4-flash and every model in its fallback chain
       const modelsToTrip = [
         'deepseek-v4-flash',
         'gemini-3.7-flash',
-        'gemini-2.5-flash',
-        'gemini-2.5-pro',
-        'nvidia/nemotron-3.5-lightning:free',
         'qwen/qwen3.6-27b',
-        'glm-5.2',
-        'gpt-4o-mini',
+        'glm-4-flash',
       ];
       for (const model of modelsToTrip) {
         for (let i = 0; i < 3; i++) {
@@ -212,7 +205,7 @@ describe('ModelRouter', () => {
       }
 
       const result = router.getAvailableModel('deepseek-v4-flash');
-      expect(result.model).toBe('gpt-4o-mini');
+      expect(result.model).toBe('qwen/qwen3.6-27b');
       expect(result.isFallback).toBe(true);
     });
   });

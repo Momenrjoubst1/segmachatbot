@@ -42,7 +42,6 @@ describe('MAX_OUTPUT_TOKENS', () => {
   });
 
   it('returns the full ceiling for models without a provider cap', () => {
-    expect(getModelMaxOutputTokens('deepseek-v4-flash')).toBe(MAX_OUTPUT_TOKENS);
     expect(getModelMaxOutputTokens('gemini-2.5-flash')).toBe(MAX_OUTPUT_TOKENS);
     expect(getModelMaxOutputTokens('unknown-model')).toBe(MAX_OUTPUT_TOKENS);
   });
@@ -50,8 +49,8 @@ describe('MAX_OUTPUT_TOKENS', () => {
   it('clamps to the provider completion cap for strict providers', () => {
     // Groq caps qwen/qwen3.6-27b at 16,384 (verified live — requests above it 400)
     expect(getModelMaxOutputTokens('qwen/qwen3.6-27b')).toBe(16_384);
-    // GitHub Models gpt-4o-mini caps at 16,384
-    expect(getModelMaxOutputTokens('gpt-4o-mini')).toBe(16_384);
+    // deepseek-v4-flash rides NVIDIA NIM with a conservative 8,192 cap
+    expect(getModelMaxOutputTokens('deepseek-v4-flash')).toBe(8_192);
     // OpenRouter free tier is tighter still
     expect(getModelMaxOutputTokens('nvidia/nemotron-3.5-lightning:free')).toBe(8_192);
   });
@@ -77,11 +76,11 @@ describe('getModelContextWindow', () => {
 
 describe('getModelInfo', () => {
   it('returns full info for known model', () => {
-    const info = getModelInfo('gpt-4o');
+    const info = getModelInfo('deepseek-v4-flash');
     expect(info).toBeDefined();
-    expect(info!.value).toBe('gpt-4o');
+    expect(info!.value).toBe('deepseek-v4-flash');
     expect(info!.contextWindow).toBe(1_000_000);
-    expect(info!.provider).toBe('openrouter');
+    expect(info!.provider).toBe('nvidia');
   });
 
   it('returns undefined for unknown model', () => {
@@ -99,7 +98,7 @@ describe('getKnownModelIds', () => {
   it('includes known models', () => {
     const ids = getKnownModelIds();
     expect(ids).toContain('glm-4-flash');
-    expect(ids).toContain('gpt-4o');
+    expect(ids).toContain('qwen/qwen3.6-27b');
   });
 });
 

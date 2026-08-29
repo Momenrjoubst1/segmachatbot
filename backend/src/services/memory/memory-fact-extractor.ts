@@ -69,19 +69,13 @@ export async function extractFacts(
 async function getExtractionModel() {
   try {
     const { google } = await import("@ai-sdk/google");
-    return google("gemini-2.0-flash-lite");
+    return google("gemini-2.5-flash-lite");
   } catch (googleErr) {
-    log.warn('Google AI SDK unavailable, trying OpenAI', { error: (googleErr as Error)?.message });
-    try {
-      const { createOpenAI } = await import("@ai-sdk/openai");
-      return createOpenAI().chat("gpt-4o-mini");
-    } catch (openaiErr) {
-      log.warn('OpenAI SDK unavailable, falling back to GitHub models', { error: (openaiErr as Error)?.message });
-      const { createOpenAI } = await import("@ai-sdk/openai");
-      return createOpenAI({
-        baseURL: "https://models.inference.ai.azure.com",
-        apiKey: process.env.GITHUB_TOKEN || "",
-      }).chat("gpt-4o-mini");
-    }
+    log.warn('Google small model unavailable, falling back to Groq', { error: (googleErr as Error)?.message });
+    const { createOpenAI } = await import("@ai-sdk/openai");
+    return createOpenAI({
+      baseURL: "https://api.groq.com/openai/v1",
+      apiKey: process.env.GROQ_API_KEY || "",
+    }).chat("qwen/qwen3.8-27b");
   }
 }

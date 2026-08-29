@@ -138,7 +138,7 @@ export async function generateAndStreamResponse(
         reqMetrics.mainAgentUsage = mainAgentResult.usage as unknown as string;
 
         const secondModelClient = createSecondModelClient();
-        const secondModelName = process.env.SECOND_MODEL_NAME || "gpt-4o-mini";
+        const secondModelName = process.env.SECOND_MODEL_NAME || "qwen/qwen3.6-27b";
         let criticModel = secondModelClient
           ? secondModelClient.chat(secondModelName)
           : currentClient.chat(currentModelName);

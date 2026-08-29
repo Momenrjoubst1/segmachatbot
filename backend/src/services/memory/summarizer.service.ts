@@ -267,15 +267,11 @@ ${conversationText}
     }
 
     // Fallback: استخدام أي مزود متاح
-    if (azureKey) {
-      const cleanEndpoint = azureEndpoint ? azureEndpoint.replace(/\/$/, '') : undefined;
+    if (process.env.GROQ_API_KEY) {
       return createOpenAI({
-        baseURL: cleanEndpoint || "https://msalrjoub25-2561-resource.openai.azure.com/openai/v1",
-        apiKey: azureKey,
-        headers: {
-          "api-key": azureKey,
-        },
-      }).chat('gpt-4o-mini');
+        baseURL: "https://api.groq.com/openai/v1",
+        apiKey: process.env.GROQ_API_KEY,
+      }).chat('qwen/qwen3.6-27b');
     }
 
     throw new Error('No AI provider configured for summarization');

@@ -1,30 +1,13 @@
 // Unified policy: every supported model runs a 1,000,000-token context window.
 // Keep in sync with backend/src/services/memory/model-context.ts
+//
+// Catalog policy (verified live against provider APIs on 2026-08-29):
+// an id is listed here ONLY if a real request succeeded, or it appeared in the
+// provider's live model list with free-tier access. Dead ids are pruned, not
+// disabled — old threads referencing them resolve to DEFAULT_MODEL_ID.
 export const MODELS = [
   // ==========================================
-  // 0. OpenRouter (primary — app default)
-  // ==========================================
-  {
-    name: "Ox-Alpha (OpenRouter - Primary)",
-    value: "stealth/ox-alpha",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "openrouter" as const,
-  },
-
-  // ==========================================
-  // 0b. Baichat (B.AI platform)
-  // ==========================================
-  {
-    name: "DeepSeek V4 Flash (B.AI)",
-    value: "deepseek-v4-flash",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "baichat" as const,
-  },
-
-  // ==========================================
-  // 1. BigModel (ZhipuAI) - GLM Models
+  // 0. BigModel (ZhipuAI) — app default (free, verified live)
   // ==========================================
   {
     name: "GLM-4 Flash (BigModel - Fast)",
@@ -33,12 +16,18 @@ export const MODELS = [
     contextWindow: 1_000_000,
     provider: "bigmodel" as const,
   },
+
+  // ==========================================
+  // 0b. DeepSeek V4 Flash — served via NVIDIA NIM
+  // (id kept stable for existing threads; backend maps it to
+  // deepseek-ai/deepseek-v4-flash-0731)
+  // ==========================================
   {
-    name: "GLM-5.2 (BigModel)",
-    value: "glm-5.2",
+    name: "DeepSeek V4 Flash (NVIDIA)",
+    value: "deepseek-v4-flash",
     disabled: false,
     contextWindow: 1_000_000,
-    provider: "bigmodel" as const,
+    provider: "nvidia" as const,
   },
 
   // ==========================================
@@ -52,22 +41,15 @@ export const MODELS = [
     provider: "google" as const,
   },
   {
+    name: "Gemini 3.5 Flash (Google - Free)",
+    value: "gemini-3.5-flash",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "google" as const,
+  },
+  {
     name: "Gemini 2.5 Flash (Google - Free)",
     value: "gemini-2.5-flash",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "google" as const,
-  },
-  {
-    name: "Gemini 2.5 Pro (Google)",
-    value: "gemini-2.5-pro",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "google" as const,
-  },
-  {
-    name: "Gemini 3 Flash (Google - Latest)",
-    value: "gemini-3-flash",
     disabled: false,
     contextWindow: 1_000_000,
     provider: "google" as const,
@@ -79,38 +61,16 @@ export const MODELS = [
     contextWindow: 1_000_000,
     provider: "google" as const,
   },
-
-  // ==========================================
-  // 2. Azure OpenAI Models (ChatGPT 5.4)
-  // ==========================================
   {
-    name: "ChatGPT 5.4 (Azure OpenAI)",
-    value: "gpt-5.4",
+    name: "Gemini 3.5 Flash-Lite (Google)",
+    value: "gemini-3.5-flash-lite",
     disabled: false,
     contextWindow: 1_000_000,
-    provider: "azure" as const,
+    provider: "google" as const,
   },
 
   // ==========================================
-  // 3. GitHub Models (Free via GITHUB_TOKEN)
-  // ==========================================
-  {
-    name: "GPT-4o Mini (GitHub)",
-    value: "gpt-4o-mini",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "github" as const,
-  },
-  {
-    name: "GPT-4o (OpenRouter)",
-    value: "gpt-4o",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "openrouter" as const,
-  },
-
-  // ==========================================
-  // 4. Groq Models (Free & Fast via GROQ_API_KEY)
+  // 2. Groq Models (Free & Fast via GROQ_API_KEY)
   // ==========================================
   {
     name: "Qwen 3.6 27B (Groq)",
@@ -140,20 +100,45 @@ export const MODELS = [
     contextWindow: 1_000_000,
     provider: "groq" as const,
   },
+
+  // ==========================================
+  // 3. NVIDIA NIM Models (via NVIDIA_API_KEY)
+  // ==========================================
   {
-    name: "Qwen 3 32B (Groq)",
-    value: "qwen/qwen3-32b",
+    name: "Nemotron 3 Super 120B (NVIDIA NIM)",
+    value: "nvidia/nemotron-3-super-120b-a12b",
     disabled: false,
     contextWindow: 1_000_000,
-    provider: "groq" as const,
+    provider: "nvidia" as const,
+  },
+  {
+    name: "Nemotron 3.5 Lightning 30B (NVIDIA NIM)",
+    value: "nvidia/nemotron-3.5-lightning-30b-a3b",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "nvidia" as const,
+  },
+  {
+    name: "Nemotron 3 Ultra 550B (NVIDIA NIM)",
+    value: "nvidia/nemotron-3-ultra-550b-a55b",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "nvidia" as const,
   },
 
   // ==========================================
-  // 5. OpenRouter Models (Free Tier via OPENROUTER_API_KEY)
+  // 4. OpenRouter Models (Free Tier via OPENROUTER_API_KEY)
   // ==========================================
   {
     name: "Nemotron 3.5 Lightning (Free)",
     value: "nvidia/nemotron-3.5-lightning:free",
+    disabled: false,
+    contextWindow: 1_000_000,
+    provider: "openrouter" as const,
+  },
+  {
+    name: "Nemotron 3 Ultra 550B (Free)",
+    value: "nvidia/nemotron-3-ultra-550b-a55b:free",
     disabled: false,
     contextWindow: 1_000_000,
     provider: "openrouter" as const,
@@ -173,13 +158,6 @@ export const MODELS = [
     provider: "openrouter" as const,
   },
   {
-    name: "Nemotron 3 Ultra 550B (Free)",
-    value: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "openrouter" as const,
-  },
-  {
     name: "Laguna S 2.1 (Free)",
     value: "poolside/laguna-s-2.1:free",
     disabled: false,
@@ -192,92 +170,6 @@ export const MODELS = [
     disabled: false,
     contextWindow: 1_000_000,
     provider: "openrouter" as const,
-  },
-
-  // ==========================================
-  // 6. Fireworks Models (via FIREWORKS_API_KEY)
-  // ==========================================
-  {
-    name: "Gemma 4 31B IT (Fireworks)",
-    value: "accounts/fireworks/models/gemma-4-31b-it",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "fireworks" as const,
-  },
-
-  // ==========================================
-  // 7. Novita.ai Models (via NOVITA_API_KEY)
-  // ==========================================
-  {
-    name: "Ling 3.0 Tiny (Novita)",
-    value: "inclusionai/ling-3.0-tiny",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "novita" as const,
-  },
-
-  // ==========================================
-  // 8. NVIDIA NIM Models (via NVIDIA_API_KEY)
-  // ==========================================
-  {
-    name: "Nemotron 70B (NVIDIA NIM)",
-    value: "nvidia/llama-3.1-nemotron-70b-instruct",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "nvidia" as const,
-  },
-  {
-    name: "Llama 3.3 70B (NVIDIA NIM)",
-    value: "nvidia/llama-3.3-70b-instruct",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "nvidia" as const,
-  },
-  {
-    name: "DeepSeek R1 (NVIDIA NIM)",
-    value: "nvidia/deepseek-r1",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "nvidia" as const,
-  },
-  {
-    name: "Llama 3.1 8B (NVIDIA NIM)",
-    value: "meta/llama-3.1-8b-instruct",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "nvidia" as const,
-  },
-  {
-    name: "Llama 3.1 70B (NVIDIA NIM)",
-    value: "meta/llama-3.1-70b-instruct",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "nvidia" as const,
-  },
-  {
-    name: "Qwen 2.5 72B (NVIDIA NIM)",
-    value: "qwen/qwen2.5-72b-instruct",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "nvidia" as const,
-  },
-
-  // ==========================================
-  // 9. Cerebras Models (via CEREBRAS_API_KEY)
-  // ==========================================
-  {
-    name: "Llama 3.3 70B (Cerebras)",
-    value: "llama-3.3-70b",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "cerebras" as const,
-  },
-  {
-    name: "Llama 3.1 8B (Cerebras - Fast)",
-    value: "llama-3.1-8b",
-    disabled: false,
-    contextWindow: 1_000_000,
-    provider: "cerebras" as const,
   },
 ] as const;
 
@@ -305,17 +197,15 @@ export const MODEL_EFFORT_WIRE: Record<
 
 /**
  * Real reasoning-effort availability per model, based on each provider's
- * documented API (researched Aug 2026):
+ * documented API (re-verified Aug 2026):
  *
  * - OpenRouter: unified `reasoning.effort`, mapped to the nearest level the
  *   target model supports → safe Low/Medium/High for its models.
- * - DeepSeek (B.AI): `reasoning_effort` accepts low | high | max
+ * - DeepSeek (NVIDIA NIM): `reasoning_effort` accepts low | high | max
  *   (medium & xhigh are mapped up to high).
- * - BigModel GLM: `reasoning_effort` only on GLM-5.2+ (low/medium→high,
- *   xhigh→max). GLM-4.x has no effort parameter.
+ * - BigModel GLM: GLM-4.x has no effort parameter.
  * - Google Gemini: `thinkingLevel` (Gemini 3) / `thinkingBudget` (2.5) —
  *   low | medium | high across the catalog's Gemini models.
- * - Azure OpenAI GPT-5.4: `reasoning_effort` none/low/medium/high/xhigh.
  * - Groq: `reasoning_effort` only for the GPT-OSS family (low/medium/high);
  *   Qwen 3 accepts only none/default → no effort UI. Llama/Mixtral: none.
  *
@@ -326,24 +216,17 @@ export const MODEL_EFFORT_LEVELS: Partial<
   Record<KnownModelId, ModelEffortLevel[]>
 > = {
   // OpenRouter
-  "stealth/ox-alpha": ["Low", "Medium", "High"],
   "google/gemma-4-31b-it:free": ["Low", "Medium", "High"],
 
-  // Baichat (DeepSeek)
+  // DeepSeek (via NVIDIA NIM)
   "deepseek-v4-flash": ["Low", "High", "Max"],
-
-  // BigModel (ZhipuAI)
-  "glm-5.2": ["Low", "Medium", "High", "Max"],
 
   // Google Gemini (direct)
   "gemini-3.7-flash": ["Low", "Medium", "High"],
+  "gemini-3.5-flash": ["Low", "Medium", "High"],
   "gemini-2.5-flash": ["Low", "Medium", "High"],
-  "gemini-2.5-pro": ["Low", "Medium", "High"],
-  "gemini-3-flash": ["Low", "Medium", "High"],
   "gemini-3.1-flash-lite": ["Low", "Medium", "High"],
-
-  // Azure OpenAI
-  "gpt-5.4": ["Low", "Medium", "High", "Extra"],
+  "gemini-3.5-flash-lite": ["Low", "Medium", "High"],
 
   // Groq (GPT-OSS family only)
   "openai/gpt-oss-120b": ["Low", "Medium", "High"],
@@ -372,15 +255,11 @@ export function getModelEffortLevels(modelId: string): ModelEffortLevel[] {
  * (featured models only — others fall back to their provider label).
  */
 export const MODEL_TAGLINES: Partial<Record<KnownModelId, string>> = {
-  "stealth/ox-alpha": "Primary model — best overall quality",
   "deepseek-v4-flash": "Fast reasoning for everyday tasks",
   "glm-4-flash": "Fastest for quick answers",
-  "glm-5.2": "Balanced speed and quality",
   "gemini-3.7-flash": "Free — great for daily use",
+  "gemini-3.5-flash": "Free — newest Google flash",
   "gemini-2.5-flash": "Free — fast responses",
-  "gemini-2.5-pro": "For complex tasks",
-  "gemini-3-flash": "Latest Google model",
-  "gpt-5.4": "For your toughest challenges",
 };
 
 const DEFAULT_MODEL = MODELS[0]; // GLM-4 Flash (BigModel - Fast)
@@ -394,7 +273,7 @@ export function getContextWindow(modelId: string): number {
 
 export function getModelProvider(modelId: string): ModelProvider {
   const model = MODELS.find((m) => m.value === modelId);
-  return model?.provider ?? "openrouter";
+  return model?.provider ?? "bigmodel";
 }
 
 const ACTIVE_MODELS = MODELS.filter((m) => !m.disabled);

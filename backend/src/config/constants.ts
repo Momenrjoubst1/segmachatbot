@@ -166,12 +166,12 @@ export const FILE_CONFIG = {
   IMAGE_TOKEN_COST: 85,
 } as const;
 
-// Default model routing.
+// Default model routing (all live & free-tier — verified 2026-08-29).
 export const MODEL_CONFIG = {
-  DEFAULT_MODEL: 'deepseek-v4-flash',
-  FALLBACK_MODEL: 'gpt-4o-mini',
-  VISION_MODEL: 'openai/gpt-4o',
-  SUMMARY_MODEL: 'gpt-4o-mini',
+  DEFAULT_MODEL: 'glm-4-flash',
+  FALLBACK_MODEL: 'qwen/qwen3.6-27b',
+  VISION_MODEL: 'gemini-2.5-flash',
+  SUMMARY_MODEL: 'glm-4-flash',
 } as const;
 
 // Pagination limits.

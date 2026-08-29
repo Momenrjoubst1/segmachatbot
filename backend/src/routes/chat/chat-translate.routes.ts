@@ -132,7 +132,7 @@ router.post(
     // 2. Fallback Chain Definition
     const chain: (
       | { type: "azure"; target: string }
-      | { type: "llm"; provider: "groq" | "github" | "openrouter"; model: string }
+      | { type: "llm"; provider: "groq" | "github" | "openrouter" | "bigmodel"; model: string }
     )[] = [];
 
     // Azure handles standard language mappings with ultra-low latency (<150ms)
@@ -145,8 +145,8 @@ router.post(
     if (process.env.GROQ_API_KEY) {
       chain.push({ type: "llm", provider: "groq", model: "qwen/qwen3.6-27b" });
     }
-    if (process.env.GITHUB_TOKEN) {
-      chain.push({ type: "llm", provider: "github", model: "openai/gpt-4o-mini" });
+    if (process.env.BIGMODEL_API_KEY) {
+      chain.push({ type: "llm", provider: "bigmodel", model: "glm-4-flash" });
     }
     if (process.env.OPENROUTER_API_KEY) {
       chain.push({ type: "llm", provider: "openrouter", model: "nvidia/nemotron-3.5-lightning:free" });

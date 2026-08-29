@@ -27,15 +27,26 @@ describe('model-catalog', () => {
       });
     });
 
-    it('has Ox-Alpha as first model (app default)', () => {
-      expect(MODELS[0].value).toBe('stealth/ox-alpha');
-      expect(MODELS[0].provider).toBe('openrouter');
+    it('has GLM-4 Flash as first model (app default)', () => {
+      expect(MODELS[0].value).toBe('glm-4-flash');
+      expect(MODELS[0].provider).toBe('bigmodel');
+    });
+
+    it('contains no retired model ids', () => {
+      const retired = [
+        'stealth/ox-alpha', 'glm-5.2', 'gemini-2.5-pro', 'gemini-3-flash',
+        'gpt-5.4', 'gpt-4o', 'gpt-4o-mini', 'qwen/qwen3-32b',
+        'inclusionai/ling-3.0-tiny', 'accounts/fireworks/models/gemma-4-31b-it',
+        'nvidia/llama-3.3-70b-instruct', 'llama-3.3-70b', 'llama-3.1-8b',
+      ];
+      const values = MODELS.map((m) => m.value);
+      for (const id of retired) expect(values).not.toContain(id);
     });
   });
 
   describe('DEFAULT_MODEL_ID', () => {
-    it('is set to stealth/ox-alpha', () => {
-      expect(DEFAULT_MODEL_ID).toBe('stealth/ox-alpha');
+    it('is set to glm-4-flash', () => {
+      expect(DEFAULT_MODEL_ID).toBe('glm-4-flash');
     });
   });
 
@@ -72,8 +83,8 @@ describe('model-catalog', () => {
       expect(getModelProvider('qwen/qwen3.6-27b')).toBe('groq');
     });
 
-    it('returns default provider "openrouter" for unknown model', () => {
-      expect(getModelProvider('unknown-model')).toBe('openrouter');
+    it('returns default provider "bigmodel" for unknown model', () => {
+      expect(getModelProvider('unknown-model')).toBe('bigmodel');
     });
   });
 

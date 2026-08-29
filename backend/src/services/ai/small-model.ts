@@ -10,24 +10,25 @@ const log = createLogger("ai:small-model");
 let cachedModel: LanguageModel | null = null;
 
 /**
- * Small chat model chain: Google gemini-2.0-flash-lite → GitHub Models gpt-4o-mini.
- * The resolved model is cached for the process lifetime.
+ * Small chat model chain: Google gemini-2.5-flash-lite → BigModel glm-4-flash.
+ * Both free-tier and verified live (2026-08-29). The resolved model is cached
+ * for the process lifetime.
  */
 export async function getSmallChatModel(): Promise<LanguageModel> {
   if (cachedModel) return cachedModel;
 
   try {
     const { google } = await import("@ai-sdk/google");
-    cachedModel = google("gemini-2.0-flash-lite");
+    cachedModel = google("gemini-2.5-flash-lite");
   } catch (googleErr) {
-    log.warn("Google small model unavailable, falling back to GitHub Models", {
+    log.warn("Google small model unavailable, falling back to BigModel", {
       error: (googleErr as Error).message,
     });
     const { createOpenAI } = await import("@ai-sdk/openai");
     cachedModel = createOpenAI({
-      baseURL: "https://models.inference.ai.azure.com",
-      apiKey: process.env.GITHUB_TOKEN || "",
-    }).chat("gpt-4o-mini");
+      baseURL: "https://open.bigmodel.cn/api/paas/v4",
+      apiKey: process.env.BIGMODEL_API_KEY || "",
+    }).chat("glm-4-flash");
   }
 
   return cachedModel;

@@ -31,7 +31,7 @@ export const MemoryConfig = {
     enabled: process.env.MEMORY_SUMMARIZATION_ENABLED !== 'false',
     
     // Model used for summarization (cheap and fast).
-    model: process.env.MEMORY_SUMMARY_MODEL || 'gpt-4o-mini',
+    model: process.env.MEMORY_SUMMARY_MODEL || 'glm-4-flash',
     
     // Maximum summary length in tokens.
     maxSummaryTokens: parseInt(process.env.MEMORY_SUMMARY_MAX_TOKENS || '500'),

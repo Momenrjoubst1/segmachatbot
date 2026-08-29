@@ -231,6 +231,8 @@ app.get("/api/health", healthLimiter, async (_req: Request, res: Response) => {
   if (process.env.GITHUB_TOKEN) providers.push("github");
   if (process.env.OPENROUTER_API_KEY) providers.push("openrouter");
   if (process.env.FIREWORKS_API_KEY) providers.push("fireworks");
+  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) providers.push("google");
+  if (process.env.NVIDIA_API_KEY) providers.push("nvidia");
 
   const overallStatus =
     redisStatus === "ok" && providers.length > 0 ? "ok" : "degraded";

@@ -27,8 +27,8 @@ export class ModelRouter {
 
   getFallbackChain(primaryModel: string): string[] {
     const chain = FALLBACK_CHAINS[primaryModel] ? [...FALLBACK_CHAINS[primaryModel]] : [];
-    if (!chain.includes("gpt-4o-mini")) {
-      chain.push("gpt-4o-mini");
+    if (!chain.includes("qwen/qwen3.6-27b")) {
+      chain.push("qwen/qwen3.6-27b");
     }
     return chain;
   }
@@ -55,9 +55,9 @@ export class ModelRouter {
       }
     }
 
-    log.error(`All models in fallback chain for "${requestedModel}" have open circuits! Forcing gpt-4o-mini as emergency fallback.`);
-    const { provider } = getProviderAndModel("gpt-4o-mini");
-    return { model: "gpt-4o-mini", provider, isFallback: true };
+    log.error(`All models in fallback chain for "${requestedModel}" have open circuits! Forcing qwen/qwen3.6-27b as emergency fallback.`);
+    const { provider } = getProviderAndModel("qwen/qwen3.6-27b");
+    return { model: "qwen/qwen3.6-27b", provider, isFallback: true };
   }
 
   reportSuccess(model: string): void {

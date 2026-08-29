@@ -44,8 +44,10 @@ export async function performVisionAnalysis(
   selectedModel: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Gemini 2.5 Flash — free, vision-native, verified live. Resolved through
+    // the normal provider map so the id and client always agree.
     const visionModelId =
-      process.env.VISION_MODEL_ID?.trim() || "openai/gpt-4o";
+      process.env.VISION_MODEL_ID?.trim() || "gemini-2.5-flash";
 
     // Resolve the vision client's provider directly via getProviderAndModel.
     const { getProviderAndModel: gpm } = await import(
@@ -61,16 +63,12 @@ export async function performVisionAnalysis(
         const textParts = msg.content.filter((p: Record<string, unknown>) => p.type === "text");
         const userText = textParts.map((p: Record<string, unknown>) => p.text).join("\n");
 
+        const { provider: visionProvider, modelName: visionName } = gpm(visionModelId);
         let visionModel: ReturnType<ReturnType<typeof createProviderClient>["chat"]>;
         try {
-          if (process.env.OPENROUTER_API_KEY) {
-            const openRouterClient = createProviderClient("openrouter");
-            visionModel = openRouterClient.chat(visionModelId);
-          } else {
-            visionModel = client.chat(vn);
-          }
+          visionModel = createProviderClient(visionProvider).chat(visionName);
         } catch (visionErr) {
-          log.warn('OpenRouter vision model unavailable, using default', { error: (visionErr as Error)?.message });
+          log.warn('Vision model client unavailable, using selected-model provider', { error: (visionErr as Error)?.message });
           visionModel = client.chat(vn);
         }
 

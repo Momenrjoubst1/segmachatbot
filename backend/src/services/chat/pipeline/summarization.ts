@@ -35,7 +35,7 @@ export async function manageContextWindow(args: {
   threadId?: string;
   selectedModel?: string;
 }): Promise<SummarizationResult> {
-  const { coreMessages, userId, threadId, selectedModel = 'gpt-4o-mini' } = args;
+  const { coreMessages, userId, threadId, selectedModel = 'glm-4-flash' } = args;
   const ctxStatus = getContextWindowStatus(coreMessages, selectedModel);
   memLog.info("Context window status", {
     messages: coreMessages.length,

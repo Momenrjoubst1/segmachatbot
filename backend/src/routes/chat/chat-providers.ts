@@ -28,20 +28,20 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
     return { provider: "openrouter", modelName: modelId };
   }
   if (modelId === "deepseek-v4-flash") {
-    return { provider: "baichat", modelName: "deepseek-v4-flash" };
+    // Baichat platform is unreachable; V4 Flash lives on NVIDIA NIM now.
+    return { provider: "nvidia", modelName: "deepseek-ai/deepseek-v4-flash-0731" };
   }
   const GEMINI_MODELS = new Set([
     "gemini-3.7-flash",
+    "gemini-3.5-flash",
     "gemini-2.5-flash",
-    "gemini-2.5-pro",
-    "gemini-3-flash",
     "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
   ]);
   if (GEMINI_MODELS.has(modelId)) {
-    const actualModel = modelId === "gemini-3.7-flash" ? "gemini-2.5-flash" : modelId;
-    return { provider: "google", modelName: actualModel };
+    return { provider: "google", modelName: modelId };
   }
-  const GLM_MODELS = new Set(["glm-5.2", "glm-4-flash"]);
+  const GLM_MODELS = new Set(["glm-4-flash"]);
   if (GLM_MODELS.has(modelId)) {
     return { provider: "bigmodel", modelName: modelId };
   }
@@ -57,23 +57,24 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
       { provider: "openrouter", envKey: "OPENROUTER_API_KEY" },
     ]);
     if (fallback) {
-      log.warn(`gpt-5.4 requested but Azure not configured; falling back to ${fallback.provider} (${fallback.reason})`);
-      return { provider: fallback.provider, modelName: "gpt-4o-mini" };
+      log.warn(`gpt-5.4 requested but Azure not configured; falling back to ${fallback.provider} (qwen/qwen3.6-27b, ${fallback.reason})`);
+      return { provider: fallback.provider, modelName: "qwen/qwen3.6-27b" };
     }
     return { provider: "azure", modelName: process.env.AZURE_MODEL || process.env.AZURE_OPENAI_DEPLOYMENT_NAME || "gpt-5.4" };
   }
   if (modelId === "gpt-4o") {
+    // Legacy threads only — resolved to a live model by the fallback chain.
     return { provider: "openrouter", modelName: "openai/gpt-4o" };
   }
   if (modelId === "gpt-4o-mini") {
+    // GitHub Models key is not configured; legacy threads land here and the
+    // router's fallback chain (qwen/qwen3.6-27b) takes over on failure.
     return { provider: "github", modelName: "openai/gpt-4o-mini" };
   }
   if (
     modelId.includes("llama-") ||
     modelId.includes("mixtral") ||
     modelId.startsWith("qwen/") ||
-    modelId === "qwen/qwen3.6-27b" ||
-    modelId === "qwen/qwen3-32b" ||
     modelId.startsWith("openai/gpt-oss") ||
     modelId.startsWith("meta-llama/")
   ) {
@@ -88,11 +89,7 @@ export function getProviderAndModel(modelId: string): { provider: ProviderName; 
   if (
     modelId.startsWith("nvidia/") ||
     modelId.startsWith("nvidia-") ||
-    modelId === "deepseek-ai/deepseek-r1" ||
-    modelId === "meta/llama-3.1-8b-instruct" ||
-    modelId === "meta/llama-3.1-70b-instruct" ||
-    modelId === "meta/llama-3.3-70b-instruct" ||
-    modelId === "qwen/qwen2.5-72b-instruct"
+    modelId.startsWith("deepseek-ai/")
   ) {
     return { provider: "nvidia", modelName: modelId };
   }

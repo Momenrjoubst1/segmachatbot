@@ -24,34 +24,28 @@ function isDefaultSessionTitle(title?: string | null): boolean {
 
 // Create an AI client from the first configured provider key.
 function createAIClient() {
-  // الأولوية 1: BigModel (ZhipuAI) - GLM-5.2
+  // الأولوية 1: Groq (سريع جداً، مجاني، Qwen 3.8)
+  if (process.env.GROQ_API_KEY) {
+    return {
+      client: createOpenAI({
+        baseURL: "https://api.groq.com/openai/v1",
+        apiKey: process.env.GROQ_API_KEY,
+      }),
+      model: "qwen/qwen3.8-27b"
+    };
+  }
+
+  // الأولوية 2: BigModel (ZhipuAI) - GLM-4 Flash (مجاني)
   if (process.env.BIGMODEL_API_KEY) {
     return {
       client: createOpenAI({
         baseURL: "https://open.bigmodel.cn/api/paas/v4",
         apiKey: process.env.BIGMODEL_API_KEY,
       }),
-      model: "glm-5.2"
+      model: "glm-4-flash"
     };
   }
 
-  // الأولوية 2: Azure OpenAI (إذا كان متاحاً)
-  if (process.env.AZURE_OPENAI_API_KEY && process.env.AZURE_OPENAI_ENDPOINT) {
-    const endpoint = process.env.AZURE_OPENAI_ENDPOINT.replace(/\/$/, '');
-    const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4o-mini';
-    
-    return {
-      client: createOpenAI({
-        baseURL: endpoint,
-        apiKey: process.env.AZURE_OPENAI_API_KEY,
-        headers: {
-          "api-key": process.env.AZURE_OPENAI_API_KEY,
-        },
-      }),
-      model: deploymentName
-    };
-  }
-  
   // الأولوية 3: Gemini Flash (سريع واقتصادي)
   if (process.env.GOOGLE_API_KEY) {
     return {
@@ -59,32 +53,21 @@ function createAIClient() {
         baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
         apiKey: process.env.GOOGLE_API_KEY,
       }),
-      model: "gemini-1.5-flash"
+      model: "gemini-2.5-flash"
     };
   }
-  
-  // الأولوية 4: GPT-4o-mini من GitHub
-  if (process.env.GITHUB_TOKEN) {
+
+  // الأولوية 4: NVIDIA NIM (Lightning)
+  if (process.env.NVIDIA_API_KEY) {
     return {
       client: createOpenAI({
-        baseURL: "https://models.github.ai/inference",
-        apiKey: process.env.GITHUB_TOKEN,
+        baseURL: "https://integrate.api.nvidia.com/v1",
+        apiKey: process.env.NVIDIA_API_KEY,
       }),
-      model: "gpt-4o-mini"
+      model: "nvidia/nemotron-3.5-lightning-30b-a3b"
     };
   }
-  
-  // الأولوية 5: Groq (سريع جداً)
-  if (process.env.GROQ_API_KEY) {
-    return {
-      client: createOpenAI({
-        baseURL: "https://api.groq.com/openai/v1",
-        apiKey: process.env.GROQ_API_KEY,
-      }),
-      model: "qwen/qwen3.6-27b"
-    };
-  }
-  
+
   throw new Error("No AI API key available for chat title generation");
 }
 

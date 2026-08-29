@@ -34,11 +34,10 @@ export const ChatTitleConfig = {
 
   // Priority order of AI models to try.
   modelPriority: [
-    { provider: 'bigmodel', model: 'glm-5.2', envKey: 'BIGMODEL_API_KEY' },
-    { provider: 'azure', model: 'gpt-4o-mini', envKey: 'AZURE_OPENAI_API_KEY' },
-    { provider: 'google', model: 'gemini-1.5-flash', envKey: 'GOOGLE_API_KEY' },
-    { provider: 'github', model: 'gpt-4o-mini', envKey: 'GITHUB_TOKEN' },
-    { provider: 'groq', model: 'qwen/qwen3.6-27b', envKey: 'GROQ_API_KEY' },
+    { provider: 'groq', model: 'qwen/qwen3.8-27b', envKey: 'GROQ_API_KEY' },
+    { provider: 'bigmodel', model: 'glm-4-flash', envKey: 'BIGMODEL_API_KEY' },
+    { provider: 'google', model: 'gemini-2.5-flash', envKey: 'GOOGLE_API_KEY' },
+    { provider: 'nvidia', model: 'nvidia/nemotron-3.5-lightning-30b-a3b', envKey: 'NVIDIA_API_KEY' },
   ],
 
   // Timeout for the operation in milliseconds.
