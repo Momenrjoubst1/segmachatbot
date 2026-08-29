@@ -83,9 +83,19 @@ jobs:
       - name: Run tests
         working-directory: frontend
         run: npm test
+        env:
+          # Suites that construct the real SupabaseClient only need it to
+          # instantiate — CI has no .env.local, so provide throwaway values.
+          VITE_SUPABASE_URL: https://placeholder-for-ci.supabase.co
+          VITE_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci
 
   frontend-e2e:
     runs-on: ubuntu-latest
+    env:
+      # The production build inlines these; without them supabaseClient throws
+      # on import and the app never mounts for Playwright.
+      VITE_SUPABASE_URL: https://placeholder-for-ci.supabase.co
+      VITE_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci
     steps:
       - uses: actions/checkout@v4
 

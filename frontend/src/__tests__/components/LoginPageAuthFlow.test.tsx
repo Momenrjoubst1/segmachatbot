@@ -56,7 +56,7 @@ describe("LoginPage authentication flow", () => {
 
     await waitFor(() => expect(authMocks.signIn).toHaveBeenCalledWith("guest@example.com", "password"));
     await waitFor(() => expect(screen.getByText("Course")).toBeInTheDocument());
-  });
+  }, 20000); // the whole test waits on the lazy chunk's cold import — 5s default is too tight for CI
 
   it("does not navigate after sign-up when email confirmation is required", async () => {
     authMocks.signUp.mockResolvedValue({ data: { session: null }, error: null });
@@ -73,5 +73,5 @@ describe("LoginPage authentication flow", () => {
     await waitFor(() => expect(authMocks.signUp).toHaveBeenCalledWith("guest@example.com", "password"));
     await waitFor(() => expect(screen.getByText("signin.errors.emailNotConfirmed")).toBeInTheDocument());
     expect(screen.queryByText("Home")).not.toBeInTheDocument();
-  });
+  }, 20000);
 });
