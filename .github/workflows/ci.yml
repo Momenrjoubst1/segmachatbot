@@ -62,8 +62,6 @@ jobs:
           rm -f audit.json
 
   frontend-test:
-
-  frontend-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
