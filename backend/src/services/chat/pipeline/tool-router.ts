@@ -46,7 +46,7 @@ export function buildEnabledTools(
     if (!isSpecificIntent) {
       const ESSENTIAL_TOOLS = new Set(["get_time", "get_weather", "calculator", "web_search"]);
       // Education tools always pass when textbook chunks are present
-      const EDUCATION_TOOLS = new Set(["record_quiz_result", "generate_flashcards"]);
+      const EDUCATION_TOOLS = new Set(["record_quiz_result", "generate_flashcards", "generate_quiz"]);
       if (!ESSENTIAL_TOOLS.has(name) && !ARTIFACT_TOOLS.has(name) && !(hasTextbookChunks && EDUCATION_TOOLS.has(name))) continue;
     }
 

@@ -15,6 +15,7 @@ const TOOL_IMPORTS: Array<{ name: string; importFn: () => Promise<unknown> }> = 
   { name: "course_info", importFn: () => import("./education/course-info/index.js") },
   { name: "flashcards", importFn: () => import("./education/flashcards/index.js") },
   { name: "quiz_tracker", importFn: () => import("./education/quiz-tracker/index.js") },
+  { name: "quiz_generator", importFn: () => import("./education/quiz-generator/index.js") },
   { name: "find_materials", importFn: () => import("./education/find-materials/index.js") },
   { name: "generate_image", importFn: () => import("./media/generate-image/index.js") },
   { name: "code_executor", importFn: () => import("./code/executor/index.js") },

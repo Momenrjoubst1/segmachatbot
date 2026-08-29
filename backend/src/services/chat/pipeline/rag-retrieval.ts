@@ -291,10 +291,33 @@ export async function runRagPipeline(args: {
             .join("\n");
           const lessonHint = sectionMatch?.matched ? ` for lesson "${sectionMatch.section_title}"` : "";
           const topicForTool = sectionMatch?.matched ? sectionMatch.section_title : (quizQuestions[0]?.section_path || "general");
+
+          // Adaptive difficulty: tell the tutor how strong the student already
+          // is on this lesson so question selection matches their mastery.
+          let difficultyHint = "";
+          if (sectionMatch?.matched && sectionMatch.section_title) {
+            try {
+              const { getTopicMastery } = await import("../../study/progress.service.js");
+              const mastery = await getTopicMastery(userId, sectionMatch.section_title);
+              if (mastery !== null) {
+                const guidance =
+                  mastery < 0.35
+                    ? "weak — start with easy, direct questions and build up within the session"
+                    : mastery < 0.7
+                      ? "developing — keep medium difficulty"
+                      : "strong — challenge them with harder, multi-step questions";
+                difficultyHint = `\nStudent's recorded mastery for this lesson: ${Math.round(mastery * 100)}% (${guidance}).`;
+              }
+            } catch { /* non-fatal */ }
+          }
+
           quizContext =
             `THE USER'S OWN TEXTBOOK QUESTIONS${lessonHint}:\n${listing}\n\n` +
             `Tutor instruction: quiz the user with these exact questions from their book. Ask them ONE question at a time, ` +
-            `wait for their answer, then evaluate it against the book content before moving to the next question. ` +
+            `wait for their answer, then evaluate it against the book content before moving to the next question.` +
+            `${difficultyHint}\n` +
+            `If fewer than 3 questions are listed above, generate similar ones yourself from the retrieved book excerpts, ` +
+            `respecting the recommended difficulty. ` +
             `After evaluating each answer, you MUST call the record_quiz_result tool immediately with: ` +
             `topic="${topicForTool}", correct=<true/false>, ` +
             `courseId and textbookId from the context if available. ` +

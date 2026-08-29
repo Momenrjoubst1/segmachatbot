@@ -173,3 +173,23 @@ export async function buildProgressContext(userId: string, options: { courseId?:
 
   return `# Learning Progress — Weak Topics\n\nStudent's weakest areas (need review):\n${lines.join("\n")}\n`;
 }
+
+/** Look up the student's current mastery for a topic (substring match, latest first). */
+export async function getTopicMastery(userId: string, topic: string): Promise<number | null> {
+  if (!topic || !topic.trim()) return null;
+  const safe = topic.replace(/[%_\\]/g, " ").trim();
+  try {
+    const { data } = await supabase
+      .from("study_progress")
+      .select("mastery_level")
+      .eq("user_id", userId)
+      .ilike("topic", `%${safe}%`)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data ? Number(data.mastery_level) : null;
+  } catch (err) {
+    log.warn("getTopicMastery failed", { error: (err as Error).message, userId });
+    return null;
+  }
+}
