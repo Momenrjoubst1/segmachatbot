@@ -26,7 +26,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { MarkdownText } from "../../ui/markdown-text";
+import { lazy, Suspense } from "react";
+const MarkdownText = lazy(() =>
+  import("../../ui/markdown-text").then((m) => ({ default: m.MarkdownText })),
+);
+const MarkdownTextOrNothing: FC = () => (
+  <Suspense fallback={null}>
+    <MarkdownText />
+  </Suspense>
+);
 import { MessageTiming } from "../../ui/message-timing";
 import { SourcesPanel } from "./SourcesPanel";
 import { KaraokeGate, SpeakingPulse } from "./KaraokeText";
@@ -163,7 +171,7 @@ export const AssistantMessage: FC = () => {
               // sync with TTS (karaoke); otherwise render markdown normally.
               return (
                 <KaraokeGate>
-                  <MarkdownText />
+                  <MarkdownTextOrNothing />
                 </KaraokeGate>
               );
             }

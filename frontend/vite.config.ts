@@ -50,7 +50,7 @@ export default defineConfig({
           // Internationalization
           'i18n': ['i18next', 'react-i18next'],
           // Markdown & Code
-          'markdown': ['react-markdown', 'remark-gfm', 'rehype-katex'],
+          'markdown': ['react-markdown', 'remark-gfm'], // katex/rehype-katex ride the lazy markdown-text chunk
           // Syntax highlighting
           // State management
           'state': ['zustand'],

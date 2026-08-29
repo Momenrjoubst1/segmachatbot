@@ -67,6 +67,14 @@ function AppContent() {
         console.error('SW registration failed:', error);
       });
     }
+    // Idle-prefetch the lazy markdown stack so the first assistant reply
+    // never flashes its plain-text Suspense fallback.
+    const t = setTimeout(() => {
+      void import("./features/ai-assistant/ui/markdown-text");
+      void import("react-markdown");
+      void import("remark-gfm");
+    }, 2500);
+    return () => clearTimeout(t);
   }, []);
 
   if (isAuthLoading) {

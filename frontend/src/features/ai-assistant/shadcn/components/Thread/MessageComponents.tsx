@@ -9,7 +9,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ui/core/ErrorBoundary";
-import { MarkdownText } from "../../../ui/markdown-text";
+const MarkdownText = lazy(() =>
+  import("../../../ui/markdown-text").then((m) => ({ default: m.MarkdownText })),
+);
+const MarkdownTextOrNothing: FC = () => (
+  <Suspense fallback={null}>
+    <MarkdownText />
+  </Suspense>
+);
 import { Perspective } from "@/components/ui/perspective-highlight";
 import { MessageTiming } from "../../../ui/message-timing";
 import { BotStatusInline } from "../../../ui/bot-activity/components/BotStatusInline";
@@ -49,9 +56,10 @@ import {
   ThumbsUpIcon,
 } from "lucide-react";
 import { LexicalComposerInput } from "@assistant-ui/react-lexical";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { type FC, memo, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+// Markdown (react-markdown + the katex stack, ~420KB) only matters once
+// messages actually render — the welcome screen must not pay for it. Both
+// renderers below are lazy with plain-text fallbacks.
+import { type FC, lazy, memo, Suspense, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import {
   useMessageFeedback,
@@ -551,19 +559,30 @@ const InlineAttachmentChip: FC<{ name: string; content: string }> = ({ name, con
 };
 
 // Claude's rose-tinted inline code + modest headings for user messages.
+const MarkdownLazy = lazy(async () => {
+  const [{ default: Markdown }, { default: remarkGfm }] = await Promise.all([
+    import("react-markdown"),
+    import("remark-gfm"),
+  ]);
+  const WithGfm: FC<any> = (props) => (
+    <Markdown {...props} remarkPlugins={[remarkGfm]} />
+  );
+  return { default: WithGfm };
+});
+
 const UserMarkdown: FC<{ text: string }> = memo(({ text }) => (
-  <Markdown
-    remarkPlugins={[remarkGfm]}
+  <Suspense fallback={<div className="whitespace-pre-wrap">{text}</div>}>
+  <MarkdownLazy
     components={{
-      p: ({ children }) => <p className="m-0">{children}</p>,
-      h1: ({ children }) => <h3 className="mt-3 mb-1 text-[15px] font-semibold first:mt-0">{children}</h3>,
-      h2: ({ children }) => <h3 className="mt-3 mb-1 text-[15px] font-semibold first:mt-0">{children}</h3>,
-      h3: ({ children }) => <h4 className="mt-2.5 mb-1 text-[15px] font-semibold first:mt-0">{children}</h4>,
-      h4: ({ children }) => <h5 className="mt-2 mb-0.5 text-[14px] font-semibold first:mt-0">{children}</h5>,
-      h5: ({ children }) => <h6 className="mt-2 mb-0.5 text-[14px] font-semibold first:mt-0">{children}</h6>,
-      h6: ({ children }) => <h6 className="mt-2 mb-0.5 text-[14px] font-semibold first:mt-0">{children}</h6>,
-      strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-      a: ({ children, href }) => (
+      p: ({ children }: any) => <p className="m-0">{children}</p>,
+      h1: ({ children }: any) => <h3 className="mt-3 mb-1 text-[15px] font-semibold first:mt-0">{children}</h3>,
+      h2: ({ children }: any) => <h3 className="mt-3 mb-1 text-[15px] font-semibold first:mt-0">{children}</h3>,
+      h3: ({ children }: any) => <h4 className="mt-2.5 mb-1 text-[15px] font-semibold first:mt-0">{children}</h4>,
+      h4: ({ children }: any) => <h5 className="mt-2 mb-0.5 text-[14px] font-semibold first:mt-0">{children}</h5>,
+      h5: ({ children }: any) => <h6 className="mt-2 mb-0.5 text-[14px] font-semibold first:mt-0">{children}</h6>,
+      h6: ({ children }: any) => <h6 className="mt-2 mb-0.5 text-[14px] font-semibold first:mt-0">{children}</h6>,
+      strong: ({ children }: any) => <strong className="font-semibold">{children}</strong>,
+      a: ({ children, href }: any) => (
         <a
           href={href}
           target="_blank"
@@ -573,7 +592,7 @@ const UserMarkdown: FC<{ text: string }> = memo(({ text }) => (
           {children}
         </a>
       ),
-      code: ({ children }) => (
+      code: ({ children }: any) => (
         <code
           dir="ltr"
           className="rounded-md bg-rose-500/10 px-1.5 py-0.5 font-mono text-[12.5px] text-rose-700 dark:bg-rose-400/15 dark:text-rose-300"
@@ -581,7 +600,7 @@ const UserMarkdown: FC<{ text: string }> = memo(({ text }) => (
           {children}
         </code>
       ),
-      pre: ({ children }) => (
+      pre: ({ children }: any) => (
         <div
           dir="ltr"
           className="my-1.5 overflow-x-auto rounded-xl border border-border/50 bg-muted/70 p-3 text-left [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-[12.5px] [&_code]:text-foreground dark:bg-muted/40"
@@ -589,26 +608,27 @@ const UserMarkdown: FC<{ text: string }> = memo(({ text }) => (
           <pre className="m-0 font-mono text-[12.5px] leading-relaxed">{children}</pre>
         </div>
       ),
-      ul: ({ children }) => <ul className="my-1 list-disc space-y-0.5 pl-5">{children}</ul>,
-      ol: ({ children }) => <ol className="my-1 list-decimal space-y-0.5 pl-5">{children}</ol>,
-      li: ({ children }) => <li className="m-0">{children}</li>,
-      blockquote: ({ children }) => (
+      ul: ({ children }: any) => <ul className="my-1 list-disc space-y-0.5 pl-5">{children}</ul>,
+      ol: ({ children }: any) => <ol className="my-1 list-decimal space-y-0.5 pl-5">{children}</ol>,
+      li: ({ children }: any) => <li className="m-0">{children}</li>,
+      blockquote: ({ children }: any) => (
         <blockquote className="my-1.5 border-l-2 border-border pl-3 text-muted-foreground">{children}</blockquote>
       ),
       hr: () => <hr className="my-2 border-border/60" />,
-      table: ({ children }) => (
+      table: ({ children }: any) => (
         <div dir="ltr" className="my-1.5 overflow-x-auto">
           <table className="w-full border-collapse text-[13px]">{children}</table>
         </div>
       ),
-      th: ({ children }) => (
+      th: ({ children }: any) => (
         <th className="border border-border/60 bg-muted/50 px-2 py-1 text-start font-semibold">{children}</th>
       ),
-      td: ({ children }) => <td className="border border-border/60 px-2 py-1 align-top">{children}</td>,
+      td: ({ children }: any) => <td className="border border-border/60 px-2 py-1 align-top">{children}</td>,
     }}
   >
     {text}
-  </Markdown>
+  </MarkdownLazy>
+  </Suspense>
 ));
 UserMarkdown.displayName = "UserMarkdown";
 
@@ -872,7 +892,7 @@ export const AssistantMessage: FC = () => {
                 const answer = (
                   <>
                     {split.thinking && thinking}
-                    <MarkdownText />
+                    <MarkdownTextOrNothing />
                   </>
                 );
                 if (disable3D) {
