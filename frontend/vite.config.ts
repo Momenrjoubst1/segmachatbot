@@ -52,7 +52,6 @@ export default defineConfig({
           // Markdown & Code
           'markdown': ['react-markdown', 'remark-gfm', 'rehype-katex'],
           // Syntax highlighting
-          'syntax': ['react-syntax-highlighter'],
           // State management
           'state': ['zustand'],
           // Utilities

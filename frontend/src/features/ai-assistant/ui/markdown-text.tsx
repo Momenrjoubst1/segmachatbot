@@ -10,7 +10,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { stripThinkTags } from "./bot-activity/thinkTags";
-import React, { type FC, memo, useRef, useState, useEffect } from "react";
+import React, { type FC, lazy, memo, Suspense, useRef, useState, useEffect } from "react";
 import { Highlight } from "@/components/ui/perspective-highlight";
 import { CopyIcon, PlayIcon, RefreshCwIcon, DownloadIcon, ShareIcon, Loader2Icon, XIcon } from "lucide-react";
 
@@ -32,10 +32,30 @@ import { NotebookPaper } from "./NotebookPaper";
 import { parseMaterialHref } from "./material-viewer/material-link";
 import { MaterialChipCard } from "./material-viewer/MaterialChipCard";
 
-// @ts-expect-error - react-syntax-highlighter module interop
-import { Prism } from "react-syntax-highlighter";
-// @ts-expect-error - react-syntax-highlighter CJS style interop
-import { vs } from "react-syntax-highlighter/dist/cjs/styles/prism";
+// The full Prism bundle is ~600KB and only needed when a code block
+// actually renders — load the LIGHT core lazily with an explicit language
+// set so first paint never pays for it.
+const PrismLazy = lazy(async () => {
+  const [{ default: PrismLight }, stylesMod, tsxMod, pyMod] = await Promise.all([
+    // @ts-expect-error - no type declarations for this subpath
+    import("react-syntax-highlighter/dist/esm/prism-light"),
+    // @ts-expect-error - no type declarations for this style subpath
+    import("react-syntax-highlighter/dist/cjs/styles/prism/vs"),
+    // @ts-expect-error - no type declarations for this subpath
+    import("react-syntax-highlighter/dist/esm/languages/prism/tsx"),
+    // @ts-expect-error - no type declarations for this subpath
+    import("react-syntax-highlighter/dist/esm/languages/prism/python"),
+  ]);
+  PrismLight.registerLanguage("js", tsxMod.default);
+  PrismLight.registerLanguage("jsx", tsxMod.default);
+  PrismLight.registerLanguage("ts", tsxMod.default);
+  PrismLight.registerLanguage("tsx", tsxMod.default);
+  PrismLight.registerLanguage("python", pyMod.default);
+  const PrismVs: FC<{ language: string; children?: React.ReactNode; [key: string]: unknown }> = (props) => (
+    <PrismLight {...props} style={stylesMod.vs} />
+  );
+  return { default: PrismVs };
+});
 import { toast } from "sonner";
 import {
   Artifact,
@@ -272,32 +292,49 @@ const CustomSyntaxHighlighter: FC<{ language: string; code: string }> = memo(({ 
       </ArtifactHeader>
       <ArtifactContent className="p-0 overflow-hidden bg-[#f5f5f5]" dir="ltr" style={{ direction: "ltr", textAlign: "left" }}>
         <CodeBlockScrollFade>
-          <Prism
-            language={language}
-            style={vs}
-            showLineNumbers={true}
-            wrapLines={true}
-            lineNumberStyle={{
-              color: "#999999",
-              minWidth: "2.25rem",
-              textAlign: "right",
-              paddingRight: "1rem",
-              userSelect: "none",
-            }}
-            customStyle={{
-              margin: 0,
-              width: "100%",
-              background: "transparent",
-              padding: "1rem",
-              fontSize: "0.85rem",
-              lineHeight: "1.5",
-              fontFamily: "var(--font-mono, monospace)",
-              direction: "ltr",
-              textAlign: "left",
-            }}
+          <Suspense
+            fallback={
+              <pre
+                style={{
+                  margin: 0,
+                  padding: "1rem",
+                  fontSize: "0.85rem",
+                  fontFamily: "var(--font-mono, monospace)",
+                  direction: "ltr",
+                  textAlign: "left",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {code}
+              </pre>
+            }
           >
-            {code}
-          </Prism>
+            <PrismLazy
+              language={language}
+              showLineNumbers={true}
+              wrapLines={true}
+              lineNumberStyle={{
+                color: "#999999",
+                minWidth: "2.25rem",
+                textAlign: "right",
+                paddingRight: "1rem",
+                userSelect: "none",
+              }}
+              customStyle={{
+                margin: 0,
+                width: "100%",
+                background: "transparent",
+                padding: "1rem",
+                fontSize: "0.85rem",
+                lineHeight: "1.5",
+                fontFamily: "var(--font-mono, monospace)",
+                direction: "ltr",
+                textAlign: "left",
+              }}
+            >
+              {code}
+            </PrismLazy>
+          </Suspense>
         </CodeBlockScrollFade>
         {(isExecuting || execResult) && (
           <div
