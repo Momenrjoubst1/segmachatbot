@@ -4,7 +4,9 @@ import { vi } from 'vitest';
 process.env.NODE_ENV = 'test';
 process.env.SUPABASE_URL = 'http://vitest.supabase.local';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'vitest-service-role-jwt-placeholder';
-process.env.REDIS_URL = 'redis://localhost:6379';
+// CI provides REDIS_URL pointing at its redis service (non-default port);
+// only default it when the environment has nothing.
+process.env.REDIS_URL ||= 'redis://localhost:6379';
 process.env.GROQ_API_KEY = 'gsk_test_key';
 process.env.OPENROUTER_API_KEY = 'sk-or-v1-test-key';
 process.env.ASSISTANT_DEFAULT_MODEL = 'qwen/qwen3.6-27b';

@@ -17,6 +17,15 @@ vi.mock('../../utils/logger.js', async (importOriginal) => {
   return { ...actual };
 });
 
+// Same for the Redis client: the global stub lacks the custom commands the
+// rate limiter and guest quota actually call, which silently degraded both
+// paths to their fallbacks mid-test. Restore the real module — CI connects
+// to its redis service via REDIS_URL, local runs get the stateful MockRedis.
+vi.mock('../../config/redis/client.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../config/redis/client.js')>();
+  return { ...actual };
+});
+
 vi.mock('../../services/rag/bm25-search.js', () => ({
   initializeBM25FromDB: vi.fn(),
   getBM25Search: () => ({
