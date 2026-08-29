@@ -244,23 +244,24 @@ router.post("/upload", async (req: Request, res: Response) => {
       return;
     }
 
-    // Use content hash for dedup (frontend hashes file bytes), fallback to URL hash
+    // Use content hash for dedup (frontend hashes file bytes), fallback to URL hash.
+    // Same window as upload-file: a book already completed, queued, or being
+    // processed is returned as-is instead of enqueuing a duplicate.
     const fileHash = file_content_hash || crypto.createHash("sha256").update(file_url).digest("hex");
 
-    // Dedup only against completed textbooks owned by this requesting user.
     const { data: existing } = await supabase
       .from("textbooks")
       .select("id, status, file_name")
       .eq("file_hash", fileHash)
       .eq("user_id", userId)
-      .eq("status", "completed")
+      .in("status", ["completed", "pending", "processing"])
       .limit(1)
       .maybeSingle();
 
     if (existing) {
       res.json({
         textbook_id: existing.id,
-        status: "completed",
+        status: existing.status,
         deduplicated: true,
         message: "You already have this textbook in your library.",
       });
@@ -296,6 +297,7 @@ router.post("/upload", async (req: Request, res: Response) => {
     });
 
     invalidateStructureCache(userId);
+    invalidateUserTextbookSignal(userId);
 
     res.json({
       textbook_id: textbook.id,

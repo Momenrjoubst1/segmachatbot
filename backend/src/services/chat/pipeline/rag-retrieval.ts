@@ -28,6 +28,14 @@ const DEFAULT_INTENT: IntentResultType = {
   needsTools: false,
 };
 
+/**
+ * Explicit quiz-request intent. Deliberately narrow: broad study words
+ * ("سؤال", "study", "revise") used to switch ordinary study questions into
+ * quiz mode. Exported so tests validate the shipped regex, not a copy.
+ */
+export const QUIZ_INTENT_REGEX =
+  /(اختبرني|راجعني|امتحني|اختبار لي|امتحاني|أسئلة|اسئلة|تمارين|تدريبات|\bquiz\b|\bquiz me\b|\btest me\b|\bpractice questions\b|\bgive me questions\b)/i;
+
 // Public API: pipeline result shape and entry point.
 
 export interface RagStepResult {
@@ -254,11 +262,10 @@ export async function runRagPipeline(args: {
     }
 
     // 4b. Quiz intent: pull the book's own questions for the matched lesson directly.
+    // Only explicit quiz requests match here — broad words like "سؤال" or "study"
+    // used to hijack ordinary study questions into quiz mode.
     let quizContext = "";
-    const isQuizLike =
-      /(اختبرني|امتحني|أسئلة|اسئلة|تمارين|تدريبات|quiz|test me|practice questions|give me questions|اختبار|مراجعة|امتحان|سؤال|revise|study)/i.test(
-        lastUserText
-      );
+    const isQuizLike = QUIZ_INTENT_REGEX.test(lastUserText);
     if (isQuizLike) {
       try {
         const mod = await import("../../textbook/textbook-search.js");

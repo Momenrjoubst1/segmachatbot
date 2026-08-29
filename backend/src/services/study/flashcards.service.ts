@@ -110,65 +110,75 @@ export async function getDueFlashcards(
   return (data || []) as FlashcardRow[];
 }
 
-/** Update a single flashcard's SRS state after a review. */
+/** Update a single flashcard's SRS state after a review.
+ *  Uses optimistic locking on updated_at: a concurrent review of the same card
+ *  re-fetches and re-computes instead of silently clobbering the other's SRS state. */
 export async function reviewFlashcard(
   userId: string,
   cardId: string,
   quality: 'again' | 'hard' | 'good' | 'easy'
 ): Promise<ReviewResult> {
-  // Fetch current state
-  const { data: card, error: fetchErr } = await supabase
-    .from("flashcards")
-    .select("*")
-    .eq("id", cardId)
-    .eq("user_id", userId)
-    .single();
-
-  if (fetchErr || !card) {
-    throw new Error("Flashcard not found");
-  }
-
-  const currentState: SrsState = {
-    interval_days: card.interval_days,
-    ease_factor: card.ease_factor,
-    repetitions: card.repetitions,
-    lapses: card.lapses,
-  };
-
   const { scheduleNext, nextDueAt } = await import("./srs.js");
-  const next = scheduleNext(currentState, quality);
-  const dueAt = nextDueAt(next.interval_days);
+  const MAX_ATTEMPTS = 3;
 
-  const { data: updated, error: updErr } = await supabase
-    .from("flashcards")
-    .update({
-      interval_days: next.interval_days,
-      ease_factor: next.ease_factor,
-      repetitions: next.repetitions,
-      lapses: next.lapses,
-      due_at: dueAt.toISOString(),
-      last_reviewed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", cardId)
-    .eq("user_id", userId)
-    .select("*")
-    .single();
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    // Fetch current state
+    const { data: card, error: fetchErr } = await supabase
+      .from("flashcards")
+      .select("*")
+      .eq("id", cardId)
+      .eq("user_id", userId)
+      .single();
 
-  if (updErr || !updated) {
-    log.error("Failed to update flashcard SRS state", { error: updErr?.message, cardId });
-    throw new Error(updErr?.message || "Update failed");
+    if (fetchErr || !card) {
+      throw new Error("Flashcard not found");
+    }
+
+    const currentState: SrsState = {
+      interval_days: card.interval_days,
+      ease_factor: card.ease_factor,
+      repetitions: card.repetitions,
+      lapses: card.lapses,
+    };
+
+    const next = scheduleNext(currentState, quality);
+    const dueAt = nextDueAt(next.interval_days);
+    const nowIso = new Date().toISOString();
+
+    const { data: updated, error: updErr } = await supabase
+      .from("flashcards")
+      .update({
+        interval_days: next.interval_days,
+        ease_factor: next.ease_factor,
+        repetitions: next.repetitions,
+        lapses: next.lapses,
+        due_at: dueAt.toISOString(),
+        last_reviewed_at: nowIso,
+        updated_at: nowIso,
+      })
+      .eq("id", cardId)
+      .eq("user_id", userId)
+      // Only apply if the row hasn't changed since we read it
+      .eq("updated_at", card.updated_at)
+      .select("*")
+      .maybeSingle();
+
+    if (!updErr && updated) {
+      return {
+        id: updated.id,
+        interval_days: updated.interval_days,
+        ease_factor: updated.ease_factor,
+        repetitions: updated.repetitions,
+        lapses: updated.lapses,
+        due_at: updated.due_at,
+        last_reviewed_at: updated.last_reviewed_at || nowIso,
+      };
+    }
+
+    log.warn("Flashcard review conflict, retrying", { cardId, userId, attempt });
   }
 
-  return {
-    id: updated.id,
-    interval_days: updated.interval_days,
-    ease_factor: updated.ease_factor,
-    repetitions: updated.repetitions,
-    lapses: updated.lapses,
-    due_at: updated.due_at,
-    last_reviewed_at: updated.last_reviewed_at || new Date().toISOString(),
-  };
+  throw new Error("Flashcard is being updated concurrently, please retry");
 }
 
 /** Delete a flashcard. */

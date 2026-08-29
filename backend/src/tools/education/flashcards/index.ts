@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { registerTool } from "../../tool-registry.js";
 import { createToolMetadata } from "../../tool-metadata.js";
-import type { LanguageModel } from "ai";
 import { createFlashcards } from "../../../services/study/flashcards.service.js";
 
 createToolMetadata("generate_flashcards", "توليد وحفظ بطاقات تعليمية (Flashcards) من موضوع معين", {
@@ -38,17 +37,8 @@ registerTool("generate_flashcards", {
     try {
       const numCards = Math.min(count || 5, 15);
       const { generateText } = await import("ai");
-      let model: LanguageModel;
-      try {
-        const { google } = await import("@ai-sdk/google");
-        model = google("gemini-2.0-flash-lite");
-      } catch {
-        const { createOpenAI } = await import("@ai-sdk/openai");
-        model = createOpenAI({
-          baseURL: "https://models.inference.ai.azure.com",
-          apiKey: process.env.GITHUB_TOKEN || "",
-        }).chat("gpt-4o-mini");
-      }
+      const { getSmallChatModel } = await import("../../../services/ai/small-model.js");
+      const model = await getSmallChatModel();
       const { text } = await generateText({
         model,
         prompt: `أنشئ ${numCards} بطاقة تعليمية (Flashcard) عن موضوع: "${topic}".
@@ -56,15 +46,25 @@ registerTool("generate_flashcards", {
 - السؤال (question)
 - الجواب (answer)
 
-ارجع JSON array فقط بالشكل:
-[{"question": "...", "answer": "..."}]
+اكتب البطاقات بنفس لغة الموضوع أعلاه (عربي لموضوع عربي، إنجليزي لموضوع إنجليزي).
 
-اجعل البطاقات مناسبة للطلاب الجامعيين.`,
+ارجع JSON array فقط بالشكل:
+[{"question": "...", "answer": "..."}]`,
         temperature: 0.7,
       });
       const cleaned = text.replace(/```(?:json)?\s*/gi, "").replace(/\s*```/g, "").trim();
       const cards = JSON.parse(cleaned);
-      const validCards = Array.isArray(cards) ? cards.slice(0, 15) : [];
+      const validCards = (Array.isArray(cards) ? cards : [])
+        .filter(
+          (c: unknown): c is { question: string; answer: string } =>
+            !!c &&
+            typeof c === "object" &&
+            typeof (c as { question?: unknown }).question === "string" &&
+            (c as { question: string }).question.trim().length > 0 &&
+            typeof (c as { answer?: unknown }).answer === "string" &&
+            (c as { answer: string }).answer.trim().length > 0
+        )
+        .slice(0, 15);
 
       // Persist if userId is available
       let saved = 0;

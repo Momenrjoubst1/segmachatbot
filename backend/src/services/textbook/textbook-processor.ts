@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { supabase } from "../../config/supabase.config.js";
+import { MAX_PDF_PAGES } from "../../config/constants.js";
 import { createLogger } from "../../utils/logger.js";
 import { uploadR2Object, downloadR2ObjectToFile } from "./r2-client.js";
 import { PermanentJobError, TransientJobError } from "./errors.js";
@@ -201,7 +202,7 @@ export async function processTextbookJob(jobData: {
         // path policy — retrying cannot change the outcome
         throw new PermanentJobError(
           `PDF processor rejected the file (${processResponse.status}): ${errText}`,
-          "This PDF could not be processed. It may be corrupt, encrypted, or exceed the 2000-page limit."
+          `This PDF could not be processed. It may be corrupt, encrypted, or exceed the ${MAX_PDF_PAGES}-page limit.`
         );
       }
       throw new TransientJobError(`PDF processor error (${processResponse.status}): ${errText}`);

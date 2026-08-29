@@ -74,7 +74,7 @@ function expandArabicTerms(text: string): string {
 function buildHydeSnippet(topic: string): string {
   // HyDE: build a hypothetical answer snippet whose embedding matches stored documents better.
   const cleanTopic = topic.replace(/[?؟]/g, "").trim();
-  return `Document about: ${cleanTopic} at Jordan University of Science and Technology (JUST). This document provides detailed information regarding ${cleanTopic}, including relevant regulations, procedures, and academic guidelines for students at JUST.`;
+  return `Document about: ${cleanTopic}. This document explains ${cleanTopic} in detail, including definitions, key concepts, worked examples, and the academic context a student needs.`;
 }
 
 // Main rewrite function

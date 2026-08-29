@@ -4,14 +4,8 @@ import { useNavigate } from "react-router-dom";
 import {
   CalendarIcon,
   Mail,
-  ShareIcon,
   Lock,
 } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -80,16 +74,6 @@ export const Header: FC<HeaderProps> = ({
       <div className="ml-auto flex items-center gap-1">
         {/* Claude-style: every file attached to this chat, one click away */}
         <ChatFilesButton />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ShareIcon className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">Share</TooltipContent>
-        </Tooltip>
       </div>
 
       <Dialog open={showLoginDialog} onOpenChange={setShowLoginDialog}>

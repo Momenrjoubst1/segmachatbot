@@ -1,6 +1,7 @@
 // Textbook search evaluation tests for BM25 normalization, fuzzy matching, SM-2, and quiz intent.
 
 import { describe, it, expect, beforeAll } from "vitest";
+import { QUIZ_INTENT_REGEX } from "../services/chat/pipeline/rag-retrieval.js";
 
 // BM25 Arabic text normalization tests.
 describe("BM25 Arabic Normalization", () => {
@@ -183,17 +184,17 @@ describe("SM-2 Spaced Repetition Scheduler", () => {
   });
 });
 
-// Quiz intent detection regex tests.
+// Quiz intent detection regex tests — validates the SHIPPED regex, not a copy.
 describe("Quiz Intent Detection Regex", () => {
-  const quizRegex = /(اختبرني|امتحني|أسئلة|اسئلة|تمارين|تدريبات|quiz|test me|practice questions|give me questions|اختبار|مراجعة|امتحان|سؤال|revise|study)/i;
+  const quizRegex = QUIZ_INTENT_REGEX;
 
   const positive = [
     "اختبرني بالدرس الأول",
+    "امتحني",
     "quiz me on lesson 2",
     "give me practice questions",
-    "اختبار على الفصل الثالث",
-    "مراجعة للامتحان",
-    "revise chapter 4",
+    "اختبار لي على الفصل الثالث",
+    "ابغى تمارين على الوحدة الثانية",
   ];
 
   const negative = [
@@ -201,6 +202,10 @@ describe("Quiz Intent Detection Regex", () => {
     "ما هي الدالة",
     "help me understand",
     "hello how are you",
+    // Ordinary study questions used to be hijacked into quiz mode:
+    "عندي سؤال عن التفاضل",
+    "revise chapter 4 for me please",
+    "students often study late at night",
   ];
 
   for (const text of positive) {

@@ -31,8 +31,39 @@ export interface RecordQuizResultInput {
  * Uses exponential moving average (alpha=0.3) for mastery_level:
  *   mastery = 0.3 * outcome + 0.7 * previous_mastery
  *   (outcome = 1 for correct, 0 for incorrect)
+ *
+ * Runs as a single atomic upsert (migrations/036_atomic_quiz_result.sql) keyed
+ * on the real UNIQUE (user_id, topic) constraint — the old read-then-insert
+ * path 500'd when the same topic arrived with a different course/textbook
+ * scoping and was racy under concurrent answers.
  */
 export async function recordQuizResult(input: RecordQuizResultInput): Promise<StudyProgressRow> {
+  const { userId, topic, correct, courseId, textbookId } = input;
+
+  const { data, error } = await supabase
+    .rpc("record_quiz_result", {
+      p_user_id: userId,
+      p_topic: topic,
+      p_correct: correct,
+      p_course_id: courseId ?? null,
+      p_textbook_id: textbookId ?? null,
+    })
+    .single();
+
+  if (!error && data) return data as unknown as StudyProgressRow;
+
+  // Function not deployed yet (rolling deploy) — fall back to the legacy path.
+  if ((error as { code?: string } | null)?.code === "42883") {
+    log.warn("record_quiz_result rpc missing; using legacy read-modify-write");
+    return legacyRecordQuizResult(input);
+  }
+
+  log.error("Failed to record quiz result", { error: error?.message, userId, topic });
+  throw new Error(error?.message || "Failed to record quiz result");
+}
+
+/** Legacy read-modify-write path, kept only as a deploy-order fallback. */
+async function legacyRecordQuizResult(input: RecordQuizResultInput): Promise<StudyProgressRow> {
   const { userId, topic, correct, courseId, textbookId } = input;
 
   // Fetch current progress row
