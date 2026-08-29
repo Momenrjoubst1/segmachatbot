@@ -44,3 +44,7 @@ scripts/probe-deepgram-agent.cjs
 scripts/voice-tunnel-keepalive.ps1
 scripts/voice-tunnel.bat
 sound-effect-4723.mp3
+
+# Personal provider-switch tooling (holds live API keys — never belongs in a repo)
+switch-provider.ps1
+switch.bat
