@@ -191,3 +191,19 @@
 | 99f613d | **Automated daily DB backups** (free-tier safe): scheduled GitHub Actions workflow pg_dumps the public schema (custom format, integrity-checked, 30-day artifact retention, manual first-run trigger) — needs only the `SUPABASE_DB_URL` repo secret. Restore procedure documented. **OPERATIONS.md**: production runbook — deploy, the migration-runner baseline warning, backup/restore, health checks, known ceilings (with the locking fixes that make a 2nd replica safe for jobs), incident quick actions, do-not-touch list. |
 
 **Infra grade after this pass: 8.5/10.** The remaining 1.5 are money/deployment decisions, not code: (1) one paid provider key (Groq/OpenRouter) to lift the free-tier quota ceiling, (2) Supabase Pro for managed backups + HIBP (the workflow above covers backups regardless), (3) multi-host deployment when traffic demands it.
+
+### Eighth pass — REAL provider-backed load test (the "untested" gap, closed)
+
+Script: `backend/scripts/load-guest.mjs` (reusable: `LOAD_VUS=n LOAD_MSGS=n node scripts/load-guest.mjs`, backend started with `TRUST_PROXY_HOPS=1` so each virtual user gets an isolated rate bucket).
+
+**Run: 12 concurrent virtual users × 2 real messages = 24 provider completions in 134s wall.**
+
+| Metric | Result |
+|--------|--------|
+| Success rate | **24/24 (100%)** — zero HTTP errors, zero empty streams |
+| Limiter hits (429) | 0 — per-IP buckets behaved exactly as configured |
+| Model fallbacks | 0 — the primary guest model served every request (chain unused = healthy) |
+| SSE TTFB | p50 **2.0s** · p95 4.3s |
+| Full stream | p50 7.6s · p95 67s (tail = genuine generation time of ~10.9k-char Arabic answers, not system stall) |
+
+Verdict: the system holds real concurrent provider traffic at beta scale with zero degradation. Remaining untested frontier is only scale BEYOND free-tier quotas (paid key → rerun with LOAD_VUS=50).
