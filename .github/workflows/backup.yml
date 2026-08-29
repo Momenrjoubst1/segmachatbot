@@ -1,0 +1,45 @@
+name: Daily DB Backup
+
+# Free-tier Supabase has NO automated backups. This dumps the public schema
+# every day and keeps 30 days of artifacts. One secret required:
+#   SUPABASE_DB_URL — the Supabase pooler connection string, e.g.
+#   postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres
+# Run it manually once (Actions → Daily DB Backup → Run workflow) to verify.
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # daily 03:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Dump public schema
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set"; exit 1
+          fi
+          STAMP=$(date -u +%Y%m%d-%H%M%S)
+          pg_dump "$SUPABASE_DB_URL" \
+            --schema=public --no-owner --no-privileges \
+            --format=custom --file "sigma-db-${STAMP}.dump"
+          pg_restore --list "sigma-db-${STAMP}.dump" > /dev/null # integrity check
+          echo "file=sigma-db-${STAMP}.dump" >> "$GITHUB_OUTPUT"
+          ls -lh "sigma-db-${STAMP}.dump"
+        id: dump
+
+      - name: Upload artifact (30-day retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.dump.outputs.file }}
+          path: sigma-db-*.dump
+          retention-days: 30
+          if-no-files-found: error
