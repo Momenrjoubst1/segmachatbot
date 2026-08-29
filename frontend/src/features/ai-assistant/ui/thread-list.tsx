@@ -228,7 +228,7 @@ export const ThreadList: FC<{
                         handleBookUploadClick(course.id);
                       }}
                       className="p-1 rounded-md hover:bg-accent/50 transition-colors"
-                      aria-label={`Upload textbook for ${course.course_name}`}
+                      aria-label={t("threadList.uploadBookFor", { course: course.course_name })}
                     >
                       <BookOpenIcon className={`size-4 shrink-0 ${isActive ? "text-foreground" : "text-muted-foreground"}`} />
                     </button>
@@ -276,7 +276,7 @@ export const ThreadList: FC<{
                     )}
 
                     {courseThreads.length === 0 && !(activeCourse?.id === course.id && !activeThreadId) ? (
-                      <div className="px-3 py-2 text-xs text-muted-foreground">No chats yet</div>
+                      <div className="px-3 py-2 text-xs text-muted-foreground">{t("threadList.noChats")}</div>
                     ) : (
                       courseThreads.map((thread) => (
                         <ThreadListItem
@@ -293,7 +293,7 @@ export const ThreadList: FC<{
                       className="state-layer flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:scale-95"
                     >
                       <PlusIcon className="size-3 transition-transform group-hover:rotate-90" />
-                      New thread
+                      {t("threadList.newThread")}
                     </button>
                   </div>
                 )}
@@ -305,7 +305,7 @@ export const ThreadList: FC<{
           {(uncategorizedThreads.length > 0 || (!activeThreadId && !activeCourse)) && (
             <section>
               <h3 className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Recents
+                {t("threadList.recents")}
               </h3>
               <div className="flex flex-col gap-0.5">
                 {!activeThreadId && !activeCourse && (
@@ -355,7 +355,7 @@ export const ThreadList: FC<{
               courseId={bookUploadCourseId || undefined}
               onUploadComplete={() => {
                 setBookUploadDialogOpen(false);
-                toast.success("Textbook uploaded successfully!", { duration: 2500 });
+                toast.success(t("textbook.uploadedToast"), { duration: 2500 });
               }}
             />
             <div className="space-y-3">
@@ -413,7 +413,7 @@ export const ThreadList: FC<{
               onClick={() => setBookUploadDialogOpen(false)}
               className="flex-1 h-9 bg-transparent text-[#2C2825] hover:bg-[#F9F6F0] transition-colors rounded-lg"
             >
-              Close
+              {t("threadList.close")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -431,6 +431,7 @@ const ThreadListItem: FC<{
   compact?: boolean;
   onSelect: (id: string) => void;
 }> = ({ thread, compact, onSelect }) => {
+  const { t } = useTranslation("study");
   const { activeThreadId, deleteThread, isLoadingMessages, prefetchThread, updateThreadTitle } = useChatHistory();
   const isActive = activeThreadId === thread.id || (activeThreadId === null && thread.id === "new-chat-virtual");
 
@@ -488,9 +489,9 @@ const ThreadListItem: FC<{
     if (newTitle !== thread.title) {
       try {
         await updateThreadTitle(thread.id, newTitle);
-        toast.success("Renamed", { duration: 1500 });
+        toast.success(t("threadList.renamed"), { duration: 1500 });
       } catch {
-        toast.error("Failed to rename", { duration: 2000 });
+        toast.error(t("threadList.renameFailed"), { duration: 2000 });
       }
     }
   };
@@ -511,9 +512,9 @@ const ThreadListItem: FC<{
     try {
       await deleteThread(thread.id);
       setShowDeleteDialog(false);
-      toast.success("Chat deleted", { duration: 2500 });
+      toast.success(t("threadList.deleted"), { duration: 2500 });
     } catch {
-      toast.error("Failed to delete", { duration: 2500 });
+      toast.error(t("threadList.deleteFailed"), { duration: 2500 });
       setIsDeletingThread(false);
     }
   };
@@ -563,7 +564,7 @@ const ThreadListItem: FC<{
                 <button
                   onClick={(e) => e.stopPropagation()}
                   className={`pointer-events-auto p-1.5 rounded-md text-foreground/40 hover:text-foreground hover:bg-[#DED2C7] transition-colors duration-150 ${isActive ? "bg-[#EBE5DF]" : "bg-transparent"}`}
-                  aria-label="More options"
+                  aria-label={t("threadList.moreOptions")}
                 >
                   <MoreVerticalIcon className="size-4 pointer-events-none" />
                 </button>
@@ -594,10 +595,10 @@ const ThreadListItem: FC<{
         >
           <div className="space-y-3">
             <DialogTitle className="text-lg font-semibold text-[#2C2825]">
-              Delete chat
+              {t("threadList.deleteChat")}
             </DialogTitle>
             <DialogDescription className="text-[#7A736E] text-sm leading-relaxed">
-              Are you sure you want to delete &ldquo;{thread.title || "this chat"}&rdquo;? This cannot be undone.
+              {t("threadList.deleteConfirm", { title: thread.title || "" })}
             </DialogDescription>
           </div>
 
@@ -608,14 +609,14 @@ const ThreadListItem: FC<{
               disabled={isDeletingThread}
               className="flex-1 h-9 bg-transparent text-[#7A736E] hover:bg-[#F9F6F0] transition-colors rounded-lg"
             >
-              Cancel
+              {t("threadList.cancel")}
             </Button>
             <Button
               onClick={handleConfirmDelete}
               disabled={isDeletingThread}
               className="flex-1 h-9 bg-[#dc2626] text-white hover:bg-[#b91c1c] transition-colors disabled:opacity-50 rounded-lg"
             >
-              {isDeletingThread ? "Deleting…" : "Delete"}
+              {isDeletingThread ? t("threadList.deleting") : t("threadList.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

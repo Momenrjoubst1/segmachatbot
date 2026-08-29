@@ -21,8 +21,16 @@ const MIN_MESSAGE_CHARS = 15;
 
 const judgeSchema = z.object({
   misunderstood: z.boolean(),
-  topic: z.string().min(1).max(200).default(""),
+  topic: z.string().max(200).default(""),
 });
+
+/** Parse and validate the judge's JSON reply. Exported for the eval suite. */
+export function parseJudgeResponse(text: string): z.infer<typeof judgeSchema> {
+  const cleaned = text.replace(/```(?:json)?\s*/gi, "").replace(/\s*```/g, "").trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("Judge returned no JSON");
+  return judgeSchema.parse(JSON.parse(jsonMatch[0]));
+}
 
 const JUDGE_PROMPT = `أنت محلل تعليمي. قرر هل تكشف رسالة الطالب عن سوء فهم واضح لموضوع دراسي محدد (مثلاً: "يعني الجذور دايماً تكون موجبة؟"، "يعني نيوتن اكتشف الجاذبية في الفضاء؟").
 
@@ -32,6 +40,24 @@ const JUDGE_PROMPT = `أنت محلل تعليمي. قرر هل تكشف رسا�
 
 أعد JSON فقط:
 {"misunderstood": false, "topic": ""}`;
+
+/** Run the misconception judge on a single message (exported for the eval suite). */
+export async function judgeMisconception(studentMessage: string, tutorAnswer: string): Promise<z.infer<typeof judgeSchema>> {
+  const model = await getSmallChatModel();
+  const { text } = await generateText({
+    model,
+    temperature: 0,
+    maxOutputTokens: 120,
+    prompt: `${JUDGE_PROMPT}
+
+## كلام السابق من المساعد (قد يكون فارغاً)
+${(tutorAnswer || "").slice(0, 1500)}
+
+## رسالة الطالب الآن
+${studentMessage.slice(0, 1500)}`,
+  });
+  return parseJudgeResponse(text);
+}
 
 export interface MisconceptionInput {
   userId: string;
@@ -63,24 +89,7 @@ export async function maybeCaptureMisconception(input: MisconceptionInput): Prom
   if (!(await checkQuota(userId))) return;
 
   try {
-    const model = await getSmallChatModel();
-    const { text } = await generateText({
-      model,
-      temperature: 0,
-      maxOutputTokens: 120,
-      prompt: `${JUDGE_PROMPT}
-
-## كلام السابق من المساعد (قد يكون فارغاً)
-${(tutorAnswer || "").slice(0, 1500)}
-
-## رسالة الطالب الآن
-${studentMessage.slice(0, 1500)}`,
-    });
-
-    const cleaned = text.replace(/```(?:json)?\s*/gi, "").replace(/\s*```/g, "").trim();
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return;
-    const parsed = judgeSchema.parse(JSON.parse(jsonMatch[0]));
+    const parsed = await judgeMisconception(studentMessage, tutorAnswer);
 
     if (!parsed.misunderstood || !parsed.topic.trim()) return;
 

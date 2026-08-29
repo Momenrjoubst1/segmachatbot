@@ -143,7 +143,7 @@ function QuizMode({
   if (shuffled.length === 0) {
     return (
       <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-        No questions were extracted from this book.
+        {t("curriculum.noQuestions")}
       </p>
     );
   }
@@ -159,9 +159,9 @@ function QuizMode({
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <ListChecks className="size-3.5" />
-          Question {index + 1} / {shuffled.length}
+          {t("curriculum.questionOf", { current: index + 1, total: shuffled.length })}
         </span>
-        <span>{q.question_type === "unit_questions" ? "Unit questions" : "Lesson questions"}</span>
+        <span>{q.question_type === "unit_questions" ? t("curriculum.unitQuestions") : t("curriculum.lessonQuestions")}</span>
       </div>
 
       <div
@@ -287,7 +287,7 @@ function QuizMode({
           }}
           className="h-8"
         >
-          Next <ArrowRight className="size-3.5" />
+          {t("curriculum.next")} <ArrowRight className="size-3.5" />
         </Button>
       </div>
     </div>
@@ -295,12 +295,13 @@ function QuizMode({
 }
 
 export function CurriculumPanel({ initialTab = "structure" }: { initialTab?: Tab }) {
+  const { t } = useTranslation("study");
   const { textbooks, isLoading: booksLoading } = useTextbooks();
-  const completed = textbooks.filter((t) => t.status === "completed");
+  const completed = textbooks.filter((tb) => tb.status === "completed");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>(initialTab);
 
-  const activeId = selectedId && completed.some((t) => t.id === selectedId)
+  const activeId = selectedId && completed.some((tb) => tb.id === selectedId)
     ? selectedId
     : completed[0]?.id ?? null;
 
@@ -323,7 +324,7 @@ export function CurriculumPanel({ initialTab = "structure" }: { initialTab?: Tab
   if (booksLoading) {
     return (
       <div className="rounded-xl border border-border/60 bg-card/95 p-4 text-center text-xs text-muted-foreground">
-        Loading your books…
+        {t("curriculum.loadingBooks")}
       </div>
     );
   }
@@ -335,7 +336,7 @@ export function CurriculumPanel({ initialTab = "structure" }: { initialTab?: Tab
       <div className="flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-1.5 text-sm font-medium">
           <GraduationCap className="size-4 text-primary" />
-            Study Map
+            {t("curriculum.studyMap")}
         </h3>
         {completed.length > 1 && (
           <select
@@ -343,9 +344,9 @@ export function CurriculumPanel({ initialTab = "structure" }: { initialTab?: Tab
             onChange={(e) => setSelectedId(e.target.value)}
             className="max-w-[55%] truncate rounded-md border border-border bg-background px-2 py-1 text-xs"
           >
-            {completed.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.file_name}
+            {completed.map((tb) => (
+              <option key={tb.id} value={tb.id}>
+                {tb.file_name}
               </option>
             ))}
           </select>
@@ -356,9 +357,9 @@ export function CurriculumPanel({ initialTab = "structure" }: { initialTab?: Tab
       <div className="flex rounded-lg bg-muted p-0.5 text-xs">
         {(
           [
-            ["structure", "Lessons"],
-            ["glossary", "Terms"],
-            ["quiz", "Quiz"],
+            ["structure", t("curriculum.tabLessons")],
+            ["glossary", t("curriculum.tabTerms")],
+            ["quiz", t("curriculum.tabQuiz")],
           ] as [Tab, string][]
         ).map(([key, label]) => (
           <button
@@ -377,7 +378,7 @@ export function CurriculumPanel({ initialTab = "structure" }: { initialTab?: Tab
 
       <div className="max-h-64 overflow-y-auto">
         {isLoading && (
-          <p className="py-6 text-center text-xs text-muted-foreground">Loading…</p>
+          <p className="py-6 text-center text-xs text-muted-foreground">{t("curriculum.loading")}</p>
         )}
 
         {!isLoading && tab === "structure" && (
@@ -389,7 +390,7 @@ export function CurriculumPanel({ initialTab = "structure" }: { initialTab?: Tab
             </div>
           ) : (
             <p className="py-6 text-center text-xs text-muted-foreground">
-              No lesson structure detected for this book yet.
+              {t("curriculum.noStructure")}
             </p>
           )
         )}
@@ -410,7 +411,7 @@ export function CurriculumPanel({ initialTab = "structure" }: { initialTab?: Tab
             </ul>
           ) : (
             <p className="py-6 text-center text-xs text-muted-foreground">
-              {glossary ? "No glossary found in this book." : "Loading terms…"}
+              {glossary ? t("curriculum.noGlossary") : t("curriculum.loadingTerms")}
             </p>
           )
         )}
@@ -419,14 +420,17 @@ export function CurriculumPanel({ initialTab = "structure" }: { initialTab?: Tab
           questions ? (
             <QuizMode questions={questions} textbookId={activeId} />
           ) : (
-            <p className="py-6 text-center text-xs text-muted-foreground">Loading questions…</p>
+            <p className="py-6 text-center text-xs text-muted-foreground">{t("curriculum.loadingQuestions")}</p>
           )
         )}
       </div>
 
       {curriculum && (
         <p className="text-[10px] text-muted-foreground">
-          {curriculum.counts.sections} sections · {curriculum.counts.questions} questions
+          {t("curriculum.countsLine", {
+            sections: curriculum.counts.sections,
+            questions: curriculum.counts.questions,
+          })}
           {curriculum.book_language ? ` · ${curriculum.book_language.toUpperCase()}` : ""}
         </p>
       )}

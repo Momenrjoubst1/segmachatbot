@@ -5,7 +5,9 @@ import {
   CalendarIcon,
   Mail,
   Lock,
+  GlobeIcon,
 } from "lucide-react";
+import i18n from "@/i18n/i18next";
 import {
   Dialog,
   DialogContent,
@@ -72,6 +74,20 @@ export const Header: FC<HeaderProps> = ({
         ]}
       />
       <div className="ml-auto flex items-center gap-1">
+        {/* Language toggle — dir flips to RTL automatically on "ar" (i18next.ts) */}
+        <button
+          type="button"
+          onClick={() => i18n.changeLanguage(i18n.language?.startsWith("ar") ? "en" : "ar")}
+          className="state-layer shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          title="Language / اللغة"
+          aria-label="Language / اللغة"
+        >
+          {i18n.language?.startsWith("ar") ? (
+            <span className="text-[11px] font-bold">EN</span>
+          ) : (
+            <GlobeIcon className="size-4" />
+          )}
+        </button>
         {/* Claude-style: every file attached to this chat, one click away */}
         <ChatFilesButton />
       </div>

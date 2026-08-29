@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Upload, FileText, Loader2, AlertCircle, CheckCircle2, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import { useTextbooks, type TextbookStatus } from "@/hooks/useTextbooks";
@@ -9,13 +10,14 @@ interface TextbookUploadProps {
   onUploadComplete?: (textbookId: string) => void;
 }
 
-const STAGE_LABELS: Record<string, string> = {
-  scanning: "Extracting pages",
-  figures: "Processing figures",
-  embedding: "Building knowledge index",
+const STAGE_KEYS: Record<string, string> = {
+  scanning: "textbook.stage.scanning",
+  figures: "textbook.stage.figures",
+  embedding: "textbook.stage.embedding",
 };
 
 export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadProps) {
+  const { t } = useTranslation("study");
   const { uploadTextbook, textbooks, getStatus, deleteTextbook, refetch } = useTextbooks();
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -70,11 +72,11 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
   const handleFile = useCallback(
     async (file: File) => {
       if (file.type !== "application/pdf") {
-        setUploadError("Only PDF files are supported");
+        setUploadError(t("textbook.errNotPdf"));
         return;
       }
       if (file.size > 500 * 1024 * 1024) {
-        setUploadError("File size must be under 500MB");
+        setUploadError(t("textbook.errTooBig"));
         return;
       }
 
@@ -88,13 +90,13 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
           pollStatus(result.textbook_id);
         }
       } catch (err) {
-        setUploadError(err instanceof Error ? err.message : "Upload failed");
+        setUploadError(err instanceof Error ? err.message : t("textbook.errUploadFailed"));
       } finally {
         setIsUploading(false);
         setUploadProgress(null);
       }
     },
-    [uploadTextbook, courseId, pollStatus]
+    [uploadTextbook, courseId, pollStatus, t]
   );
 
   const handleDrop = useCallback(
@@ -150,6 +152,13 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
     }
   };
 
+  const progressUnit =
+    activeStatus?.progress?.stage === "embedding"
+      ? t("textbook.unit.chunks")
+      : activeStatus?.progress?.stage === "figures"
+        ? t("textbook.unit.figures")
+        : t("textbook.unit.pages");
+
   return (
     <div className="space-y-4">
       {/* Dropzone */}
@@ -185,14 +194,14 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
           <p className="text-sm font-medium">
             {isUploading
               ? uploadProgress !== null
-                ? `Uploading... ${uploadProgress}%`
-                : "Uploading..."
+                ? t("textbook.uploadingPct", { pct: uploadProgress })
+                : t("textbook.uploading")
               : isDragOver
-              ? "Drop your PDF here"
-              : "Upload a textbook PDF"}
+              ? t("textbook.dropHere")
+              : t("textbook.uploadPrompt")}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Native digital PDF only, up to 500MB
+            {t("textbook.constraint")}
           </p>
         </div>
         {isUploading && uploadProgress !== null && (
@@ -219,15 +228,15 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
         <div className="rounded-xl border border-border/60 bg-card/95 p-4 space-y-2">
           <div className="flex items-center gap-2 text-sm">
             <Loader2 className="size-4 animate-spin text-primary" />
-            <span className="font-medium">Processing textbook...</span>
+            <span className="font-medium">{t("textbook.processing")}</span>
           </div>
           {activeStatus.progress && (
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{STAGE_LABELS[activeStatus.progress.stage] ?? activeStatus.progress.stage}</span>
+                <span>{STAGE_KEYS[activeStatus.progress.stage] ? t(STAGE_KEYS[activeStatus.progress.stage]) : activeStatus.progress.stage}</span>
                 <span>
                   {activeStatus.progress.pages_done}/{activeStatus.progress.total_pages || "?"}{" "}
-                  {activeStatus.progress.stage === "embedding" ? "chunks" : activeStatus.progress.stage === "figures" ? "figures" : "pages"}
+                  {progressUnit}
                 </span>
               </div>
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
@@ -251,7 +260,7 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
         <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 space-y-2">
           <div className="flex items-center gap-2 text-sm text-destructive">
             <AlertCircle className="size-4" />
-            <span className="font-medium">Processing failed</span>
+            <span className="font-medium">{t("textbook.failed")}</span>
           </div>
           <p className="text-xs text-destructive/80">{activeStatus.error}</p>
         </div>
@@ -260,7 +269,7 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
       {/* Textbook library */}
       {textbooks.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-medium text-muted-foreground">My Study Library</h3>
+          <h3 className="text-sm font-medium text-muted-foreground">{t("textbook.myLibrary")}</h3>
           <div className="space-y-1.5">
             {textbooks.map((tb) => (
               <div
@@ -271,7 +280,9 @@ export function TextbookUpload({ courseId, onUploadComplete }: TextbookUploadPro
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{tb.file_name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {tb.total_pages ? `${tb.total_pages} pages` : "Processing..."} · {tb.status}
+                    {tb.total_pages
+                      ? `${t("textbook.pageCount", { count: tb.total_pages })} · ${tb.status}`
+                      : t("textbook.processingShort")}
                   </p>
                 </div>
                 <Button

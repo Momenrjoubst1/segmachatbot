@@ -38,7 +38,9 @@ describe('Query Rewriter', () => {
       const result = rewriteQuery('What are database normalization forms?', [], knowledgeIntent);
       expect(result.strategy).toBe('hyde');
       expect(result.rewritten).toContain('Document about:');
-      expect(result.rewritten).toContain('Jordan University');
+      // Generic snippet — no hardcoded university name (removed from HyDE).
+      expect(result.rewritten).toContain('What are database normalization forms');
+      expect(result.rewritten).not.toContain('Jordan University');
     });
 
     it('should use hyde for Arabic knowledge queries', () => {
