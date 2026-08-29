@@ -72,5 +72,18 @@
   "quiz.masteryNow": "التمكن: {{pct}}%",
   "quiz.gradingError": "ما قدرناش نصحح الإجابة هلق. جرب مرة ثانية.",
   "progress.trainTopic": "درّبني",
-  "daily.trainTopic": "درّبني"
+  "daily.trainTopic": "درّبني",
+  "daily.profileTitle": "ملفك الدراسي",
+  "daily.profileEdit": "تعديل ملفك الدراسي",
+  "daily.profileSetup": "اضبط ملفك الدراسي (صف، امتحان، هدف يومي)",
+  "daily.profileClose": "إغلاق",
+  "daily.profileSave": "حفظ",
+  "daily.profileSaving": "جاري الحفظ…",
+  "daily.profileSaved": "انحفظ!",
+  "daily.gradeLevel": "المرحلة / الصف",
+  "daily.major": "التخصص",
+  "daily.examDate": "تاريخ الامتحان القادم",
+  "daily.dailyGoal": "الهدف اليومي (بطاقة)",
+  "daily.examCountdown": "الامتحان بعد {{days}} يوم",
+  "daily.dueTopics": "مستحق للمراجعة اليوم"
 }

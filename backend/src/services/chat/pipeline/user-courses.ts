@@ -65,13 +65,36 @@ export async function fetchStudyProgressContext(userId: string): Promise<string>
   }
 }
 
-/** Combined context for system prompt: courses + weak topics */
+// Fetches the study profile (grade/major/exam countdown/daily goal), cached like courses.
+export async function fetchStudyProfileContext(userId: string): Promise<string> {
+  const cacheKey = `user:profile:${userId}`;
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) return cached;
+
+    const { buildProfileContext } = await import("../../study/profile.service.js");
+    const context = await buildProfileContext(userId);
+
+    if (context) {
+      await redis.set(cacheKey, context, "EX", CACHE_TTL_SECONDS);
+    }
+    return context;
+  } catch (err) {
+    log.warn("Failed to fetch study profile", {
+      error: (err as Error)?.message,
+    });
+    return "";
+  }
+}
+
+/** Combined context for system prompt: profile + courses + weak topics */
 export async function fetchCombinedUserContext(userId: string): Promise<string> {
-  const [coursesCtx, progressCtx] = await Promise.all([
+  const [profileCtx, coursesCtx, progressCtx] = await Promise.all([
+    fetchStudyProfileContext(userId),
     fetchUserCoursesContext(userId),
     fetchStudyProgressContext(userId),
   ]);
 
-  if (!coursesCtx && !progressCtx) return "";
-  return [coursesCtx, progressCtx].filter(Boolean).join("\n\n");
+  if (!profileCtx && !coursesCtx && !progressCtx) return "";
+  return [profileCtx, coursesCtx, progressCtx].filter(Boolean).join("\n\n");
 }

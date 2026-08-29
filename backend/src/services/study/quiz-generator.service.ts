@@ -84,6 +84,9 @@ async function fetchBookContext(
   }
 }
 
+/** Retrieve the student's own book excerpts for a topic (shared with the flashcards tool). */
+export const fetchTopicContext = fetchBookContext;
+
 export interface GenerateQuizInput {
   userId: string;
   topic: string;

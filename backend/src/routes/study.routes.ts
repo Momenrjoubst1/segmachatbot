@@ -4,9 +4,11 @@ import { asyncHandler } from "../utils/express-async-wrapper.js";
 import { createFlashcards, getDueFlashcards, reviewFlashcard, deleteFlashcard, listFlashcards } from "../services/study/flashcards.service.js";
 import { recordQuizResult, getStudyProgress, buildProgressContext } from "../services/study/progress.service.js";
 import { gradeAnswer } from "../services/study/answer-grader.service.js";
+import { getStudyProfile, upsertStudyProfile } from "../services/study/profile.service.js";
 import { answerGradingLimiter } from "../middleware/rate-limiters.js";
 import { createLogger } from "../utils/logger.js";
 import { supabase } from "../config/supabase.config.js";
+import redis from "../config/redis/client.js";
 
 const log = createLogger("routes:study");
 const router = Router();
@@ -29,6 +31,13 @@ const gradeAnswerSchema = z.object({
   courseId: z.string().uuid().optional(),
   textbookId: z.string().uuid().optional(),
   sectionPath: z.string().max(500).optional(),
+});
+
+const profileSchema = z.object({
+  gradeLevel: z.string().max(100).optional(),
+  major: z.string().max(100).optional(),
+  examDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  dailyGoal: z.number().int().min(1).max(200).optional(),
 });
 
 const createFlashcardsSchema = z.object({
@@ -210,6 +219,45 @@ router.get(
   })
 );
 
+// Study profile endpoints (onboarding data: grade, major, exam date, daily goal).
+
+router.get(
+  "/profile",
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+    const profile = await getStudyProfile(userId);
+    res.json({ profile });
+  })
+);
+
+router.put(
+  "/profile",
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+    const parsed = profileSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      return;
+    }
+
+    const profile = await upsertStudyProfile(userId, {
+      gradeLevel: parsed.data.gradeLevel,
+      major: parsed.data.major,
+      examDate: parsed.data.examDate,
+      dailyGoal: parsed.data.dailyGoal,
+    });
+
+    // The system prompt caches the profile block — keep it fresh.
+    try { await redis.del(`user:profile:${userId}`); } catch { /* non-fatal */ }
+
+    res.json({ profile });
+  })
+);
+
 // Daily review plan endpoint.
 router.get(
   "/daily-plan",
@@ -230,6 +278,16 @@ router.get(
       .select("topic, mastery_level, correct_count, incorrect_count")
       .eq("user_id", userId)
       .lt("mastery_level", 0.5)
+      .order("mastery_level", { ascending: true })
+      .limit(5);
+
+    // 2b. Topics due for review (topic-level SRS — next_review_at, migration 037)
+    const { data: dueTopics } = await supabase
+      .from("study_progress")
+      .select("topic, mastery_level, correct_count, incorrect_count")
+      .eq("user_id", userId)
+      .not("next_review_at", "is", null)
+      .lte("next_review_at", new Date().toISOString())
       .order("mastery_level", { ascending: true })
       .limit(5);
 
@@ -282,6 +340,7 @@ router.get(
     res.json({
       dueCardsCount: dueCardsCount ?? 0,
       weakTopics: weakTopics || [],
+      dueTopics: dueTopics || [],
       suggestedQuestions,
     });
   })

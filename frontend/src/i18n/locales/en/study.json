@@ -72,5 +72,18 @@
   "quiz.masteryNow": "Mastery: {{pct}}%",
   "quiz.gradingError": "Could not check the answer right now. Please try again.",
   "progress.trainTopic": "Train me",
-  "daily.trainTopic": "Train me"
+  "daily.trainTopic": "Train me",
+  "daily.profileTitle": "Study profile",
+  "daily.profileEdit": "Edit study profile",
+  "daily.profileSetup": "Set up your study profile",
+  "daily.profileClose": "Close",
+  "daily.profileSave": "Save",
+  "daily.profileSaving": "Saving…",
+  "daily.profileSaved": "Saved!",
+  "daily.gradeLevel": "Grade / level",
+  "daily.major": "Major",
+  "daily.examDate": "Next exam date",
+  "daily.dailyGoal": "Daily goal (cards)",
+  "daily.examCountdown": "Exam in {{days}} days",
+  "daily.dueTopics": "Due for review today"
 }

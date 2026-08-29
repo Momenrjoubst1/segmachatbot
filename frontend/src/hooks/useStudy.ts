@@ -205,6 +205,13 @@ export interface DailyPlan {
     correct_count: number;
     incorrect_count: number;
   }>;
+  /** Topics whose SRS next_review_at has passed (migration 037). */
+  dueTopics?: Array<{
+    topic: string;
+    mastery_level: number;
+    correct_count: number;
+    incorrect_count: number;
+  }>;
   suggestedQuestions: Array<{
     text: string;
     page_number: number | null;
@@ -237,4 +244,64 @@ export function useDailyPlan() {
   }, [fetchPlan]);
 
   return { plan, isLoading, error, refetch: fetchPlan };
+}
+
+export interface StudyProfile {
+  user_id: string;
+  grade_level: string | null;
+  major: string | null;
+  exam_date: string | null;
+  daily_goal: number;
+}
+
+/** Payload shape matches the PUT /api/study/profile API (camelCase). */
+export interface StudyProfilePatch {
+  gradeLevel?: string;
+  major?: string;
+  examDate?: string | null;
+  dailyGoal?: number;
+}
+
+export function useStudyProfile() {
+  const [profile, setProfile] = useState<StudyProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const fetchProfile = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res = await authFetch(`${BACKEND_URL}/api/study/profile`);
+      if (res.ok) {
+        const data = await res.json();
+        setProfile(data.profile || null);
+      }
+    } catch {
+      /* non-fatal */
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
+
+  const saveProfile = useCallback(async (patch: StudyProfilePatch) => {
+    setIsSaving(true);
+    try {
+      const res = await authFetch(`${BACKEND_URL}/api/study/profile`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error("Failed to save profile");
+      const data = await res.json();
+      setProfile(data.profile || null);
+      return true;
+    } finally {
+      setIsSaving(false);
+    }
+  }, []);
+
+  return { profile, isLoading, isSaving, saveProfile, refetch: fetchProfile };
 }

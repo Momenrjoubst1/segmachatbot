@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
-import { useDailyPlan } from "@/hooks/useStudy";
+import { useDailyPlan, useStudyProfile, type StudyProfilePatch } from "@/hooks/useStudy";
 import { unstable_useComposerInput } from "../../shims/assistant-ui-compat-shim";
 import {
   BookOpenIcon,
@@ -9,6 +10,8 @@ import {
   LightbulbIcon,
   DumbbellIcon,
   Loader2,
+  UserCogIcon,
+  CalendarClockIcon,
 } from "lucide-react";
 
 interface DailyPlanPanelProps {
@@ -17,6 +20,125 @@ interface DailyPlanPanelProps {
   /** Opens the chat with a tutor prompt for the given topic. */
   onTrainTopic?: (topic: string) => void;
   className?: string;
+}
+
+/** Compact study-profile form — grade, major, exam date, daily goal. */
+function ProfileCard({ onExamDateSet }: { onExamDateSet: boolean }) {
+  const { t } = useTranslation("study");
+  const { profile, isLoading, isSaving, saveProfile } = useStudyProfile();
+  const [open, setOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [form, setForm] = useState<StudyProfilePatch>({});
+
+  const countdown = (() => {
+    if (!profile?.exam_date) return null;
+    const days = Math.round(
+      (new Date(`${profile.exam_date}T00:00:00`).getTime() - new Date(new Date().toDateString()).getTime()) / 86_400_000
+    );
+    return Number.isNaN(days) ? null : days;
+  })();
+
+  const handleSave = async () => {
+    try {
+      await saveProfile(form);
+      setForm({});
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch {
+      /* inline error ignored — button state shows result */
+    }
+  };
+
+  if (isLoading) return null;
+
+  if (!open) {
+    return (
+      <div className="flex items-center justify-between rounded-xl border border-border/40 bg-background px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <UserCogIcon className="size-3.5" />
+          {profile ? t("daily.profileEdit") : t("daily.profileSetup")}
+        </button>
+        {profile?.exam_date && countdown !== null && (
+          <span
+            className={cn(
+              "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+              onExamDateSet && countdown <= 7
+                ? "bg-red-500/15 text-red-700"
+                : "bg-blue-500/10 text-blue-700"
+            )}
+          >
+            <CalendarClockIcon className="size-3" />
+            {countdown !== null && countdown >= 0
+              ? t("daily.examCountdown", { days: countdown })
+              : profile.exam_date}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl border border-border/60 bg-background p-3">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-xs font-semibold">
+          <UserCogIcon className="size-3.5" />
+          {t("daily.profileTitle")}
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="text-[10px] text-muted-foreground hover:text-foreground"
+        >
+          {t("daily.profileClose")}
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          dir="auto"
+          value={form.gradeLevel ?? profile?.grade_level ?? ""}
+          onChange={(e) => setForm((f) => ({ ...f, gradeLevel: e.target.value }))}
+          placeholder={t("daily.gradeLevel")}
+          className="rounded-md border border-border/60 bg-card px-2 py-1.5 text-xs outline-none focus:border-primary/50"
+        />
+        <input
+          dir="auto"
+          value={form.major ?? profile?.major ?? ""}
+          onChange={(e) => setForm((f) => ({ ...f, major: e.target.value }))}
+          placeholder={t("daily.major")}
+          className="rounded-md border border-border/60 bg-card px-2 py-1.5 text-xs outline-none focus:border-primary/50"
+        />
+        <input
+          type="date"
+          value={form.examDate ?? profile?.exam_date ?? ""}
+          onChange={(e) => setForm((f) => ({ ...f, examDate: e.target.value || null }))}
+          className="rounded-md border border-border/60 bg-card px-2 py-1.5 text-xs outline-none focus:border-primary/50"
+        />
+        <input
+          type="number"
+          min={1}
+          max={200}
+          value={form.dailyGoal ?? profile?.daily_goal ?? ""}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, dailyGoal: e.target.value ? Number(e.target.value) : undefined }))
+          }
+          placeholder={t("daily.dailyGoal")}
+          className="rounded-md border border-border/60 bg-card px-2 py-1.5 text-xs outline-none focus:border-primary/50"
+        />
+      </div>
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={isSaving || Object.keys(form).length === 0}
+        className="w-full rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+      >
+        {saved ? t("daily.profileSaved") : isSaving ? t("daily.profileSaving") : t("daily.profileSave")}
+      </button>
+    </div>
+  );
 }
 
 export function DailyPlanPanel({
@@ -60,14 +182,19 @@ export function DailyPlanPanel({
   if (!plan) return null;
 
   const hasDueCards = plan.dueCardsCount > 0;
+  const dueTopics = (plan.dueTopics || []).filter(
+    (dt) => !(plan.weakTopics || []).some((w) => w.topic === dt.topic)
+  );
+  const hasDueTopics = dueTopics.length > 0;
   const hasWeakTopics = plan.weakTopics.length > 0;
   const hasQuestions = plan.suggestedQuestions.length > 0;
-  const isEmpty = !hasDueCards && !hasWeakTopics && !hasQuestions;
+  const isEmpty = !hasDueCards && !hasDueTopics && !hasWeakTopics && !hasQuestions;
 
   if (isEmpty) {
     return (
-      <div className={cn("flex items-center justify-center p-6", className)}>
-        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+      <div className={cn("space-y-3 p-1", className)}>
+        <ProfileCard onExamDateSet={!!plan.dueTopics} />
+        <div className="flex flex-col items-center gap-2 p-4 text-muted-foreground">
           <GraduationCapIcon className="h-6 w-6" />
           <span className="text-sm">{t("daily.empty")}</span>
           <span className="text-xs text-muted-foreground/70">
@@ -80,6 +207,8 @@ export function DailyPlanPanel({
 
   return (
     <div className={cn("space-y-4 p-1", className)}>
+      <ProfileCard onExamDateSet={!!plan.dueTopics} />
+
       {/* Due Cards Card */}
       {hasDueCards && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-50/10 p-4">
@@ -103,6 +232,58 @@ export function DailyPlanPanel({
             >
               {t("daily.startReview")}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Topics due for review (topic-level SRS) */}
+      {hasDueTopics && (
+        <div className="space-y-2">
+          <h4 className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <CalendarClockIcon className="h-3.5 w-3.5 text-orange-500" />
+            {t("daily.dueTopics")}
+          </h4>
+          <div className="space-y-2">
+            {dueTopics.map((topic, i) => {
+              const total = topic.correct_count + topic.incorrect_count;
+              const pct = total > 0 ? Math.round(topic.mastery_level * 100) : 0;
+              return (
+                <div
+                  key={`due-${i}`}
+                  className="flex items-center gap-3 rounded-lg border border-border/40 bg-background p-2.5"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-foreground truncate">
+                      {topic.topic}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">
+                      {total} {t("daily.questionsCount")} · {pct}% {t("daily.mastery")}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {onTrainTopic && (
+                      <button
+                        type="button"
+                        onClick={() => onTrainTopic(topic.topic)}
+                        className="flex items-center gap-1 rounded-md bg-orange-500/15 px-2 py-1 text-[10px] font-medium text-orange-700 hover:bg-orange-500/25 transition-colors"
+                      >
+                        <DumbbellIcon className="size-3" />
+                        {t("daily.trainTopic")}
+                      </button>
+                    )}
+                    <div className="w-16 h-1.5 rounded-full bg-muted/50 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-orange-500 transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-medium text-muted-foreground w-8 text-right">
+                      {pct}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
