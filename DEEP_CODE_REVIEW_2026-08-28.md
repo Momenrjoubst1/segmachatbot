@@ -166,3 +166,10 @@
 | — | **Secrets scan**: full git history pickaxe-scanned for key patterns (groq/openrouter/google/anthropic/openai/private-keys) — only test placeholders (`gsk_test_key`, `sk-or-v1-test-key`); no real secrets ever committed; all .env files untracked. |
 | cd9c0af | **WS JWTs moved out of upgrade URLs** into the first config frame (both relays + frontend clients + e2e probe). Verified live: anon-dev session authenticates and streams 128KB to Deepgram; garbage token → 4401 before ready. **Also fixed a P0 the startup smoke exposed**: sender.ts re-exported the `EmailTemplate` type as a value — the backend could not boot under node/tsx at all (tsc elides the name silently). |
 | — | **First load test in project history** (autocannon, single replica, local): `/api/health` 1,891 rps · 0 errors · p99 35ms; `/api/guest` validation 1,421 rps · p99 32ms; `/api/chat` auth-reject 1,462 rps · p99 25ms (20–25 concurrent, 10–12s each). The app layer is not the bottleneck — provider quotas are, as expected. |
+
+### Fifth pass — E2E testing (tests 9→10)
+
+| Commit | Outcome |
+|--------|---------|
+| cacecaf | **True E2E suites** (backend `src/__tests__/e2e/`, run by the normal CI job): `server.e2e` boots the REAL index.ts — full middleware chain (helmet/CORS/global-limiter/auth/error-handler) — asserting health shape, 401s on missing+garbage JWTs across protected routes, dev-route gating, helmet headers, CORS origin rejection, 404 JSON. `ws-auth.e2e` drives REAL sockets: config-frame JWT auth (anon-dev → ready), missing/garbage token → 4401 before ready, binary-before-config → 4401. Auth edges mocked at Supabase getUser only; everything between is the production path. Backend suite: **766/766**. |
+| — | Remaining axis for a future pass: browser-level E2E (Playwright: login → composer → guest chat render) + a provider-backed guest-chat SSE flow with a mocked LLM. |
