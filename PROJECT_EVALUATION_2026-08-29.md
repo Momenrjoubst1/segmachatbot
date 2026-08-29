@@ -111,7 +111,7 @@
 
 **CI: ‏4/4 jobs خضرا لأول مرة بتاريخ المشروع** @ 8500d3e (768 backend + 556 frontend + Playwright e2e + 106 pytest — كلها مفروضة الآن على كل دفعة).
 
-**البند الوحيد المفتوح (يدوي):** سر `SUPABASE_DB_URL` بالـ repo — ‏workflow النسخ الاحتياطي منضمّل وجدولي (يومياً 03:00 UTC) وبيفشل بأمان لحد ما تنلصق قيمة الاتصال (Dashboard → Settings → Database → Connection string → repo Settings → Secrets → Actions). *بديل متاح بإذنك: إعادة تعيين كلمة سر القاعدة عبر Management API.*
+**البند المفتوح انغلق بنفس اليوم (بإذن المالك):** سر `SUPABASE_DB_URL` انضبط عالـ repo. المسار: كلمة سر القاعدة أعيد تعيينها عبر Management API (‏`PATCH /v1/projects/{ref}/database/password` — ‏POST بيرجع 404، وurllib بيتحجب بـ Cloudflare 1010 بدون User-Agent) → رابط الـ **Session pooler** (‏`aws-0-ap-northeast-2.pooler.supabase.com:5432` — التاب المباشر IPv6 بس وما يشتغل مع runners تبع Actions) → شُفّر بمفتاح الـ repo العام وانرفع سراً (201). أول تشغيلة فشلت بـ «server version mismatch» (سيرفر Supabase ‏17.6 مقابل pg_dump 16 بالـ runner) → ‏9d00506 يشغّل الأدوات المتطابقة من صورة `postgres:17`. **النتيجة: ‏`sigma-db-20260829-054920.dump` (73 KB) مع فحص سلامة — والجدولة اليومية 03:00 UTC فعّالة.** تنبيه: أي اتصال pg محفوظ خارجياً بكلمة السر القديمة يحتاج تحديث.
 
 - **جداول الشغل بلا سياسات RLS** (`documents`, `memory_extraction_jobs/dead_letter`, `message_embeddings`): RLS مفعّل وبدون سياسات = deny-all لـ anon/authenticated — اتجاه آمن (fail-closed) لأن الوصول يتم بـ service role فقط. لمّحة توثيق بالـ migrations README تكفي.
 - **فرق قياس الضغط:** قياسي gzip (مستوى 9) أعطى 551KB للـ eager مقابل ~470KB المقدّرة بالسجل (nginx gzip level 6 أقل كفاءة قليلاً) — لا تضارب فعلي.
