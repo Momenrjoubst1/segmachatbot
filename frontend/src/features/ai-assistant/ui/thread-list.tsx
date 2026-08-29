@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useAgenticAction } from "@/context/AgenticUIBus";
+import { unstable_useComposerInput } from "../shims/assistant-ui-compat-shim";
 import { TextbookUpload } from "../components/TextbookUpload";
 import { CurriculumPanel } from "../components/CurriculumPanel";
 import { FlashcardsStudy } from "../components/chat/FlashcardsStudy";
@@ -141,6 +142,17 @@ export const ThreadList: FC<{
     setStudyTab("daily");
     setBookUploadDialogOpen(true);
   }, []);
+
+  // "Train me" — open the chat with a step-by-step tutor prompt for a topic.
+  const composer = unstable_useComposerInput();
+  const handleTrainTopic = useCallback((topic: string) => {
+    const prompt = `علّمني موضوع "${topic}" خطوة بخطوة: ابدأ بسؤال بسيط لتعرف مستواي، ثم اشرح لي مع مثال، ثم اختبرني بسؤال وصحّح لي.`;
+    composer.setText(prompt);
+    requestAnimationFrame(() => {
+      composer.send();
+      setBookUploadDialogOpen(false);
+    });
+  }, [composer]);
 
   const handleBookUploadClick = (courseId: string) => {
     setBookUploadCourseId(courseId);
@@ -380,12 +392,16 @@ export const ThreadList: FC<{
                 <FlashcardsStudy courseId={bookUploadCourseId || undefined} onReviewComplete={refreshDueCount} />
               )}
               {studyTab === "progress" && (
-                <StudyProgressPanel courseId={bookUploadCourseId || undefined} />
+                <StudyProgressPanel
+                  courseId={bookUploadCourseId || undefined}
+                  onTrainTopic={handleTrainTopic}
+                />
               )}
               {studyTab === "daily" && (
                 <DailyPlanPanel
                   onNavigateToFlashcards={() => setStudyTab("flashcards")}
                   onQuestionSent={() => setBookUploadDialogOpen(false)}
+                  onTrainTopic={handleTrainTopic}
                 />
               )}
             </div>

@@ -2,17 +2,20 @@ import { useMemo } from "react";
 import { cn } from "@/lib/cn";
 import { useTranslation } from "react-i18next";
 import { useStudyProgress, type StudyProgress } from "@/hooks/useStudy";
-import { BarChart3Icon, AlertTriangleIcon, CheckCircleIcon } from "lucide-react";
+import { BarChart3Icon, AlertTriangleIcon, CheckCircleIcon, DumbbellIcon } from "lucide-react";
 
 interface StudyProgressPanelProps {
   courseId?: string;
   textbookId?: string;
+  /** Opens the chat with a tutor prompt for the given topic. */
+  onTrainTopic?: (topic: string) => void;
   className?: string;
 }
 
 export function StudyProgressPanel({
   courseId,
   textbookId,
+  onTrainTopic,
   className,
 }: StudyProgressPanelProps) {
   const { progress, isLoading, error } = useStudyProgress(courseId, textbookId, 20);
@@ -88,7 +91,12 @@ export function StudyProgressPanel({
           </h4>
           <div className="space-y-2">
             {weakTopics.map((topic) => (
-              <TopicRow key={topic.id} topic={topic} variant="weak" />
+              <TopicRow
+                key={topic.id}
+                topic={topic}
+                variant="weak"
+                onTrain={onTrainTopic ? () => onTrainTopic(topic.topic) : undefined}
+              />
             ))}
           </div>
         </div>
@@ -142,9 +150,11 @@ function StatCard({
 function TopicRow({
   topic,
   variant,
+  onTrain,
 }: {
   topic: StudyProgress;
   variant: "weak" | "strong";
+  onTrain?: () => void;
 }) {
   const { t } = useTranslation("study");
   const total = topic.correct_count + topic.incorrect_count;
@@ -162,6 +172,16 @@ function TopicRow({
         </div>
       </div>
       <div className="flex items-center gap-2">
+        {onTrain && (
+          <button
+            type="button"
+            onClick={onTrain}
+            className="flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-500/25 transition-colors"
+          >
+            <DumbbellIcon className="size-3" />
+            {t("progress.trainTopic")}
+          </button>
+        )}
         <div className="w-16 h-1.5 rounded-full bg-muted/50 overflow-hidden">
           <div
             className={cn(

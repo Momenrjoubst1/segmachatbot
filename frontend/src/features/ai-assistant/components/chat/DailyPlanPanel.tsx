@@ -7,18 +7,22 @@ import {
   GraduationCapIcon,
   AlertTriangleIcon,
   LightbulbIcon,
+  DumbbellIcon,
   Loader2,
 } from "lucide-react";
 
 interface DailyPlanPanelProps {
   onNavigateToFlashcards: () => void;
   onQuestionSent?: () => void;
+  /** Opens the chat with a tutor prompt for the given topic. */
+  onTrainTopic?: (topic: string) => void;
   className?: string;
 }
 
 export function DailyPlanPanel({
   onNavigateToFlashcards,
   onQuestionSent,
+  onTrainTopic,
   className,
 }: DailyPlanPanelProps) {
   const { t } = useTranslation("study");
@@ -128,6 +132,16 @@ export function DailyPlanPanel({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {onTrainTopic && (
+                      <button
+                        type="button"
+                        onClick={() => onTrainTopic(topic.topic)}
+                        className="flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-500/25 transition-colors"
+                      >
+                        <DumbbellIcon className="size-3" />
+                        {t("daily.trainTopic")}
+                      </button>
+                    )}
                     <div className="w-16 h-1.5 rounded-full bg-muted/50 overflow-hidden">
                       <div
                         className="h-full rounded-full bg-amber-500 transition-all"

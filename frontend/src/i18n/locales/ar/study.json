@@ -70,5 +70,7 @@
   "quiz.verdict.incorrect": "ليست صحيحة",
   "quiz.modelAnswer": "اعرض الإجابة النموذجية",
   "quiz.masteryNow": "التمكن: {{pct}}%",
-  "quiz.gradingError": "ما قدرناش نصحح الإجابة هلق. جرب مرة ثانية."
+  "quiz.gradingError": "ما قدرناش نصحح الإجابة هلق. جرب مرة ثانية.",
+  "progress.trainTopic": "درّبني",
+  "daily.trainTopic": "درّبني"
 }

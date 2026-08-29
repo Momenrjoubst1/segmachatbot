@@ -70,5 +70,7 @@
   "quiz.verdict.incorrect": "Not quite",
   "quiz.modelAnswer": "Show model answer",
   "quiz.masteryNow": "Mastery: {{pct}}%",
-  "quiz.gradingError": "Could not check the answer right now. Please try again."
+  "quiz.gradingError": "Could not check the answer right now. Please try again.",
+  "progress.trainTopic": "Train me",
+  "daily.trainTopic": "Train me"
 }
