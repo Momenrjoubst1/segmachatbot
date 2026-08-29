@@ -101,6 +101,30 @@ export function sidebarOpenThread(threadId: string): UIActionPayload {
   return createUIAction("sidebar", "OPEN_THREAD", { threadId });
 }
 
+// Study panel actions — let the model open the student's study tools.
+
+export type StudyPanelTab = "curriculum" | "quiz" | "flashcards" | "progress" | "daily";
+
+/** Open the study dialog, optionally on a specific tab. */
+export function studyOpenPanel(tab?: StudyPanelTab, courseId?: string): UIActionPayload {
+  return createUIAction("study", "OPEN_STUDY", { ...(tab ? { tab } : {}), ...(courseId ? { courseId } : {}) });
+}
+
+/** Open the study dialog directly on the flashcards review session. */
+export function studyOpenFlashcards(courseId?: string): UIActionPayload {
+  return createUIAction("study", "OPEN_FLASHCARDS", courseId ? { courseId } : {});
+}
+
+/** Open the study dialog on the daily study plan. */
+export function studyOpenDailyPlan(): UIActionPayload {
+  return createUIAction("study", "OPEN_DAILY_PLAN");
+}
+
+/** Open the Study Map directly on its quiz tab. */
+export function studyOpenQuiz(courseId?: string): UIActionPayload {
+  return createUIAction("study", "OPEN_QUIZ", courseId ? { courseId } : {});
+}
+
 // System prompt snippet enabling model-emitted UI actions.
 
 // Instructions teaching the LLM how to emit <ui_action> tags in its responses.
@@ -137,4 +161,28 @@ the action, and hide them from the user.
 If the user just scheduled a meeting via the calendar tool, you could respond:
 "Your meeting has been created for tomorrow at 2 PM. Would you like to modify the time?"
 <ui_action>{"target": "composer", "action": "SET_TEXT", "payload": {"text": "Can we change the meeting time to 3 PM?"}}</ui_action>
+`.trim();
+
+// Study actions are taught to every authenticated student even when the generic
+// Octopus protocol is disabled — study tools are invisible otherwise (they live
+// behind a small book icon in the sidebar).
+
+export const STUDY_UI_ACTIONS_PROMPT = `
+## Study Panel Actions
+
+You can open the student's study panels directly in their interface by emitting a
+<ui_action> tag (same format and rules as above — at most ONE per response, at the
+END of your reply, never mention the tag).
+
+| Target | Action        | Payload                                          | When to use |
+|--------|---------------|--------------------------------------------------|-------------|
+| study  | OPEN_STUDY    | { "tab"?: "curriculum"\|"quiz"\|"flashcards"\|"progress"\|"daily" } | The student wants their study tools / study map in general |
+| study  | OPEN_FLASHCARDS | {}                                             | The student wants to review flashcards, or you just generated cards for them |
+| study  | OPEN_DAILY_PLAN | {}                                             | The student asks what to study today / for their plan |
+| study  | OPEN_QUIZ     | {}                                               | The student wants to practice questions from the book map |
+
+Rules:
+1. Only use these when the student clearly wants to study or review — never open a panel uninvited.
+2. After generating flashcards via the generate_flashcards tool, offer the review panel with OPEN_FLASHCARDS.
+3. When the student asks "what should I study today?", open OPEN_DAILY_PLAN and summarize the plan in text as well.
 `.trim();

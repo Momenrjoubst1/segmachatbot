@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   BookOpen,
   GraduationCap,
@@ -164,11 +164,11 @@ function QuizMode({ questions }: { questions: NonNullable<ReturnType<typeof useC
   );
 }
 
-export function CurriculumPanel() {
+export function CurriculumPanel({ initialTab = "structure" }: { initialTab?: Tab }) {
   const { textbooks, isLoading: booksLoading } = useTextbooks();
   const completed = textbooks.filter((t) => t.status === "completed");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("structure");
+  const [tab, setTab] = useState<Tab>(initialTab);
 
   const activeId = selectedId && completed.some((t) => t.id === selectedId)
     ? selectedId
@@ -176,6 +176,13 @@ export function CurriculumPanel() {
 
   const { curriculum, questions, glossary, isLoading, fetchQuestions, fetchGlossary } =
     useCurriculum(activeId);
+
+  // When opened directly on the quiz tab (e.g. via an AI study action),
+  // the questions fetch is triggered by switchTab — trigger it here too.
+  useEffect(() => {
+    if (initialTab === "quiz") fetchQuestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTab]);
 
   const switchTab = (t: Tab) => {
     setTab(t);

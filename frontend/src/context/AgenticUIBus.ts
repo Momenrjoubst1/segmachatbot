@@ -34,6 +34,17 @@ export interface AgenticUIActionMap {
     OPEN_EMAIL: {};
     OPEN_ARTIFACTS: { artifactId?: string };
   };
+  "study": {
+    /** Open the study dialog on a specific tab (defaults to the daily plan). */
+    OPEN_STUDY: {
+      tab?: "curriculum" | "quiz" | "flashcards" | "progress" | "daily";
+      courseId?: string;
+    };
+    OPEN_FLASHCARDS: { courseId?: string };
+    OPEN_DAILY_PLAN: {};
+    /** Open the Study Map directly on its quiz tab. */
+    OPEN_QUIZ: { courseId?: string };
+  };
 }
 
 // ─── Generic Action Type ──────────────────────────────────────────────────────────

@@ -52,5 +52,9 @@
   "daily.weakTopics": "Weak Topics",
   "daily.questionsCount": "questions",
   "daily.mastery": "mastery",
-  "daily.suggestedQuestions": "Suggested Questions"
+  "daily.suggestedQuestions": "Suggested Questions",
+  "threadList.studyHub": "Study Hub",
+  "threadList.studyHubDescription": "Your daily plan, flashcards, progress and study map — all in one place. Upload textbook PDFs here too.",
+  "threadList.uploadTitle": "Upload Textbook",
+  "threadList.uploadDescription": "Upload a PDF textbook for this course to help with your studies."
 }

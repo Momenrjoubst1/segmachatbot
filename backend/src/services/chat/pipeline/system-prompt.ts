@@ -2,7 +2,7 @@
 
 import { buildBasePersona } from "../../../prompts/base-persona.js";
 import { buildSystemPrompt, resolveABVariant, buildPersonaWithVariant, type PromptBuildOptions, type PersonaVariant } from "../../../prompts/index.js";
-import { UI_ACTION_SYSTEM_PROMPT } from "../ui-action-emitter.js";
+import { UI_ACTION_SYSTEM_PROMPT, STUDY_UI_ACTIONS_PROMPT } from "../ui-action-emitter.js";
 import { isWebSearchAvailable } from "../../../tools/web/search/index.js";
 import { isEmailAvailable } from "../../../tools/email/send/index.js";
 import { getToolDefinitions } from "../../../tools/tool-definitions-aggregator.js";
@@ -84,6 +84,12 @@ export function assembleSystemPrompt(args: {
 
   if (process.env.OCTOPUS_UI_ACTIONS === "true") {
     systemPrompt += "\n\n" + UI_ACTION_SYSTEM_PROMPT;
+  }
+
+  // Study panels exist only for authenticated students — teach the study actions
+  // unconditionally for them so the AI can surface otherwise-hidden study tools.
+  if (args.userId) {
+    systemPrompt += "\n\n" + STUDY_UI_ACTIONS_PROMPT;
   }
 
   const buildTimeMs = Date.now() - t0;

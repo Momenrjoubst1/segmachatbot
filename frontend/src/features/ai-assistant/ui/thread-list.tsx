@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { useAgenticAction } from "@/context/AgenticUIBus";
 import { TextbookUpload } from "../components/TextbookUpload";
 import { CurriculumPanel } from "../components/CurriculumPanel";
 import { FlashcardsStudy } from "../components/chat/FlashcardsStudy";
@@ -102,10 +103,44 @@ export const ThreadList: FC<{
 
   const [bookUploadCourseId, setBookUploadCourseId] = useState<string | null>(null);
   const [bookUploadDialogOpen, setBookUploadDialogOpen] = useState(false);
-  type StudyTab = "curriculum" | "flashcards" | "progress" | "daily";
+  type StudyTab = "curriculum" | "quiz" | "flashcards" | "progress" | "daily";
   const [studyTab, setStudyTab] = useState<StudyTab>("curriculum");
   const { count: dueCount, refresh: refreshDueCount } = useDueFlashcardsCount();
   const { t } = useTranslation("study");
+
+  // ── AI-triggered study panel actions (Octopus bus → study dialog) ─────────
+  useAgenticAction("study", (action) => {
+    const payload = action.payload as { tab?: StudyTab; courseId?: string };
+    switch (action.action) {
+      case "OPEN_FLASHCARDS":
+        setStudyTab("flashcards");
+        setBookUploadCourseId(payload.courseId ?? null);
+        setBookUploadDialogOpen(true);
+        break;
+      case "OPEN_DAILY_PLAN":
+        setStudyTab("daily");
+        setBookUploadCourseId(null);
+        setBookUploadDialogOpen(true);
+        break;
+      case "OPEN_QUIZ":
+        setStudyTab("quiz");
+        setBookUploadCourseId(payload.courseId ?? null);
+        setBookUploadDialogOpen(true);
+        break;
+      case "OPEN_STUDY":
+      default:
+        setStudyTab(payload.tab ?? "daily");
+        setBookUploadCourseId(payload.courseId ?? null);
+        setBookUploadDialogOpen(true);
+        break;
+    }
+  });
+
+  const openStudyHub = useCallback(() => {
+    setBookUploadCourseId(null);
+    setStudyTab("daily");
+    setBookUploadDialogOpen(true);
+  }, []);
 
   const handleBookUploadClick = (courseId: string) => {
     setBookUploadCourseId(courseId);
@@ -124,6 +159,21 @@ export const ThreadList: FC<{
     <div data-testid="thread-list" className="aui-root aui-thread-list-root flex h-full min-h-0 flex-col gap-1.5">
       {/* Thread list — scrollable area, New Chat button moved to SidebarView */}
       <div className="flex-1 min-h-0 flex flex-col gap-2 pb-2 ps-2 pe-0 pt-2">
+
+          {/* Study Hub — global 1-click entry to all study tools */}
+          <button
+            type="button"
+            onClick={openStudyHub}
+            className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-foreground/90 transition-colors hover:bg-accent/50"
+          >
+            <GraduationCapIcon className="size-4 shrink-0 text-amber-500" />
+            <span className="flex-1 text-start">{t("threadList.studyHub")}</span>
+            {dueCount > 0 && (
+              <span className="flex size-4 items-center justify-center rounded-full bg-amber-500 text-[8px] font-bold text-white">
+                {dueCount > 99 ? "99+" : dueCount}
+              </span>
+            )}
+          </button>
 
           {/* Course sections (expandable accordion) */}
           {(courses || []).map((course) => {
@@ -277,10 +327,14 @@ export const ThreadList: FC<{
         >
           <div className="space-y-3">
             <DialogTitle className="text-lg font-semibold text-[#2C2825]">
-              Upload Textbook
+              {bookUploadCourseId
+                ? t("threadList.uploadTitle")
+                : t("threadList.studyHub")}
             </DialogTitle>
             <DialogDescription className="text-[#7A736E] text-sm leading-relaxed">
-              Upload a PDF textbook for this course to help with your studies.
+              {bookUploadCourseId
+                ? t("threadList.uploadDescription")
+                : t("threadList.studyHubDescription")}
             </DialogDescription>
           </div>
 
@@ -306,7 +360,7 @@ export const ThreadList: FC<{
                     onClick={() => setStudyTab(tab.id)}
                     className={
                       "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors " +
-                      (studyTab === tab.id
+                      ((studyTab === "quiz" ? "curriculum" : studyTab) === tab.id
                         ? "bg-white text-[#2C2825] shadow-sm"
                         : "text-[#7A736E] hover:text-[#2C2825]")
                     }
@@ -316,7 +370,12 @@ export const ThreadList: FC<{
                 ))}
               </div>
 
-              {studyTab === "curriculum" && <CurriculumPanel />}
+              {(studyTab === "curriculum" || studyTab === "quiz") && (
+                <CurriculumPanel
+                  key={studyTab}
+                  initialTab={studyTab === "quiz" ? "quiz" : "structure"}
+                />
+              )}
               {studyTab === "flashcards" && (
                 <FlashcardsStudy courseId={bookUploadCourseId || undefined} onReviewComplete={refreshDueCount} />
               )}

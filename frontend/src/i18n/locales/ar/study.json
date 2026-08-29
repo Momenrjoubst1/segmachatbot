@@ -52,5 +52,9 @@
   "daily.weakTopics": "المواضيع الضعيفة",
   "daily.questionsCount": "سؤال",
   "daily.mastery": "إتقان",
-  "daily.suggestedQuestions": "أسئلة مقترحة من كتابك"
+  "daily.suggestedQuestions": "أسئلة مقترحة من كتابك",
+  "threadList.studyHub": "مركز الدراسة",
+  "threadList.studyHubDescription": "خطتك اليومية والبطاقات وتقدمك وخريطة المذاكرة — كله بمكان واحد. وبتقدر ترفع كتبك من هنا كمان.",
+  "threadList.uploadTitle": "رفع كتاب مدرسي",
+  "threadList.uploadDescription": "ارفع كتاب المادة بصيغة PDF لتساعدك بمذاكرته."
 }
