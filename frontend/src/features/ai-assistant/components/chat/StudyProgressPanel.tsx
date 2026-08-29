@@ -1,8 +1,81 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/cn";
 import { useTranslation } from "react-i18next";
-import { useStudyProgress, type StudyProgress } from "@/hooks/useStudy";
-import { BarChart3Icon, AlertTriangleIcon, CheckCircleIcon, DumbbellIcon } from "lucide-react";
+import { useStudyProgress, useGamification, type StudyProgress } from "@/hooks/useStudy";
+import {
+  BarChart3Icon,
+  AlertTriangleIcon,
+  CheckCircleIcon,
+  DumbbellIcon,
+  FlameIcon,
+  ZapIcon,
+} from "lucide-react";
+
+/** Weekly activity strip — XP, streak, 7-day bars, quiz accuracy, badges. */
+function StatsStrip() {
+  const { t } = useTranslation("study");
+  const { summary } = useGamification();
+  if (!summary) return null;
+
+  const quizTotal = summary.totals.quizCorrect + summary.totals.quizIncorrect;
+  const accuracy = quizTotal > 0 ? Math.round((summary.totals.quizCorrect / quizTotal) * 100) : null;
+  const maxDay = Math.max(1, ...summary.week.map((d) => d.reviewed));
+
+  return (
+    <div className="rounded-xl border border-border/40 bg-background p-3">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1 text-xs font-bold text-orange-600">
+          <FlameIcon className="size-3.5" />
+          {t("gamification.streakDays", { count: summary.streak })}
+        </span>
+        <span className="flex items-center gap-0.5 text-xs font-medium text-amber-600">
+          <ZapIcon className="size-3.5" />
+          {t("gamification.xp", { count: summary.xp })}
+        </span>
+        {accuracy !== null && (
+          <span className={cn("text-xs font-medium", accuracy >= 70 ? "text-emerald-600" : "text-amber-600")}>
+            {t("gamification.accuracy", { pct: accuracy })}
+          </span>
+        )}
+      </div>
+
+      {/* 7-day activity bars */}
+      <div className="mt-2">
+        <div className="flex h-8 items-end gap-1">
+          {summary.week.map((day) => (
+            <div
+              key={day.date}
+              title={`${day.date}: ${day.reviewed}`}
+              className="flex-1 rounded-t-sm bg-blue-500/70 transition-all"
+              style={{ height: `${Math.max(8, (day.reviewed / maxDay) * 100)}%` }}
+            />
+          ))}
+        </div>
+        <div className="mt-0.5 text-[10px] text-muted-foreground">
+          {t("gamification.weeklyActivity")}
+        </div>
+      </div>
+
+      {/* Badges */}
+      <div className="mt-2 flex items-center gap-1.5">
+        {summary.badges.map((badge) => (
+          <span
+            key={badge.id}
+            title={t(`gamification.badge_${badge.id}`)}
+            className={cn(
+              "flex size-5 items-center justify-center rounded-full text-[9px] font-bold",
+              badge.earned
+                ? "bg-amber-500 text-white"
+                : "bg-muted text-muted-foreground/40"
+            )}
+          >
+            {t(`gamification.badge_${badge.id}_icon`)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 interface StudyProgressPanelProps {
   courseId?: string;
@@ -65,6 +138,7 @@ export function StudyProgressPanel({
 
   return (
     <div className={cn("space-y-4 p-4", className)}>
+      <StatsStrip />
       <div className="grid grid-cols-3 gap-3">
         <StatCard
           icon={<BarChart3Icon className="h-4 w-4 text-blue-500" />}

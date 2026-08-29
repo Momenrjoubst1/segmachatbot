@@ -85,5 +85,21 @@
   "daily.examDate": "تاريخ الامتحان القادم",
   "daily.dailyGoal": "الهدف اليومي (بطاقة)",
   "daily.examCountdown": "الامتحان بعد {{days}} يوم",
-  "daily.dueTopics": "مستحق للمراجعة اليوم"
+  "daily.dueTopics": "مستحق للمراجعة اليوم",
+  "gamification.streakDays": "سلسلة {{count}} يوم",
+  "gamification.streakTitle": "أيام المذاكرة المتتالية",
+  "gamification.xp": "{{count}} نقطة",
+  "gamification.goalToday": "اليوم: {{done}}/{{goal}}",
+  "gamification.accuracy": "دقة {{pct}}%",
+  "gamification.weeklyActivity": "آخر ٧ أيام",
+  "gamification.badge_first_steps": "أول خطوة",
+  "gamification.badge_first_steps_icon": "١",
+  "gamification.badge_streak_3": "سلسلة ٣ أيام",
+  "gamification.badge_streak_3_icon": "٣",
+  "gamification.badge_streak_7": "سلسلة ٧ أيام",
+  "gamification.badge_streak_7_icon": "٧",
+  "gamification.badge_cards_50": "٥٠ بطاقة منجزة",
+  "gamification.badge_cards_50_icon": "٥٠",
+  "gamification.badge_quiz_20": "٢٠ إجابة اختبار",
+  "gamification.badge_quiz_20_icon": "٢٠"
 }

@@ -85,5 +85,21 @@
   "daily.examDate": "Next exam date",
   "daily.dailyGoal": "Daily goal (cards)",
   "daily.examCountdown": "Exam in {{days}} days",
-  "daily.dueTopics": "Due for review today"
+  "daily.dueTopics": "Due for review today",
+  "gamification.streakDays": "{{count}}-day streak",
+  "gamification.streakTitle": "Consecutive study days",
+  "gamification.xp": "{{count}} XP",
+  "gamification.goalToday": "Today: {{done}}/{{goal}}",
+  "gamification.accuracy": "{{pct}}% accuracy",
+  "gamification.weeklyActivity": "Last 7 days",
+  "gamification.badge_first_steps": "First steps",
+  "gamification.badge_first_steps_icon": "1",
+  "gamification.badge_streak_3": "3-day streak",
+  "gamification.badge_streak_3_icon": "3",
+  "gamification.badge_streak_7": "7-day streak",
+  "gamification.badge_streak_7_icon": "7",
+  "gamification.badge_cards_50": "50 cards reviewed",
+  "gamification.badge_cards_50_icon": "50",
+  "gamification.badge_quiz_20": "20 quiz answers",
+  "gamification.badge_quiz_20_icon": "20"
 }

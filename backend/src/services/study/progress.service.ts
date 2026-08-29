@@ -50,7 +50,14 @@ export async function recordQuizResult(input: RecordQuizResultInput): Promise<St
     })
     .single();
 
-  if (!error && data) return data as unknown as StudyProgressRow;
+  if (!error && data) {
+    // XP/streak feed — fire-and-forget must never fail the quiz flow.
+    try {
+      const { recordStudyEvent } = await import("./gamification.service.js");
+      await recordStudyEvent(userId, "quiz_result", { correct, points: correct ? 2 : 1 });
+    } catch { /* non-fatal */ }
+    return data as unknown as StudyProgressRow;
+  }
 
   // Function not deployed yet (rolling deploy) — fall back to the legacy path.
   if ((error as { code?: string } | null)?.code === "42883") {

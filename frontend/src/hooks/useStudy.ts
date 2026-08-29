@@ -219,6 +219,41 @@ export interface DailyPlan {
   }>;
 }
 
+export interface GamificationSummary {
+  xp: number;
+  streak: number;
+  reviewedToday: number;
+  totals: {
+    cardsReviewed: number;
+    quizCorrect: number;
+    quizIncorrect: number;
+  };
+  week: Array<{ date: string; reviewed: number; correct: number }>;
+  badges: Array<{ id: string; earned: boolean }>;
+}
+
+export function useGamification() {
+  const [summary, setSummary] = useState<GamificationSummary | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchSummary = useCallback(async () => {
+    try {
+      const res = await authFetch(`${BACKEND_URL}/api/study/gamification`);
+      if (res.ok) setSummary(await res.json());
+    } catch {
+      /* non-fatal */
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
+
+  return { summary, isLoading, refetch: fetchSummary };
+}
+
 export function useDailyPlan() {
   const [plan, setPlan] = useState<DailyPlan | null>(null);
   const [isLoading, setIsLoading] = useState(true);

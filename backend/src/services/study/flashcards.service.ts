@@ -164,6 +164,15 @@ export async function reviewFlashcard(
       .maybeSingle();
 
     if (!updErr && updated) {
+      // XP/streak feed — a failed event insert must never fail the review.
+      try {
+        const { recordStudyEvent } = await import("./gamification.service.js");
+        await recordStudyEvent(userId, "card_review", {
+          correct: quality !== "again",
+          points: quality === "easy" ? 2 : 1,
+          detail: { cardId, quality },
+        });
+      } catch { /* non-fatal */ }
       return {
         id: updated.id,
         interval_days: updated.interval_days,

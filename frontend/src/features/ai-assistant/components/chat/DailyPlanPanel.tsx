@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
-import { useDailyPlan, useStudyProfile, type StudyProfilePatch } from "@/hooks/useStudy";
+import {
+  useDailyPlan,
+  useStudyProfile,
+  useGamification,
+  type StudyProfilePatch,
+  type StudyProfile,
+} from "@/hooks/useStudy";
 import { unstable_useComposerInput } from "../../shims/assistant-ui-compat-shim";
 import {
   BookOpenIcon,
@@ -12,6 +18,9 @@ import {
   Loader2,
   UserCogIcon,
   CalendarClockIcon,
+  FlameIcon,
+  ZapIcon,
+  TargetIcon,
 } from "lucide-react";
 
 interface DailyPlanPanelProps {
@@ -22,10 +31,67 @@ interface DailyPlanPanelProps {
   className?: string;
 }
 
-/** Compact study-profile form — grade, major, exam date, daily goal. */
-function ProfileCard({ onExamDateSet }: { onExamDateSet: boolean }) {
+/** Streak + daily goal + XP strip. */
+function StreakStrip({ dailyGoal }: { dailyGoal: number | null }) {
   const { t } = useTranslation("study");
-  const { profile, isLoading, isSaving, saveProfile } = useStudyProfile();
+  const { summary } = useGamification();
+  if (!summary) return null;
+
+  const goal = dailyGoal ?? 10;
+  const goalPct = Math.min(100, Math.round((summary.reviewedToday / goal) * 100));
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border/40 bg-background px-3 py-2">
+      <span
+        className={cn(
+          "flex items-center gap-1 text-xs font-bold",
+          summary.streak > 0 ? "text-orange-600" : "text-muted-foreground"
+        )}
+        title={t("gamification.streakTitle")}
+      >
+        <FlameIcon className="size-3.5" />
+        {summary.streak}
+      </span>
+      <div className="flex-1">
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <TargetIcon className="size-3" />
+            {t("gamification.goalToday", { done: summary.reviewedToday, goal })}
+          </span>
+          <span className="flex items-center gap-0.5 font-medium text-amber-600">
+            <ZapIcon className="size-3" />
+            {t("gamification.xp", { count: summary.xp })}
+          </span>
+        </div>
+        <div className="mt-1 h-1.5 rounded-full bg-muted/50 overflow-hidden">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all",
+              goalPct >= 100 ? "bg-emerald-500" : "bg-amber-500"
+            )}
+            style={{ width: `${goalPct}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Compact study-profile form — grade, major, exam date, daily goal. */
+function ProfileCard({
+  profile,
+  isLoading,
+  isSaving,
+  saveProfile,
+  onExamDateSet,
+}: {
+  profile: StudyProfile | null;
+  isLoading: boolean;
+  isSaving: boolean;
+  saveProfile: (patch: StudyProfilePatch) => Promise<boolean>;
+  onExamDateSet: boolean;
+}) {
+  const { t } = useTranslation("study");
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [form, setForm] = useState<StudyProfilePatch>({});
@@ -149,6 +215,7 @@ export function DailyPlanPanel({
 }: DailyPlanPanelProps) {
   const { t } = useTranslation("study");
   const { plan, isLoading, error } = useDailyPlan();
+  const { profile, isLoading: profileLoading, isSaving, saveProfile } = useStudyProfile();
   const composer = unstable_useComposerInput();
 
   const handleSendQuestion = (text: string) => {
@@ -193,7 +260,14 @@ export function DailyPlanPanel({
   if (isEmpty) {
     return (
       <div className={cn("space-y-3 p-1", className)}>
-        <ProfileCard onExamDateSet={!!plan.dueTopics} />
+        {!profileLoading && <StreakStrip dailyGoal={profile?.daily_goal ?? null} />}
+        <ProfileCard
+          profile={profile}
+          isLoading={profileLoading}
+          isSaving={isSaving}
+          saveProfile={saveProfile}
+          onExamDateSet={!!plan.dueTopics}
+        />
         <div className="flex flex-col items-center gap-2 p-4 text-muted-foreground">
           <GraduationCapIcon className="h-6 w-6" />
           <span className="text-sm">{t("daily.empty")}</span>
@@ -207,7 +281,14 @@ export function DailyPlanPanel({
 
   return (
     <div className={cn("space-y-4 p-1", className)}>
-      <ProfileCard onExamDateSet={!!plan.dueTopics} />
+      {!profileLoading && <StreakStrip dailyGoal={profile?.daily_goal ?? null} />}
+      <ProfileCard
+        profile={profile}
+        isLoading={profileLoading}
+        isSaving={isSaving}
+        saveProfile={saveProfile}
+        onExamDateSet={!!plan.dueTopics}
+      />
 
       {/* Due Cards Card */}
       {hasDueCards && (

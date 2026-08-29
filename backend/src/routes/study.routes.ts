@@ -5,6 +5,7 @@ import { createFlashcards, getDueFlashcards, reviewFlashcard, deleteFlashcard, l
 import { recordQuizResult, getStudyProgress, buildProgressContext } from "../services/study/progress.service.js";
 import { gradeAnswer } from "../services/study/answer-grader.service.js";
 import { getStudyProfile, upsertStudyProfile } from "../services/study/profile.service.js";
+import { getGamificationSummary } from "../services/study/gamification.service.js";
 import { answerGradingLimiter } from "../middleware/rate-limiters.js";
 import { createLogger } from "../utils/logger.js";
 import { supabase } from "../config/supabase.config.js";
@@ -255,6 +256,18 @@ router.put(
     try { await redis.del(`user:profile:${userId}`); } catch { /* non-fatal */ }
 
     res.json({ profile });
+  })
+);
+
+// Gamification summary — streak, XP, weekly stats, badges.
+router.get(
+  "/gamification",
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+    const summary = await getGamificationSummary(userId);
+    res.json(summary);
   })
 );
 
