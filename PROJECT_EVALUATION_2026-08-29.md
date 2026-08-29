@@ -96,6 +96,23 @@
 
 ## ملحق
 
+---
+
+## Resolution Log (applied 2026-08-29, same-day execution pass)
+
+| Commit | Outcome |
+|--------|---------|
+| 1f7c86f | **5 اختبارات LoginPage أصلحت** — findBy* مع مهلة 15s للتحميل البارد للـ chunk الكسول (three.js). |
+| f6be83c | **flake اختبار الـ calendar ثبّت** — الاستيرادات الثقيلة صارت ثابتة أعلى الملف بدل جوّا الاختبار (خارج مهلة الـ 5s). |
+| a159ec9 | **مفاتيح الـ provider-scripts نقلت خارج المشروع** (`%USERPROFILE%\bin`) + `.gitignore`. |
+| 0ac2b5c | **السبب الجذري لموت CI تاريخياً**: مفتاح `frontend-test:` مكرر بالـ YAML — PyYAML ببلعه محلياً ومحلل GitHub بيرفض الملف كله (startup failure بدون jobs، والفلترة معطّلة). ‏CI صار ينشطّل فعلياً. |
+| 0a3aa65 | **bug إنتاجي حقيقي انغلق**: أمر الـ Lua ‏`slidingWindowRateLimit` كان معرّف بالـ TypeScript فقط — ‏`defineCommand` عمره ما انسمع، فالعميل الحقيقي بيرمي بكل increment والتقييد كان **بالذاكرة بالإنتاج طول العمر** (الـ Mock بتنفذه فمحلياً كل شي "شغال"). كمان ‏`REDIS_URL` كان متجاهل (عميل دايماً على localhost:6379 — ميت بالـ CI)، ومفاتيح الـ fallback صارت بـ prefix (كانت بتتصالب بين الـ limiters). |
+| 8500d3e | **e2e بيرجّع عميل Redis الحقيقي** بدل الـ stub العام الناقص — الـ CI هلق بيختبر مسار الإنتاج فعلياً (سيرفر redis الخدمي + Lua). |
+
+**CI: ‏4/4 jobs خضرا لأول مرة بتاريخ المشروع** @ 8500d3e (768 backend + 556 frontend + Playwright e2e + 106 pytest — كلها مفروضة الآن على كل دفعة).
+
+**البند الوحيد المفتوح (يدوي):** سر `SUPABASE_DB_URL` بالـ repo — ‏workflow النسخ الاحتياطي منضمّل وجدولي (يومياً 03:00 UTC) وبيفشل بأمان لحد ما تنلصق قيمة الاتصال (Dashboard → Settings → Database → Connection string → repo Settings → Secrets → Actions). *بديل متاح بإذنك: إعادة تعيين كلمة سر القاعدة عبر Management API.*
+
 - **جداول الشغل بلا سياسات RLS** (`documents`, `memory_extraction_jobs/dead_letter`, `message_embeddings`): RLS مفعّل وبدون سياسات = deny-all لـ anon/authenticated — اتجاه آمن (fail-closed) لأن الوصول يتم بـ service role فقط. لمّحة توثيق بالـ migrations README تكفي.
 - **فرق قياس الضغط:** قياسي gzip (مستوى 9) أعطى 551KB للـ eager مقابل ~470KB المقدّرة بالسجل (nginx gzip level 6 أقل كفاءة قليلاً) — لا تضارب فعلي.
 - **مراجع الإصلاح:** ‏`DEEP_CODE_REVIEW_2026-08-28.md` (المراجعة الأصلية + سجل الـ 10 جولات) · ‏`OPERATIONS.md` (runbook) · ‏`backend/scripts/load-guest.mjs` (اختبار الحمل قابل لإعادة الاستخدام).
