@@ -48,7 +48,9 @@ describe("LoginPage authentication flow", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.change(screen.getByLabelText(/signin\.emailLabel/i), { target: { value: "guest@example.com" } });
+    // SignupPage is a lazy chunk inside <Suspense> — await the form before interacting.
+    const email = await screen.findByLabelText(/signin\.emailLabel/i, {}, { timeout: 15000 });
+    fireEvent.change(email, { target: { value: "guest@example.com" } });
     fireEvent.change(screen.getByLabelText(/signin\.passwordLabel/i), { target: { value: "password" } });
     fireEvent.submit(screen.getByRole("button", { name: /signin\.submit/i }).closest("form")!);
 
@@ -60,7 +62,10 @@ describe("LoginPage authentication flow", () => {
     authMocks.signUp.mockResolvedValue({ data: { session: null }, error: null });
     renderLogin("/login");
 
-    fireEvent.click(screen.getByRole("button", { name: /signup\.(noAccount|hasAccount)/i }));
+    // The mode toggle lives in the lazy chunk too — await it first.
+    fireEvent.click(
+      await screen.findByRole("button", { name: /signup\.(noAccount|hasAccount)/i }, { timeout: 15000 })
+    );
     fireEvent.change(screen.getByLabelText(/signin\.emailLabel/i), { target: { value: "guest@example.com" } });
     fireEvent.change(screen.getByLabelText(/signin\.passwordLabel/i), { target: { value: "password" } });
     fireEvent.submit(screen.getByRole("button", { name: /signup\.submit/i }).closest("form")!);

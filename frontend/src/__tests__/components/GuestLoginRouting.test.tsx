@@ -95,7 +95,9 @@ describe('Guest Login Routing', () => {
   });
 
   describe('LoginPage routing', () => {
-    it('renders LoginPage when navigating to /login', () => {
+    // SignupPage is a lazy chunk inside <Suspense> — the form only exists once
+    // the dynamic import resolves, so every assertion here must await findBy*.
+    it('renders LoginPage when navigating to /login', async () => {
       renderWithProviders(
         <Routes>
           <Route path="/" element={<div>Home</div>} />
@@ -103,31 +105,37 @@ describe('Guest Login Routing', () => {
         </Routes>,
         ['/login']
       );
-      
-      expect(screen.getByText(/signin\.title/i)).toBeInTheDocument();
+
+      expect(
+        await screen.findByText(/signin\.title/i, {}, { timeout: 15000 })
+      ).toBeInTheDocument();
     });
 
-    it('renders email and password fields', () => {
+    it('renders email and password fields', async () => {
       renderWithProviders(
         <Routes>
           <Route path="/login" element={<LoginPage />} />
         </Routes>,
         ['/login']
       );
-      
-      expect(screen.getByLabelText(/signin\.emailLabel/i)).toBeInTheDocument();
+
+      expect(
+        await screen.findByLabelText(/signin\.emailLabel/i, {}, { timeout: 15000 })
+      ).toBeInTheDocument();
       expect(screen.getByLabelText(/signin\.passwordLabel/i)).toBeInTheDocument();
     });
 
-    it('renders submit button', () => {
+    it('renders submit button', async () => {
       renderWithProviders(
         <Routes>
           <Route path="/login" element={<LoginPage />} />
         </Routes>,
         ['/login']
       );
-      
-      expect(screen.getByRole('button', { name: /signin\.submit/i })).toBeInTheDocument();
+
+      expect(
+        await screen.findByRole('button', { name: /signin\.submit/i }, { timeout: 15000 })
+      ).toBeInTheDocument();
     });
   });
 
