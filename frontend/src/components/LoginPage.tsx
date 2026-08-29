@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { SignupPage } from "@/components/ui/sign-up-page";
+// Lazy: three.js butterfly overlay must not ride on the auth chunk.
+const SignupPage = lazy(() =>
+  import("@/components/ui/sign-up-page").then((m) => ({ default: m.SignupPage })),
+);
 
 import type { Location as RouterLocation } from "react-router-dom";
 
@@ -51,11 +54,13 @@ export function LoginPage() {
   }, []);
 
   return (
-    <SignupPage
-      initialMode="signin"
-      onSuccess={() => {
-        navigate(from, { replace: true });
-      }}
-    />
+    <Suspense fallback={null}>
+      <SignupPage
+        initialMode="signin"
+        onSuccess={() => {
+          navigate(from, { replace: true });
+        }}
+      />
+    </Suspense>
   );
 }

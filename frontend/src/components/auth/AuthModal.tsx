@@ -1,5 +1,10 @@
+import { lazy, Suspense } from "react";
 import { useAuthModal } from "@/context/AuthModalContext";
-import { SignupPage } from "@/components/ui/sign-up-page";
+// Lazy: this page pulls three.js (butterfly overlay) — keep it out of the
+// initial bundle for every visitor who is not looking at the auth modal.
+const SignupPage = lazy(() =>
+  import("@/components/ui/sign-up-page").then((m) => ({ default: m.SignupPage })),
+);
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -30,12 +35,14 @@ export function AuthModal() {
             <X className="size-4" />
           </DialogPrimitive.Close>
 
-          <SignupPage
-            initialMode={activeTab === "signup" ? "signup" : "signin"}
-            onSuccess={() => {
-              closeAuthModal();
-            }}
-          />
+          <Suspense fallback={null}>
+            <SignupPage
+              initialMode={activeTab === "signup" ? "signup" : "signin"}
+              onSuccess={() => {
+                closeAuthModal();
+              }}
+            />
+          </Suspense>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
