@@ -3,20 +3,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { SidebarView } from '@/features/ai-assistant/shadcn/components/Sidebar/SidebarView';
 
-// ThreadList/DailyPlanPanel call the Aui composer hook (unstable_useComposerInput),
-// which requires the full provider tree these tests don't mount.
-vi.mock('@/features/ai-assistant/shims/assistant-ui-compat-shim', async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  return {
-    ...actual,
-    unstable_useComposerInput: () => ({
-      value: '',
-      setText: vi.fn(),
-      send: vi.fn(),
-    }),
-  };
-});
-
 // Mock useChatHistory
 vi.mock('@/hooks/useChatHistory', () => ({
   useChatHistory: () => ({

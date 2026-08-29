@@ -8,7 +8,7 @@ import {
   type StudyProfilePatch,
   type StudyProfile,
 } from "@/hooks/useStudy";
-import { unstable_useComposerInput } from "../../shims/assistant-ui-compat-shim";
+import { dispatchUIAction } from "@/context/AgenticUIBus";
 import {
   BookOpenIcon,
   GraduationCapIcon,
@@ -216,15 +216,14 @@ export function DailyPlanPanel({
   const { t } = useTranslation("study");
   const { plan, isLoading, error } = useDailyPlan();
   const { profile, isLoading: profileLoading, isSaving, saveProfile } = useStudyProfile();
-  const composer = unstable_useComposerInput();
 
+  // The study dialog lives in the sidebar, OUTSIDE the AuiProvider tree —
+  // pre-fill the composer via the provider-free AgenticUIBus instead of the
+  // Aui composer hook. The user reviews and presses send.
   const handleSendQuestion = (text: string) => {
-    composer.setText(text);
-    // Small delay to ensure text is set before send
-    requestAnimationFrame(() => {
-      composer.send();
-      onQuestionSent?.();
-    });
+    dispatchUIAction({ target: "composer", action: "SET_TEXT", payload: { text } });
+    dispatchUIAction({ target: "composer", action: "FOCUS", payload: {} });
+    onQuestionSent?.();
   };
 
   if (isLoading) {

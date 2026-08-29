@@ -1,6 +1,11 @@
 
+// React must be imported BEFORE any module-scope lazy() call: when Vite emits
+// CJS-interop destructuring for the react dep, the import becomes a const at
+// this source position — leaving lazy() above it hits a TDZ ReferenceError
+// ("Cannot access 'lazy' before initialization") that crashes the whole app.
+import { type FC, lazy, memo, Suspense, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  UserMessageAttachments,
+  UserMessageAttachments
 } from "../../../ui/attachment";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,7 +64,6 @@ import { LexicalComposerInput } from "@assistant-ui/react-lexical";
 // Markdown (react-markdown + the katex stack, ~420KB) only matters once
 // messages actually render — the welcome screen must not pay for it. Both
 // renderers below are lazy with plain-text fallbacks.
-import { type FC, lazy, memo, Suspense, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import {
   useMessageFeedback,

@@ -28,8 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { useAgenticAction } from "@/context/AgenticUIBus";
-import { unstable_useComposerInput } from "../shims/assistant-ui-compat-shim";
+import { dispatchUIAction, useAgenticAction } from "@/context/AgenticUIBus";
 import { TextbookUpload } from "../components/TextbookUpload";
 import { CurriculumPanel } from "../components/CurriculumPanel";
 import { FlashcardsStudy } from "../components/chat/FlashcardsStudy";
@@ -144,15 +143,15 @@ export const ThreadList: FC<{
   }, []);
 
   // "Train me" — open the chat with a step-by-step tutor prompt for a topic.
-  const composer = unstable_useComposerInput();
+  // The sidebar renders OUTSIDE the AuiProvider tree, so the composer hook
+  // cannot be used here; the AgenticUIBus composer actions are provider-free
+  // and handled by AssistantLayout (pre-fill + focus, user presses send).
   const handleTrainTopic = useCallback((topic: string) => {
     const prompt = `علّمني موضوع "${topic}" خطوة بخطوة: ابدأ بسؤال بسيط لتعرف مستواي، ثم اشرح لي مع مثال، ثم اختبرني بسؤال وصحّح لي.`;
-    composer.setText(prompt);
-    requestAnimationFrame(() => {
-      composer.send();
-      setBookUploadDialogOpen(false);
-    });
-  }, [composer]);
+    dispatchUIAction({ target: "composer", action: "SET_TEXT", payload: { text: prompt } });
+    dispatchUIAction({ target: "composer", action: "FOCUS", payload: {} });
+    setBookUploadDialogOpen(false);
+  }, []);
 
   const handleBookUploadClick = (courseId: string) => {
     setBookUploadCourseId(courseId);
