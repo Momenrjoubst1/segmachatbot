@@ -42,6 +42,7 @@ CREATE OR REPLACE FUNCTION record_quiz_result(
 )
 RETURNS study_progress
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   v_outcome numeric := CASE WHEN p_correct THEN 1 ELSE 0 END;
