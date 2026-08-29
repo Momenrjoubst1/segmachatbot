@@ -47,14 +47,18 @@ export function createRedisSlidingWindowStore(options: RedisStoreOptions): IRate
           member,
         );
 
-        const [totalHits, resetTimeMs] = result;
+        // ioredis may deliver Lua table values as strings — normalize.
+        const [rawHits, rawReset] = result as [number | string, number | string];
         return {
-          totalHits,
-          resetTime: new Date(resetTimeMs),
+          totalHits: Number(rawHits),
+          resetTime: new Date(Number(rawReset)),
         };
       } catch (error) {
         log.error('Redis Rate Limit Error, falling back to in-memory', { error });
-        return fallbackIncrement(key, 300_000);
+        // Key the fallback by prefix+key: the counter map is module-global and
+        // shared by every store instance — unprefixed keys collided across
+        // limiters and cross-charged each other's buckets.
+        return fallbackIncrement(prefix + key, 300_000);
       }
     },
 
