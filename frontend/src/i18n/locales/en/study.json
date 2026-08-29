@@ -56,5 +56,19 @@
   "threadList.studyHub": "Study Hub",
   "threadList.studyHubDescription": "Your daily plan, flashcards, progress and study map — all in one place. Upload textbook PDFs here too.",
   "threadList.uploadTitle": "Upload Textbook",
-  "threadList.uploadDescription": "Upload a PDF textbook for this course to help with your studies."
+  "threadList.uploadDescription": "Upload a PDF textbook for this course to help with your studies.",
+  "quiz.writeAnswer": "Write your answer",
+  "quiz.answerPlaceholder": "Answer in your own words…",
+  "quiz.checkAnswer": "Check my answer",
+  "quiz.checking": "Checking…",
+  "quiz.cancelAnswer": "Cancel",
+  "quiz.hintButton": "Hint",
+  "quiz.hideHint": "Hide hint",
+  "quiz.hint": "Try answering in your own words first — check it against page {{page}}.",
+  "quiz.verdict.correct": "Correct!",
+  "quiz.verdict.partial": "Partially correct",
+  "quiz.verdict.incorrect": "Not quite",
+  "quiz.modelAnswer": "Show model answer",
+  "quiz.masteryNow": "Mastery: {{pct}}%",
+  "quiz.gradingError": "Could not check the answer right now. Please try again."
 }

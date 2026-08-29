@@ -12,11 +12,17 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 import { useTextbooks } from "@/hooks/useTextbooks";
 import {
   useCurriculum,
   type CurriculumSection,
 } from "@/hooks/useCurriculum";
+import {
+  gradeAnswerApi,
+  type GradeAnswerResponse,
+  type GraderVerdict,
+} from "@/hooks/useStudy";
 
 type Tab = "structure" | "glossary" | "quiz";
 
@@ -79,7 +85,14 @@ function SectionNode({ section, depth }: { section: CurriculumSection; depth: nu
   );
 }
 
-function QuizMode({ questions }: { questions: NonNullable<ReturnType<typeof useCurriculum>["questions"]> }) {
+function QuizMode({
+  questions,
+  textbookId,
+}: {
+  questions: NonNullable<ReturnType<typeof useCurriculum>["questions"]>;
+  textbookId: string | null;
+}) {
+  const { t } = useTranslation("study");
   const shuffled = useMemo(() => {
     const arr = [...questions];
     for (let i = arr.length - 1; i > 0; i--) {
@@ -91,6 +104,41 @@ function QuizMode({ questions }: { questions: NonNullable<ReturnType<typeof useC
 
   const [index, setIndex] = useState(0);
   const [showAnswerHint, setShowAnswerHint] = useState(false);
+  const [showAnswerBox, setShowAnswerBox] = useState(false);
+  const [answerText, setAnswerText] = useState("");
+  const [grading, setGrading] = useState(false);
+  const [result, setResult] = useState<GradeAnswerResponse | null>(null);
+  const [gradeError, setGradeError] = useState<string | null>(null);
+
+  const q = shuffled[index];
+
+  const resetAnswerState = () => {
+    setAnswerText("");
+    setShowAnswerBox(false);
+    setResult(null);
+    setGradeError(null);
+    setShowAnswerHint(false);
+  };
+
+  const checkAnswer = async () => {
+    if (!q || !answerText.trim() || grading) return;
+    setGrading(true);
+    setGradeError(null);
+    try {
+      const res = await gradeAnswerApi({
+        question: q.text,
+        studentAnswer: answerText.trim(),
+        topic: q.section_path?.split(">").pop()?.trim() || q.section_path || "عام",
+        textbookId: textbookId ?? undefined,
+        sectionPath: q.section_path ?? undefined,
+      });
+      setResult(res);
+    } catch {
+      setGradeError(t("quiz.gradingError"));
+    } finally {
+      setGrading(false);
+    }
+  };
 
   if (shuffled.length === 0) {
     return (
@@ -100,7 +148,11 @@ function QuizMode({ questions }: { questions: NonNullable<ReturnType<typeof useC
     );
   }
 
-  const q = shuffled[index];
+  const verdictStyles: Record<GraderVerdict, string> = {
+    correct: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700",
+    partial: "border-amber-500/40 bg-amber-500/10 text-amber-700",
+    incorrect: "border-red-500/40 bg-red-500/10 text-red-700",
+  };
 
   return (
     <div className="space-y-3">
@@ -120,10 +172,88 @@ function QuizMode({ questions }: { questions: NonNullable<ReturnType<typeof useC
         {q.text}
       </div>
 
-      {showAnswerHint && (
+      {!showAnswerBox && !result && (
+        <button
+          type="button"
+          onClick={() => setShowAnswerBox(true)}
+          className="w-full rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          {t("quiz.writeAnswer")}
+        </button>
+      )}
+
+      {showAnswerBox && !result && (
+        <div className="space-y-2">
+          <textarea
+            dir="auto"
+            value={answerText}
+            onChange={(e) => setAnswerText(e.target.value)}
+            placeholder={t("quiz.answerPlaceholder")}
+            rows={3}
+            className="w-full resize-none rounded-lg border border-border/60 bg-background p-2.5 text-xs leading-relaxed outline-none focus:border-primary/50"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={checkAnswer}
+              disabled={grading || !answerText.trim()}
+              className="flex-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {grading ? t("quiz.checking") : t("quiz.checkAnswer")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAnswerBox(false)}
+              className="rounded-lg border border-border/60 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {t("quiz.cancelAnswer")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {gradeError && (
+        <p className="text-xs text-destructive">{gradeError}</p>
+      )}
+
+      {result && (
+        <div className={cn("space-y-2 rounded-xl border p-3", verdictStyles[result.verdict])}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold">
+              {t(`quiz.verdict.${result.verdict}`)}
+            </span>
+            {result.recorded && result.masteryLevel !== null && (
+              <span className="text-[10px] font-medium opacity-80">
+                {t("quiz.masteryNow", { pct: Math.round(result.masteryLevel * 100) })}
+              </span>
+            )}
+          </div>
+          <p dir="auto" className="text-xs leading-relaxed opacity-90">
+            {result.feedback}
+          </p>
+          {result.missedPoints.length > 0 && (
+            <ul dir="auto" className="list-disc space-y-0.5 ps-4 text-[11px] opacity-80">
+              {result.missedPoints.map((point, i) => (
+                <li key={i}>{point}</li>
+              ))}
+            </ul>
+          )}
+          {result.modelAnswer && (
+            <details className="group">
+              <summary className="cursor-pointer text-[11px] font-medium underline underline-offset-2">
+                {t("quiz.modelAnswer")}
+              </summary>
+              <p dir="auto" className="mt-1 whitespace-pre-wrap text-[11px] leading-relaxed opacity-90">
+                {result.modelAnswer}
+              </p>
+            </details>
+          )}
+        </div>
+      )}
+
+      {showAnswerHint && !result && (
         <p className="px-1 text-xs text-muted-foreground">
-          Answer it in your own words, then ask the assistant in chat to check your
-          answer against page {q.page_number ?? "?"}.
+          {t("quiz.hint", { page: q.page_number ?? "?" })}
         </p>
       )}
 
@@ -134,7 +264,7 @@ function QuizMode({ questions }: { questions: NonNullable<ReturnType<typeof useC
           disabled={index === 0}
           onClick={() => {
             setIndex((i) => Math.max(0, i - 1));
-            setShowAnswerHint(false);
+            resetAnswerState();
           }}
           className="h-8"
         >
@@ -146,14 +276,14 @@ function QuizMode({ questions }: { questions: NonNullable<ReturnType<typeof useC
           className="h-8 flex-1"
           onClick={() => setShowAnswerHint((v) => !v)}
         >
-          {showAnswerHint ? "Hide hint" : "Hint"}
+          {showAnswerHint ? t("quiz.hideHint") : t("quiz.hintButton")}
         </Button>
         <Button
           size="sm"
           disabled={index === shuffled.length - 1}
           onClick={() => {
             setIndex((i) => Math.min(shuffled.length - 1, i + 1));
-            setShowAnswerHint(false);
+            resetAnswerState();
           }}
           className="h-8"
         >
@@ -287,7 +417,7 @@ export function CurriculumPanel({ initialTab = "structure" }: { initialTab?: Tab
 
         {!isLoading && tab === "quiz" && (
           questions ? (
-            <QuizMode questions={questions} />
+            <QuizMode questions={questions} textbookId={activeId} />
           ) : (
             <p className="py-6 text-center text-xs text-muted-foreground">Loading questions…</p>
           )

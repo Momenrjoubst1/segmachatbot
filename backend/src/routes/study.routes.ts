@@ -3,6 +3,8 @@ import { z } from "zod";
 import { asyncHandler } from "../utils/express-async-wrapper.js";
 import { createFlashcards, getDueFlashcards, reviewFlashcard, deleteFlashcard, listFlashcards } from "../services/study/flashcards.service.js";
 import { recordQuizResult, getStudyProgress, buildProgressContext } from "../services/study/progress.service.js";
+import { gradeAnswer } from "../services/study/answer-grader.service.js";
+import { answerGradingLimiter } from "../middleware/rate-limiters.js";
 import { createLogger } from "../utils/logger.js";
 import { supabase } from "../config/supabase.config.js";
 
@@ -18,6 +20,15 @@ const quizResultSchema = z.object({
   correct: z.boolean(),
   courseId: z.string().uuid().optional(),
   textbookId: z.string().uuid().optional(),
+});
+
+const gradeAnswerSchema = z.object({
+  question: z.string().min(3).max(2000),
+  studentAnswer: z.string().min(1).max(4000),
+  topic: z.string().min(1).max(200),
+  courseId: z.string().uuid().optional(),
+  textbookId: z.string().uuid().optional(),
+  sectionPath: z.string().max(500).optional(),
 });
 
 const createFlashcardsSchema = z.object({
@@ -160,6 +171,26 @@ router.post(
     }
 
     const result = await recordQuizResult({ userId, ...parsed.data });
+    res.json(result);
+  })
+);
+
+// Grade a free-form quiz answer against the student's own textbook and record
+// the outcome into study progress (used by the Study Map quiz panel).
+router.post(
+  "/grade-answer",
+  answerGradingLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+    const parsed = gradeAnswerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      return;
+    }
+
+    const result = await gradeAnswer({ userId, ...parsed.data });
     res.json(result);
   })
 );

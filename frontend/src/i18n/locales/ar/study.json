@@ -56,5 +56,19 @@
   "threadList.studyHub": "مركز الدراسة",
   "threadList.studyHubDescription": "خطتك اليومية والبطاقات وتقدمك وخريطة المذاكرة — كله بمكان واحد. وبتقدر ترفع كتبك من هنا كمان.",
   "threadList.uploadTitle": "رفع كتاب مدرسي",
-  "threadList.uploadDescription": "ارفع كتاب المادة بصيغة PDF لتساعدك بمذاكرته."
+  "threadList.uploadDescription": "ارفع كتاب المادة بصيغة PDF لتساعدك بمذاكرته.",
+  "quiz.writeAnswer": "اكتب إجابتك",
+  "quiz.answerPlaceholder": "أجب بكلامك الخاص…",
+  "quiz.checkAnswer": "صحّح إجابتي",
+  "quiz.checking": "جاري التصحيح…",
+  "quiz.cancelAnswer": "إلغاء",
+  "quiz.hintButton": "تلميح",
+  "quiz.hideHint": "إخفاء التلميح",
+  "quiz.hint": "حاول الإجابة بكلامك أولاً — ثم قارن إجابتك بما ورد في الصفحة {{page}}.",
+  "quiz.verdict.correct": "إجابة صحيحة!",
+  "quiz.verdict.partial": "صحيحة جزئياً",
+  "quiz.verdict.incorrect": "ليست صحيحة",
+  "quiz.modelAnswer": "اعرض الإجابة النموذجية",
+  "quiz.masteryNow": "التمكن: {{pct}}%",
+  "quiz.gradingError": "ما قدرناش نصحح الإجابة هلق. جرب مرة ثانية."
 }

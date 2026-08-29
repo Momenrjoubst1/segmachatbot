@@ -122,6 +122,37 @@ export async function recordQuizResultApi(topic: string, correct: boolean, cours
   return res.json();
 }
 
+export type GraderVerdict = "correct" | "partial" | "incorrect";
+
+export interface GradeAnswerResponse {
+  verdict: GraderVerdict;
+  score: number;
+  feedback: string;
+  modelAnswer: string;
+  missedPoints: string[];
+  gradedBy: "objective" | "llm" | "lexical-fallback";
+  correct: boolean;
+  masteryLevel: number | null;
+  recorded: boolean;
+}
+
+export async function gradeAnswerApi(body: {
+  question: string;
+  studentAnswer: string;
+  topic: string;
+  courseId?: string;
+  textbookId?: string;
+  sectionPath?: string;
+}): Promise<GradeAnswerResponse> {
+  const res = await authFetch(`${BACKEND_URL}/api/study/grade-answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("Failed to grade answer");
+  return res.json();
+}
+
 export function useDueFlashcardsCount(pollIntervalMs = 5 * 60 * 1000) {
   const [count, setCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);

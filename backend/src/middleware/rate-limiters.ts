@@ -154,6 +154,20 @@ export const uploadLimiter = createLimiter({
   keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip || ''),
 });
 
+// Answer grading limiter — each grading call may hit an embedding provider and
+// an auxiliary LLM, so cap per-user cost.
+export const answerGradingLimiter = createLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour window
+  max: 60,                  // 60 graded answers per user per hour
+  prefix: 'rl:study-grade:',
+  message: {
+    error: 'too_many_requests',
+    message: 'Too many answer grading requests. Please try again later.',
+    retryAfter: 15 * 60,
+  },
+  keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip || ''),
+});
+
 // ==========================================
 // Exports for backward compatibility
 // ==========================================
