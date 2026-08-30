@@ -70,7 +70,9 @@ describe('Constants', () => {
 
     it('should return default provider for unknown model', () => {
       const provider = getModelProvider('unknown-model');
-      expect(provider).toBe('openrouter');
+      // 2cb556e routed every task to verified-live ids — bigmodel is the
+      // universal fallback now (was 'openrouter').
+      expect(provider).toBe('bigmodel');
     });
   });
 
