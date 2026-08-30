@@ -1,27 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%">
   <style>
     .b-t-line {
-      stroke: currentColor; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
+      stroke: #BE1E2D; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
       stroke-dasharray: 40; stroke-dashoffset: 40;
       animation: dBranchTop 5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
     }
     .b-b-line {
-      stroke: currentColor; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
+      stroke: #BE1E2D; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
       stroke-dasharray: 40; stroke-dashoffset: 40;
       animation: dBranchBottom 5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
     }
     .r-tri-path {
-      stroke: currentColor; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
+      stroke: #BE1E2D; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
       stroke-dasharray: 120; stroke-dashoffset: 120;
       animation: dRightTriangle 5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
     }
     .m-vert-line {
-      stroke: currentColor; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
+      stroke: #BE1E2D; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
       stroke-dasharray: 80; stroke-dashoffset: 80;
       animation: dVerticalLine 5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
     }
     .l-tri-path {
-      stroke: currentColor; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
+      stroke: #BE1E2D; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; fill: none;
       stroke-dasharray: 120; stroke-dashoffset: 120;
       animation: dLeftTriangle 5s cubic-bezier(0.25, 1, 0.5, 1) infinite;
     }
@@ -62,11 +62,11 @@
       90%, 100% { stroke-dashoffset: 120; opacity: 0; }
     }
 
-    .n-br-t { transform: scale(0); transform-origin: 87px 37px; animation: pNodeE 5s ease-out infinite; animation-delay: 0s; fill: currentColor; }
-    .n-br-b { transform: scale(0); transform-origin: 87px 63px; animation: pNodeE 5s ease-out infinite; animation-delay: 0s; fill: currentColor; }
-    .n-center-t { transform: scale(0); transform-origin: 50px 23px; animation: pNodeE 5s ease-out infinite; animation-delay: 1.9s; fill: currentColor; }
-    .n-center-b { transform: scale(0); transform-origin: 50px 77px; animation: pNodeE 5s ease-out infinite; animation-delay: 1.9s; fill: currentColor; }
-    .n-left-far { transform: scale(0); transform-origin: 26px 50px; animation: pNodeE 5s ease-out infinite; animation-delay: 3.5s; fill: currentColor; }
+    .n-br-t { transform: scale(0); transform-origin: 87px 37px; animation: pNodeE 5s ease-out infinite; animation-delay: 0s; fill: #BE1E2D; }
+    .n-br-b { transform: scale(0); transform-origin: 87px 63px; animation: pNodeE 5s ease-out infinite; animation-delay: 0s; fill: #BE1E2D; }
+    .n-center-t { transform: scale(0); transform-origin: 50px 23px; animation: pNodeE 5s ease-out infinite; animation-delay: 1.9s; fill: #BE1E2D; }
+    .n-center-b { transform: scale(0); transform-origin: 50px 77px; animation: pNodeE 5s ease-out infinite; animation-delay: 1.9s; fill: #BE1E2D; }
+    .n-left-far { transform: scale(0); transform-origin: 26px 50px; animation: pNodeE 5s ease-out infinite; animation-delay: 3.5s; fill: #BE1E2D; }
 
     @keyframes pNodeE {
       0% { transform: scale(0); opacity: 0; }
