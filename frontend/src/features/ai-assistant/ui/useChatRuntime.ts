@@ -276,7 +276,10 @@ function contextMessageToRuntimeParts(msg: {
   attachments?: ChatAttachmentMeta[];
 }): RuntimeUIMessagePart[] {
   const parts: RuntimeUIMessagePart[] = [];
-  if (msg.content) parts.push({ type: "text", text: msg.content });
+  // Trim: trailing "\n"/spaces from persisted rows would render as phantom
+  // inline space inside the pre-wrap user bubble after the runtime rebuilds
+  // messages from history.
+  if (msg.content?.trim()) parts.push({ type: "text", text: msg.content.trim() });
   for (const a of msg.attachments ?? []) {
     if (!a.r2Key) continue;
     parts.push({
@@ -345,7 +348,7 @@ const AuthenticatedMessageSyncer = () => {
     const existingMap = new Map(activeThreadMessages.map((m) => [m.id, m]));
     for (const m of aiMessages) {
       const textPart = m.parts?.find((p: { type: string }) => p.type === "text");
-      const content = textPart && "text" in textPart ? textPart.text : "";
+      const content = textPart && "text" in textPart ? (textPart.text ?? "").trim() : "";
       // Keep attachment refs so the UI (and next turns' history) keep them.
       const attachments = (m.parts ?? [])
         .filter((p: { type?: string }) => p.type === "file")

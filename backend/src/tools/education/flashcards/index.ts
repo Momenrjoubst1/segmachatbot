@@ -6,7 +6,7 @@ import { createFlashcards } from "../../../services/study/flashcards.service.js"
 import { getStudyProgress } from "../../../services/study/progress.service.js";
 import { fetchTopicContext } from "../../../services/study/quiz-generator.service.js";
 
-createToolMetadata("generate_flashcards", "توليد وحفظ بطاقات تعليمية (Flashcards) من موضوع معين", {
+createToolMetadata("generate_flashcards", "Generate and save study flashcards from a given topic", {
   requiresUserId: true,
   category: "education",
   enabledByDefault: true,
@@ -15,14 +15,14 @@ createToolMetadata("generate_flashcards", "توليد وحفظ بطاقات تع
 const DAILY_GENERATION_QUOTA = 10;
 
 registerTool("generate_flashcards", {
-  description: "توليد وحفظ بطاقات تعليمية (Flashcards) من موضوع معين. البطاقات تُحفظ تلقائياً للمراجعة اللاحقة بنظام التكرار المتباعد (SRS). إن لم يحدد الطالب موضوعاً فسيتم استهداف أضعف مواضيعه تلقائياً.",
+  description: "Generate and save study flashcards from a given topic. Cards are saved automatically for later review using spaced repetition (SRS). If the student does not specify a topic, their weakest topics are targeted automatically.",
   inputSchema: z.object({
-    topic: z.string().optional().describe("الموضوع المراد توليد بطاقات له. اتركه فارغاً لاستهداف أضعف موضوع عند الطالب تلقائياً"),
-    count: z.number().optional().describe("عدد البطاقات المطلوبة (افتراضياً 5، حد أقصى 15)"),
-    courseId: z.string().uuid().optional().describe("معرف المادة الدراسية (اختياري)"),
-    textbookId: z.string().uuid().optional().describe("معرف الكتاب المدرسي (اختياري)"),
-    sectionPath: z.string().optional().describe("مسار القسم/الدرس في الكتاب (اختياري)"),
-    __userId: z.string().optional().describe("معرّف المستخدم (يُمرر تلقائياً)"),
+    topic: z.string().optional().describe("Topic to generate cards for. Leave empty to automatically target the student's weakest topic"),
+    count: z.number().optional().describe("Number of cards requested (default 5, max 15)"),
+    courseId: z.string().uuid().optional().describe("Course ID (optional)"),
+    textbookId: z.string().uuid().optional().describe("Textbook ID (optional)"),
+    sectionPath: z.string().optional().describe("Section/lesson path in the book (optional)"),
+    __userId: z.string().optional().describe("User ID (passed automatically)"),
   }),
   execute: async ({
     topic,
@@ -50,7 +50,7 @@ registerTool("generate_flashcards", {
           if (used > DAILY_GENERATION_QUOTA) {
             return JSON.stringify({
               status: "error",
-              message: `وصلت الحد اليومي لتوليد البطاقات (${DAILY_GENERATION_QUOTA} مرات). راجع بطاقاتك الحالية وجرّب غداً.`,
+              message: `You have reached the daily card generation limit (${DAILY_GENERATION_QUOTA} times). Review your current cards and try again tomorrow.`,
             });
           }
         } catch { /* quota store down — fail open */ }
@@ -69,7 +69,7 @@ registerTool("generate_flashcards", {
       if (!effectiveTopic) {
         return JSON.stringify({
           status: "error",
-          message: "حدد موضوعاً لتوليد البطاقات، أو سجل بعض نتائج الاختبارات حتى أعرف مواضيعك الضعيفة.",
+          message: "Please specify a topic to generate cards, or record some quiz results so I can identify your weak topics.",
         });
       }
 
@@ -85,18 +85,18 @@ registerTool("generate_flashcards", {
       const model = await getSmallChatModel();
       const { text } = await generateText({
         model,
-        prompt: `أنشئ ${numCards} بطاقة تعليمية (Flashcard) عن موضوع: "${effectiveTopic}".
-كل بطاقة تحتوي:
-- السؤال (question)
-- الجواب (answer)
+        prompt: `Create ${numCards} flashcards about the topic: "${effectiveTopic}".
+Each card must contain:
+- question
+- answer
 
 ${bookContext
-  ? `اركز على هذه المقاطع من كتاب الطالب نفسه — الأسئلة والأجوبة يجب أن تعكس محتواها فعلياً:\n${bookContext}`
-  : "اكتب بطاقات دقيقة علمياً تغطي أهم نقاط الموضوع."}
+  ? `Focus on these excerpts from the student's own book — the questions and answers must genuinely reflect its content:\n${bookContext}`
+  : "Write scientifically accurate cards covering the most important points of the topic."}
 
-اكتب البطاقات بنفس لغة الموضوع أعلاه (عربي لموضوع عربي، إنجليزي لموضوع إنجليزي).
+Write the cards in the same language as the topic above (Arabic for an Arabic topic, English for an English topic).
 
-ارجع JSON array فقط بالشكل:
+Return only a JSON array in this format:
 [{"question": "...", "answer": "..."}]`,
         temperature: 0.7,
       });
@@ -142,10 +142,10 @@ ${bookContext
         topic: effectiveTopic,
         cards: validCards,
         saved,
-        message: saved > 0 ? `تم حفظ ${saved} بطاقة للمراجعة اللاحقة (SRS).` : "لم يتم الحفظ (يتطلب تسجيل الدخول).",
+        message: saved > 0 ? `${saved} cards saved for later review (SRS).` : "Not saved (login required).",
       });
     } catch (err: unknown) {
-      return JSON.stringify({ status: "error", message: "فشل في توليد البطاقات", error: err instanceof Error ? err.message : String(err) });
+      return JSON.stringify({ status: "error", message: "Card generation failed", error: err instanceof Error ? err.message : String(err) });
     }
   },
 });

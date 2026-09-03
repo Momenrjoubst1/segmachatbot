@@ -20,7 +20,7 @@ import type {
 const TICK_MS = 250;
 
 /** Extract step events from the data-* parts in an AUI message. */
-function extractStepEvents(parts: AuiPart[]): StepStreamEvent[] {
+export function extractStepEvents(parts: AuiPart[]): StepStreamEvent[] {
   const out: StepStreamEvent[] = [];
   for (const p of parts) {
     if (p && typeof p === "object" && typeof p.type === "string" && p.type.startsWith("data-")) {

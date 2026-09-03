@@ -1,5 +1,5 @@
 import { type AcademicCourse } from "../../../hooks/useCourses";
-import { useState, useEffect, useCallback, useMemo, type FC, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type FC, lazy, Suspense } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useTranslation } from "react-i18next";
 import { LOAD_ERROR_I18N, type LoadErrorCode } from "@/lib/load-errors";
@@ -219,8 +219,12 @@ export const Shadcn: FC<{
 
   // Month navigation inside the grid refetches the visible window (including
   // recurring bases that started before it).
+  const lastRangeRef = useRef("");
   const handleVisibleRangeChange = useCallback((range: { start: Date; end: Date }) => {
     if (!calendarUserId) return;
+    const key = `${range.start.toISOString()}|${range.end.toISOString()}`;
+    if (lastRangeRef.current === key) return;
+    lastRangeRef.current = key;
     calendar.fetchEvents('this_month', undefined, range);
   }, [calendarUserId, calendar.fetchEvents]);
 
@@ -339,24 +343,23 @@ export const Shadcn: FC<{
         >
           {!isGuestMode && activeView === 'calendar' ? (
             <div className="flex-1 h-full flex overflow-hidden bg-background">
-              <div className="flex-1 min-w-0 h-full overflow-y-auto custom-scrollbar">
-                {calendar.isCalendarLoading ? (
-                  <div className="flex items-center justify-center h-full">
+              <div className="relative flex-1 min-w-0 h-full overflow-y-auto custom-scrollbar">
+                <Suspense fallback={<PanelLoading />}>
+                  <ErrorBoundary componentName="FullScreenCalendar">
+                    <FullScreenCalendar
+                      data={calendarData}
+                      onCreateEvent={openCreateAtSelectedDay}
+                      onEditEvent={openEditEvent}
+                      onDeleteEvent={requestDeleteEvent}
+                      onVisibleRangeChange={handleVisibleRangeChange}
+                      onSelectedDayChange={setSelectedDay}
+                    />
+                  </ErrorBoundary>
+                </Suspense>
+                {calendar.isCalendarLoading && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60">
                     <LoadingSpinner size="md" />
                   </div>
-                ) : (
-                  <Suspense fallback={<PanelLoading />}>
-                    <ErrorBoundary componentName="FullScreenCalendar">
-                      <FullScreenCalendar
-                        data={calendarData}
-                        onCreateEvent={openCreateAtSelectedDay}
-                        onEditEvent={openEditEvent}
-                        onDeleteEvent={requestDeleteEvent}
-                        onVisibleRangeChange={handleVisibleRangeChange}
-                        onSelectedDayChange={setSelectedDay}
-                      />
-                    </ErrorBoundary>
-                  </Suspense>
                 )}
 
                 {/* Scheduling Panel Slide-in */}

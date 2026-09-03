@@ -2,9 +2,9 @@ import { z } from "zod";
 import { registerTool } from "../../tool-registry.js";
 
 registerTool("get_time", {
-  description: "احصل على الوقت والتاريخ الحالي. استخدم عندما يسأل المستخدم عن الوقت أو التاريخ.",
+  description: "Get the current time and date. Use when the user asks about the time or date.",
   inputSchema: z.object({
-    timezone: z.string().optional().describe("المنطقة الزمنية (مثال: 'Asia/Amman', 'America/New_York'). افتراضياً المنطقة المحلية."),
+    timezone: z.string().optional().describe("Time zone (e.g. 'Asia/Amman', 'America/New_York'). Defaults to the local zone."),
   }),
   execute: async ({ timezone }: { timezone?: string }) => {
     try {
@@ -24,7 +24,7 @@ registerTool("get_time", {
       const iso = now.toISOString();
       return JSON.stringify({ status: "success", formatted, iso, timezone: timezone || "local" });
     } catch (err: unknown) {
-      return JSON.stringify({ status: "error", message: "فشل في الحصول على الوقت", error: err instanceof Error ? err.message : String(err) });
+      return JSON.stringify({ status: "error", message: "Failed to get the time", error: err instanceof Error ? err.message : String(err) });
     }
   },
 });

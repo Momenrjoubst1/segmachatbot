@@ -3,20 +3,20 @@ import { registerTool } from "../../tool-registry.js";
 import { createToolMetadata } from "../../tool-metadata.js";
 import { recordQuizResult } from "../../../services/study/progress.service.js";
 
-createToolMetadata("record_quiz_result", "تسجيل نتيجة سؤال اختبار/مراجعة لتتبع تقدم الطالب", {
+createToolMetadata("record_quiz_result", "Record quiz/review question results to track student progress", {
   requiresUserId: true,
   category: "education",
   enabledByDefault: true,
 });
 
 registerTool("record_quiz_result", {
-  description: "سجّل نتيجة إجابة الطالب على سؤال اختبار/مراجعة. استخدم هذا بعد تقييم إجابة الطالب لتحديد المواضيع الضعيفة وتحديث تقدمه الدراسي.",
+  description: "Record the student's answer result for a quiz/review question. Use this after grading the student's answer to identify weak topics and update their study progress.",
   inputSchema: z.object({
-    topic: z.string().describe("الموضوع/الدرس الذي سُئل عنه السؤال (مثال: 'الدوال في بايثون', 'التفاضل والتكامل')"),
-    correct: z.boolean().describe("هل أجاب الطالب بشكل صحيح؟"),
-    courseId: z.string().uuid().optional().describe("معرف المادة الدراسية (اختياري)"),
-    textbookId: z.string().uuid().optional().describe("معرف الكتاب المدرسي (اختياري)"),
-    __userId: z.string().optional().describe("معرّف المستخدم (يُمرر تلقائياً)"),
+    topic: z.string().describe("The topic/lesson the question was about (e.g. 'Functions in Python', 'Calculus')"),
+    correct: z.boolean().describe("Did the student answer correctly?"),
+    courseId: z.string().uuid().optional().describe("Course ID (optional)"),
+    textbookId: z.string().uuid().optional().describe("Textbook ID (optional)"),
+    __userId: z.string().optional().describe("User ID (passed automatically)"),
   }),
   execute: async ({
     topic,
@@ -32,7 +32,7 @@ registerTool("record_quiz_result", {
     __userId?: string;
   }) => {
     if (!__userId) {
-      return JSON.stringify({ status: "error", message: "يتطلب تسجيل الدخول" });
+      return JSON.stringify({ status: "error", message: "Login required" });
     }
     try {
       const result = await recordQuizResult({
@@ -48,11 +48,11 @@ registerTool("record_quiz_result", {
         correct,
         masteryLevel: result.mastery_level,
         message: correct
-          ? "تم تسجيل الإجابة الصحيحة. تقدم جيد!"
-          : "تم تسجيل الإجابة الخاطئة. هذا الموضوع يحتاج مراجعة.",
+          ? "Correct answer recorded. Good progress!"
+          : "Incorrect answer recorded. This topic needs review.",
       });
     } catch (err: unknown) {
-      return JSON.stringify({ status: "error", message: "فشل في تسجيل النتيجة", error: err instanceof Error ? err.message : String(err) });
+      return JSON.stringify({ status: "error", message: "Result recording failed", error: err instanceof Error ? err.message : String(err) });
     }
   },
 });

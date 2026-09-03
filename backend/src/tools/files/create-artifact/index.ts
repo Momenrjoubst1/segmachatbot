@@ -8,28 +8,28 @@ import { injectFontsIntoHtml, resolveFontLinks } from "../../utils/fonts/library
 // tool-metadata drives userId injection and startup validation.
 registerTool("create_artifact", {
   description:
-    "أنشيء محتوى تفاعلي في اللوحة الجانبية (Artifact). استخدم لإنشاء صفحات ويب، رسومات بيانية، أكواد تفاعلية، جداول، " +
-    "خرائط ذهنية، اختبارات، ومحتوى تعليمي، أو بيئة تطوير متكاملة (IDE). المحتوى يظهر في لوحة منفصلة بجانب الشات. " +
-    "يدعم تمرير `fonts` لحقن خطوط Google Fonts (عربي/لاتيني/مونو/ديكور/يدوي) في HTML و React. " +
-    "عند استخدام type='ide'، يتم إنشاء بيئة تطوير كاملة مع محرر أكواد، شجرة ملفات، وتيرمينال. " +
-    "للتعديل على أرتفاكت موجود استخدم update_artifact بدلاً من إعادة إنشائه.",
+    "Create interactive content in the side panel (Artifact). Use for web pages, charts, interactive code, tables, " +
+    "mind maps, quizzes, educational content, or an integrated development environment (IDE). The content appears in a separate panel beside the chat. " +
+    "Supports passing `fonts` to inject Google Fonts (Arabic/Latin/mono/decorative/handwriting) into HTML and React. " +
+    "When using type='ide', a complete development environment is created with a code editor, file tree, and terminal. " +
+    "To modify an existing artifact, use update_artifact instead of recreating it.",
   inputSchema: z.object({
-    type: z.enum(["html", "svg", "mermaid", "markdown", "code", "chart", "quiz", "react", "ide"]).describe("نوع المحتوى: html, svg, mermaid, markdown, code, chart, quiz, react, ide"),
-    title: z.string().describe("عنوان الـ Artifact"),
-    content: z.string().describe("محتوى الـ Artifact (HTML, SVG, Mermaid, Markdown, كود برمجي، JSON للـ charts/quizzes/ide)"),
-    language: z.string().optional().describe("لغة الكود إذا كان النوع 'code' (مثال: python, javascript, typescript, java)"),
+    type: z.enum(["html", "svg", "mermaid", "markdown", "code", "chart", "quiz", "react", "ide"]).describe("Content type: html, svg, mermaid, markdown, code, chart, quiz, react, ide"),
+    title: z.string().describe("Title of the artifact"),
+    content: z.string().describe("Artifact content (HTML, SVG, Mermaid, Markdown, code, JSON for charts/quizzes/ide)"),
+    language: z.string().optional().describe("Code language if type is 'code' (e.g. python, javascript, typescript, java)"),
     projectFiles: z.array(z.object({
       name: z.string(),
       type: z.enum(["file", "folder"]),
       content: z.string().optional(),
       path: z.string(),
       children: z.any().optional(),
-    })).optional().describe("ملفات المشروع للـ IDE (مطلوب عند type='ide')"),
+    })).optional().describe("Project files for the IDE (required when type='ide')"),
     fonts: z.array(z.string()).optional().describe(
-      "اختياري: أسماء خطوط Google Fonts لتطبيقها على HTML/React (مثال: ['Cairo', 'JetBrains Mono']). تُقبل الأسماء المستعارة. تُحقن خطوط Google تلقائياً داخل <head>.",
+      "Optional: Google Fonts names to apply on HTML/React (e.g. ['Cairo', 'JetBrains Mono']). Aliases are accepted. Google Fonts are automatically injected into <head>.",
     ),
     bodyFontFamily: z.string().optional().describe(
-      "اختياري: قيمة CSS font-family تُطبّق على body عند غياب خطوط صريحة.",
+      "Optional: CSS font-family value applied to body when no explicit fonts are present.",
     ),
   }),
   execute: async (args: {
@@ -46,7 +46,7 @@ registerTool("create_artifact", {
     const { type, title, content, language, fonts, bodyFontFamily, projectFiles, __userId, __threadId } = args;
     try {
       if (!__userId) {
-        return JSON.stringify({ status: "error", message: "لا يمكن إنشاء Artifact بدون مستخدم مسجّل." });
+        return JSON.stringify({ status: "error", message: "Cannot create an artifact without a registered user." });
       }
 
       let finalContent = content;
@@ -94,17 +94,17 @@ registerTool("create_artifact", {
         fonts_link: linkHref || undefined,
         message:
           missingFonts.length > 0
-            ? `تم إنشاء "${title}" بنجاح وحفظه دائمًا. تحذير: خطوط غير معروفة: ${missingFonts.join(", ")}.`
+            ? `Successfully created "${title}" and saved it permanently. Warning: unknown fonts: ${missingFonts.join(", ")}.`
             : appliedFonts.length > 0
-              ? `تم إنشاء "${title}" مع الخطوط: ${appliedFonts.join(", ")}.`
-              : `تم إنشاء "${title}" بنجاح وحفظه دائمًا.`,
+              ? `Created "${title}" with fonts: ${appliedFonts.join(", ")}.`
+              : `Successfully created "${title}" and saved it permanently.`,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       if (/exceeds/i.test(message)) {
-        return JSON.stringify({ status: "error", message: `فشل إنشاء الـ Artifact: ${message}. قسّم المحتوى أو اختصره.` });
+        return JSON.stringify({ status: "error", message: `Artifact creation failed: ${message}. Split or shorten the content.` });
       }
-      return JSON.stringify({ status: "error", message: "فشل في إنشاء الـ Artifact", error: message });
+      return JSON.stringify({ status: "error", message: "Artifact creation failed", error: message });
     }
   },
 });

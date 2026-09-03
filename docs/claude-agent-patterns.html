@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude's Agent Patterns — Visual Maps</title>
+<style>
+  :root{
+    --ink:#2B2320;
+    --muted:#7A6E66;
+    --paper:#FAF8F5;
+    --card:#FFFFFF;
+    --line:#E7DFD8;
+    --brand:#C15F3C;
+    --brand2:#A64B2A;
+    --coral-bg:#FBEEE7; --coral-bd:#EDBFA5;
+    --amber-bg:#FFF7E8; --amber-bd:#F0C987; --amber-tx:#92400E;
+    --green-bg:#EAF7EE; --green-bd:#A5D6B5; --green-tx:#166534;
+    --blue-bg:#EEF3FE;  --blue-bd:#B9CBF2;  --blue-tx:#1E40AF;
+    --gray-bg:#F4F1EE;  --gray-bd:#DDD5CC;  --gray-tx:#6B625B;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"Segoe UI",Tahoma,Arial,sans-serif;
+    background:var(--paper); color:var(--ink);
+    line-height:1.65; padding:32px 16px 64px;
+  }
+  .wrap{max-width:1060px;margin:0 auto}
+  code{font-family:Consolas,"Courier New",monospace;background:#F3EDE7;border:1px solid var(--line);
+    border-radius:5px;padding:0 6px;font-size:.85em;color:var(--brand2)}
+
+  /* ---------- header ---------- */
+  header{border-bottom:3px solid var(--brand);padding-bottom:18px;margin-bottom:10px}
+  header h1{font-size:1.7rem;color:var(--brand2)}
+  header p{color:var(--muted);margin-top:6px}
+  .formula{
+    margin:18px 0 8px;background:var(--card);border:2px solid var(--brand);
+    border-radius:14px;padding:14px 18px;text-align:center;font-size:1.05rem;font-weight:600;
+  }
+  .formula .op{color:var(--brand);font-weight:800;padding:0 8px}
+
+  /* ---------- legend ---------- */
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 30px}
+  .legend span{display:inline-flex;align-items:center;gap:7px;font-size:.82rem;color:var(--muted);
+    background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 12px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+
+  /* ---------- sections ---------- */
+  section{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:26px 26px 30px;margin-bottom:34px;box-shadow:0 1px 3px rgba(43,35,32,.05)}
+  section h2{font-size:1.25rem;color:var(--brand2);display:flex;align-items:center;gap:10px}
+  section h2 .num{background:var(--brand);color:#fff;border-radius:8px;min-width:30px;height:30px;
+    display:inline-flex;align-items:center;justify-content:center;font-size:.95rem}
+  .sub{color:var(--muted);font-size:.9rem;margin:6px 0 20px}
+  .ref{font-size:.78rem;color:var(--muted);margin-top:16px;border-top:1px dashed var(--line);padding-top:10px}
+
+  /* ---------- generic node boxes ---------- */
+  .node{background:var(--blue-bg);border:1.5px solid var(--blue-bd);color:var(--blue-tx);
+    border-radius:10px;padding:9px 14px;text-align:center;font-size:.9rem;font-weight:600}
+  .node small{display:block;font-weight:400;font-size:.74rem;color:var(--muted);margin-top:2px}
+  .node.amber{background:var(--amber-bg);border-color:var(--amber-bd);color:var(--amber-tx)}
+  .node.green{background:var(--green-bg);border-color:var(--green-bd);color:var(--green-tx)}
+  .node.gray{background:var(--gray-bg);border-color:var(--gray-bd);color:var(--gray-tx)}
+  .node.coral{background:var(--coral-bg);border-color:var(--coral-bd);color:var(--brand2)}
+
+  .varrow{display:flex;justify-content:center;padding:2px 0;color:#B9ADA3}
+  .hflow{display:flex;align-items:stretch;gap:10px;flex-wrap:nowrap}
+  .hflow .grow{flex:1}
+  .harrow{align-self:center;color:#B9ADA3;flex:0 0 auto}
+
+  /* ---------- nested ---------- */
+  .nest-user{max-width:500px;margin:0 auto}
+  .nest-loop{border:2px dashed var(--brand);border-radius:16px;padding:16px 16px 18px;background:#FDFAF7}
+  .nest-loop>.tag{font-size:.8rem;font-weight:700;color:var(--brand2);margin-bottom:12px;display:block;text-align:center}
+  .mini-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  .mini{background:var(--blue-bg);border:1px solid var(--blue-bd);color:var(--blue-tx);
+    border-radius:7px;padding:3px 9px;font-size:.76rem;font-weight:600}
+
+  /* ---------- phases ---------- */
+  .phase{border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px;background:#FDFCFA}
+  .phase>h3{font-size:.95rem;color:var(--ink);margin-bottom:4px;display:flex;align-items:center;gap:8px}
+  .phase>h3 .pnum{background:var(--brand2);color:#fff;border-radius:6px;font-size:.72rem;padding:1px 8px}
+  .phase>p{font-size:.78rem;color:var(--muted);margin-bottom:12px}
+  .steps{display:flex;flex-direction:column;gap:0}
+  .step{display:flex;align-items:flex-start;gap:10px;padding:7px 10px;border-radius:9px}
+  .step .n{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--brand);color:#fff;
+    font-size:.75rem;display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .step .b{flex:1}
+  .step .b strong{font-size:.88rem}
+  .step .b small{display:block;font-size:.75rem;color:var(--muted)}
+  .step.gate{background:var(--amber-bg)}
+  .step.gate .n{background:var(--amber-tx)}
+  .step.exit{background:var(--green-bg)}
+  .step.exit .n{background:var(--green-tx)}
+  .step.after{background:var(--gray-bg);border:1px dashed var(--gray-bd)}
+  .step.after .n{background:var(--gray-tx)}
+  .step-core{background:var(--coral-bg);border:1.5px solid var(--coral-bd)}
+  .phase-link{display:flex;justify-content:center;padding:2px 0 10px;color:#B9ADA3}
+
+  /* ---------- svg ---------- */
+  svg{display:block;margin:0 auto;max-width:100%;height:auto}
+  svg text{font-family:"Segoe UI",Tahoma,Arial,sans-serif}
+
+  /* ---------- chips ---------- */
+  .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px}
+  .chips span{background:var(--gray-bg);border:1px solid var(--gray-bd);color:var(--gray-tx);
+    border-radius:999px;padding:3px 12px;font-size:.76rem;font-weight:600}
+
+  /* ---------- taxonomy ---------- */
+  .tax{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}
+  .tcard{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#FDFCFA}
+  .tcard h4{font-size:.95rem;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .badge{font-size:.72rem;border-radius:999px;padding:2px 10px;font-weight:700;white-space:nowrap}
+  .badge.yes{background:var(--green-bg);color:var(--green-tx);border:1px solid var(--green-bd)}
+  .badge.core{background:var(--coral-bg);color:var(--brand2);border:1px solid var(--coral-bd)}
+  .badge.half{background:var(--amber-bg);color:var(--amber-tx);border:1px solid var(--amber-bd)}
+  .badge.no{background:var(--gray-bg);color:var(--gray-tx);border:1px solid var(--gray-bd)}
+  .tcard p{font-size:.8rem;color:var(--muted);margin-top:6px}
+  .tcard.core{border-color:var(--coral-bd);background:var(--coral-bg)}
+  .tcard.core p{color:var(--brand2)}
+
+  .compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:16px}
+  .ccard{border-radius:12px;padding:14px 16px;border:1.5px solid}
+  .ccard h4{font-size:.95rem;margin-bottom:6px}
+  .ccard ul{margin:0;padding-inline-start:18px;font-size:.8rem}
+  .ccard li{margin:2px 0}
+  .ccard.sigma{border-color:#E5A9AF;background:#FBEDEE;color:#8A2229}
+  .ccard.claude{border-color:var(--coral-bd);background:var(--coral-bg);color:var(--brand2)}
+
+  @media (max-width:640px){
+    .hflow{flex-direction:column}
+    .harrow{transform:rotate(90deg);justify-content:center}
+    section{padding:18px 14px 22px}
+  }
+  @media print{
+    body{background:#fff;padding:0}
+    section{box-shadow:none;break-inside:avoid;margin-bottom:14px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ===================== HEADER ===================== -->
+<header>
+  <h1>🧭 Claude's Agent Patterns — Visual Maps</h1>
+  <p>How Claude (Claude Code) actually runs a task — same lens we used for your Sigma pipeline, grounded in Anthropic's published docs &amp; blog</p>
+</header>
+
+<div class="formula">
+  Claude = <span>Open Agentic Loop (verification-driven)</span><span class="op">+</span><span>Orchestrator–Workers (subagents)</span><span class="op">+</span><span>Human Gates (permissions &amp; plan mode)</span>
+</div>
+
+<div class="legend">
+  <span><i class="dot" style="background:#1D4ED8"></i> Concrete mechanism</span>
+  <span><i class="dot" style="background:#B45309"></i> Human gate / decision</span>
+  <span><i class="dot" style="background:#15803D"></i> Completion / exit</span>
+  <span><i class="dot" style="background:#C15F3C"></i> The loop itself</span>
+  <span><i class="dot" style="background:#9A8F87"></i> Ongoing / background</span>
+</div>
+
+<!-- ===================== 1. BIG PICTURE ===================== -->
+<section>
+  <h2><span class="num">1</span> The Big Picture — There Is No Pipeline</h2>
+  <p class="sub">This is the deepest contrast with Sigma: Sigma wraps a small agent inside a fixed step chain. Claude is <b>the loop all the way down</b> — the model directs its own path, nothing is pre-coded.</p>
+
+  <div class="nest-user">
+    <div class="node green">👤 Human gives a goal<br><small>a task, a bug, a feature — in natural language</small></div>
+    <div class="varrow">
+      <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+
+    <div class="nest-loop">
+      <span class="tag">🔁 The agentic loop — "LLMs using tools based on environmental feedback, in a loop"</span>
+      <div class="mini-row">
+        <span class="mini" style="background:#FBEEE7;border-color:#EDBFA5;color:#A64B2A">Gather context</span>
+        <span class="mini" style="background:#FBEEE7;border-color:#EDBFA5;color:#A64B2A">Take action</span>
+        <span class="mini" style="background:#FBEEE7;border-color:#EDBFA5;color:#A64B2A">Verify work</span>
+        <span class="mini" style="background:#FBEEE7;border-color:#EDBFA5;color:#A64B2A">…repeat until done</span>
+      </div>
+      <div class="chips" style="margin-top:12px">
+        <span>🚧 permission prompt before risky actions</span>
+        <span>🪜 plan mode = read-only until approved</span>
+      </div>
+    </div>
+
+    <div class="varrow">
+      <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="node green">✅ Done when <b>verified</b> — not when a step counter runs out</div>
+  </div>
+
+  <p class="ref">Anthropic's own distinction: <b>workflows</b> = "orchestrated through predefined code paths" (that's Sigma) vs <b>agents</b> = "LLMs dynamically direct their own processes and tool usage" (that's Claude). Source: <i>Building Effective Agents</i>, anthropic.com/research/building-effective-agents</p>
+</section>
+
+<!-- ===================== 2. ANATOMY OF ONE TASK ===================== -->
+<section>
+  <h2><span class="num">2</span> Anatomy of One Task — Goal to Verified Result</h2>
+  <p class="sub">The canonical Claude Code cycle: <b>gather context → take action → verify work → repeat</b>. Phases below are behavioral, not hard-coded steps.</p>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase A</span> Gather Context</h3>
+    <p>Everything Claude knows before its first action — assembled fresh each session</p>
+    <div class="steps">
+      <div class="step"><span class="n">a1</span><div class="b"><strong>Session context</strong><small><code>CLAUDE.md</code> read at session start • auto memory carried across sessions • git status snapshot</small></div></div>
+      <div class="step"><span class="n">a2</span><div class="b"><strong>Explore the codebase</strong><small>Grep / Glob / Read — or fan out an <code>Explore</code> subagent so search noise never enters the main context</small></div></div>
+    </div>
+  </div>
+  <div class="phase-link"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase B</span> Plan (Optional Gear)</h3>
+    <p>For anything non-trivial, Claude can slow down and think before touching anything</p>
+    <div class="steps">
+      <div class="step gate"><span class="n">b1</span><div class="b"><strong>🪜 Plan mode</strong><small>Shift+Tab — Claude <i>reads and proposes a plan but makes no edits until you approve</i></small></div></div>
+      <div class="step"><span class="n">b2</span><div class="b"><strong>Task breakdown</strong><small>a live todo list — Claude ticks items off as the loop progresses</small></div></div>
+    </div>
+  </div>
+  <div class="phase-link"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase C</span> Take Action</h3>
+    <p>The model picks the tool and the moves — at runtime, never pre-wired</p>
+    <div class="steps">
+      <div class="step step-core"><span class="n">c1</span><div class="b"><strong>Tool calls</strong><small>Read • Grep • Glob • Edit • Write • Bash • Agent (subagents) • MCP tools</small></div></div>
+      <div class="step gate"><span class="n">c2</span><div class="b"><strong>🚧 Permission gate</strong><small>risky or external actions pause for human approval (unless pre-allowed); hooks can run before/after any action</small></div></div>
+      <div class="step"><span class="n">c3</span><div class="b"><strong>Observe ground truth</strong><small>Anthropic: agents should gain "ground truth" from the environment — tool results, command output, diffs</small></div></div>
+    </div>
+  </div>
+  <div class="phase-link"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase D</span> Verify Work</h3>
+    <p>The step Sigma replaced with a 15-step cap; Claude replaces it with evidence</p>
+    <div class="steps">
+      <div class="step exit"><span class="n">d1</span><div class="b"><strong>Run the checks</strong><small>"run the new tests and fix any failures" — tests, lint, builds; the loop iterates until they pass</small></div></div>
+      <div class="step"><span class="n">d2</span><div class="b"><strong>Not verified? → loop</strong><small>failures become new context, Claude acts again — verification closes the loop</small></div></div>
+    </div>
+  </div>
+  <div class="phase-link"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase E</span> Continuation Rules</h3>
+    <p>What keeps a long-running loop alive and under control</p>
+    <div class="steps">
+      <div class="step after"><span class="n">e1</span><div class="b"><strong>Context fills → compact</strong><small>long sessions are summarized and continue; auto memory persists learnings for next time</small></div></div>
+      <div class="step gate"><span class="n">e2</span><div class="b"><strong>Blockers → pause for the human</strong><small>"pausing for human input at checkpoints or blockers" is the documented design</small></div></div>
+    </div>
+  </div>
+
+  <p class="ref">Sources: code.claude.com/docs — overview, common-workflows (plan mode, tests), sub-agents (Explore fan-out) • best practices (gather/act/verify) • <i>Building Effective Agents</i> (ground truth, checkpoints)</p>
+</section>
+
+<!-- ===================== 3. THE LOOP SVG ===================== -->
+<section>
+  <h2><span class="num">3</span> The Open Loop — Unbounded, Verification-Driven</h2>
+  <p class="sub">Same shape as Sigma's ReAct loop, two differences: <b>no hard step cap</b> (the exit is evidence, not a counter) and <b>a human gate</b> wired into risky actions.</p>
+
+  <svg viewBox="0 0 900 700" role="img" aria-label="Claude agentic loop">
+    <defs>
+      <marker id="car" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L8,4.5 L0,9 z" fill="#B9ADA3"/>
+      </marker>
+      <marker id="crg" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L8,4.5 L0,9 z" fill="#C15F3C"/>
+      </marker>
+      <marker id="cgn" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L8,4.5 L0,9 z" fill="#15803D"/>
+      </marker>
+    </defs>
+
+    <!-- user goal -->
+    <rect x="320" y="8" width="260" height="46" rx="10" fill="#EAF7EE" stroke="#A5D6B5" stroke-width="1.8"/>
+    <text x="450" y="36" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">👤 User goal / command</text>
+
+    <line x1="450" y1="54" x2="450" y2="92" stroke="#B9ADA3" stroke-width="2" marker-end="url(#car)"/>
+
+    <!-- loop container -->
+    <rect x="40" y="100" width="820" height="450" rx="16" fill="none" stroke="#C15F3C" stroke-width="2" stroke-dasharray="7 5"/>
+    <rect x="205" y="88" width="490" height="26" rx="13" fill="#FBEEE7" stroke="#EDBFA5"/>
+    <text x="450" y="106" text-anchor="middle" font-size="12.5" font-weight="700" fill="#C15F3C">The agentic loop — the model directs itself (no fixed path)</text>
+
+    <!-- think -->
+    <rect x="310" y="136" width="280" height="56" rx="10" fill="#FBEEE7" stroke="#C15F3C" stroke-width="1.8"/>
+    <text x="450" y="159" text-anchor="middle" font-size="14.5" font-weight="700" fill="#C15F3C">Think — decide the next step</text>
+    <text x="450" y="177" text-anchor="middle" font-size="11" fill="#7A6E66">plan • extend thinking • update todos</text>
+
+    <line x1="450" y1="192" x2="450" y2="228" stroke="#B9ADA3" stroke-width="2" marker-end="url(#car)"/>
+
+    <!-- act -->
+    <rect x="310" y="232" width="280" height="56" rx="10" fill="#EEF3FE" stroke="#B9CBF2" stroke-width="1.8"/>
+    <text x="450" y="255" text-anchor="middle" font-size="14" font-weight="700" fill="#1E40AF">Take action — tool call</text>
+    <text x="450" y="273" text-anchor="middle" font-size="11" fill="#1E40AF">Read • Grep • Edit • Write • Bash • Agent</text>
+
+    <!-- permission gate -->
+    <rect x="48" y="232" width="210" height="56" rx="10" fill="#FFF7E8" stroke="#F0C987" stroke-width="1.8"/>
+    <text x="153" y="255" text-anchor="middle" font-size="13" font-weight="700" fill="#92400E">🚧 Permission gate</text>
+    <text x="153" y="273" text-anchor="middle" font-size="10.5" fill="#92400E">risky action? ask the human first</text>
+    <line x1="258" y1="260" x2="304" y2="260" stroke="#B9ADA3" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#car)"/>
+
+    <line x1="450" y1="288" x2="450" y2="324" stroke="#B9ADA3" stroke-width="2" marker-end="url(#car)"/>
+
+    <!-- observe -->
+    <rect x="310" y="328" width="280" height="56" rx="10" fill="#EEF3FE" stroke="#B9CBF2" stroke-width="1.8"/>
+    <text x="450" y="351" text-anchor="middle" font-size="14" font-weight="700" fill="#1E40AF">Observe ground truth</text>
+    <text x="450" y="369" text-anchor="middle" font-size="11" fill="#1E40AF">tool result • test output • diff</text>
+
+    <line x1="450" y1="384" x2="450" y2="424" stroke="#B9ADA3" stroke-width="2" marker-end="url(#car)"/>
+
+    <!-- diamond -->
+    <polygon points="450,428 538,478 450,528 362,478" fill="#FFF7E8" stroke="#F0C987" stroke-width="1.8"/>
+    <text x="450" y="474" text-anchor="middle" font-size="14" font-weight="700" fill="#92400E">Task done &amp;</text>
+    <text x="450" y="494" text-anchor="middle" font-size="14" font-weight="700" fill="#92400E">verified?</text>
+
+    <!-- YES: done (left) -->
+    <line x1="362" y1="478" x2="268" y2="478" stroke="#15803D" stroke-width="2.2" marker-end="url(#cgn)"/>
+    <text x="312" y="464" text-anchor="middle" font-size="12.5" font-weight="700" fill="#15803D">Yes</text>
+    <rect x="48" y="452" width="216" height="52" rx="10" fill="#EAF7EE" stroke="#A5D6B5" stroke-width="1.8"/>
+    <text x="156" y="473" text-anchor="middle" font-size="13.5" font-weight="700" fill="#166534">Done — report to user</text>
+    <text x="156" y="491" text-anchor="middle" font-size="10.5" fill="#166534">summary + files changed</text>
+
+    <!-- NO: loop back (right) -->
+    <path d="M538,478 H770 V164 H596" fill="none" stroke="#C15F3C" stroke-width="2.2" marker-end="url(#crg)"/>
+    <text x="780" y="316" font-size="12" font-weight="700" fill="#C15F3C">No —</text>
+    <text x="780" y="333" font-size="12" font-weight="700" fill="#C15F3C">repeat ↻</text>
+
+    <!-- no-cap chip -->
+    <rect x="56" y="136" width="190" height="30" rx="15" fill="#fff" stroke="#DDD5CC"/>
+    <text x="151" y="156" text-anchor="middle" font-size="11" fill="#7A6E66">runs until done — no fixed cap</text>
+
+    <!-- bottom notes -->
+    <rect x="40" y="570" width="820" height="112" rx="12" fill="#F4F1EE" stroke="#DDD5CC"/>
+    <text x="460" y="596" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2320">How the loop stops or pauses:</text>
+    <text x="460" y="622" text-anchor="middle" font-size="12.5" fill="#2B2320">① task complete &amp; verified (tests pass) &nbsp;&nbsp; ② the human interrupts — or denies a permission prompt</text>
+    <text x="460" y="646" text-anchor="middle" font-size="12.5" fill="#2B2320">③ context fills → auto-compaction summarizes, loop continues &nbsp;&nbsp; ④ checkpoint: agent pauses to ask</text>
+    <text x="460" y="670" text-anchor="middle" font-size="11.5" fill="#C15F3C">Contrast: Sigma caps its tool loop at 15 steps — Claude exits on evidence, and a step cap exists only as maxTurns on subagents</text>
+  </svg>
+
+  <p class="ref">Sources: <i>Building Effective Agents</i> (loop + stopping conditions: "such as a maximum number of iterations") • code.claude.com/docs — sub-agents (<code>maxTurns</code>), common-workflows (plan mode)</p>
+</section>
+
+<!-- ===================== 4. ORCHESTRATOR-WORKERS ===================== -->
+<section>
+  <h2><span class="num">4</span> Orchestrator–Workers — The Subagent System</h2>
+  <p class="sub">Claude's signature second pattern: a lead agent decomposes the task <b>at runtime</b> and fans work out to subagents — each in its own context window.</p>
+
+  <div class="nest-user" style="max-width:560px">
+    <div class="node coral">🧭 Lead agent<small>plans, delegates via the Agent tool, merges results — keeps its own context</small></div>
+    <div class="varrow">
+      <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+      <div class="node" style="font-size:.8rem">🔎 Explore<small>read-only search agent</small></div>
+      <div class="node" style="font-size:.8rem">📋 Plan<small>plan-mode research agent</small></div>
+      <div class="node" style="font-size:.8rem">🛠️ General-purpose<small>+ your custom <code>.claude/agents/</code></small></div>
+    </div>
+    <div class="chips">
+      <span>each subagent: own context window • own tools • own permissions</span>
+    </div>
+    <div class="varrow">
+      <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="node green">📩 Summaries only flow back<small>"returns only the summary" — noisy transcripts never flood the main context</small></div>
+  </div>
+
+  <div class="chips">
+    <span>subtasks chosen at runtime — the blog's own example: "coding changes across an unknown number of files"</span>
+    <span>nesting ≤ 3 layers</span>
+    <span>≤ 20 concurrent spawns</span>
+    <span>background results arrive as notifications</span>
+    <span>forks inherit the full conversation</span>
+  </div>
+
+  <p class="ref">Source: code.claude.com/docs/en/sub-agents (context isolation, Agent tool, limits) • <i>Building Effective Agents</i> (orchestrator-workers definition)</p>
+</section>
+
+<!-- ===================== 5. ROUTING & GEARS ===================== -->
+<section>
+  <h2><span class="num">5</span> Routing &amp; Gears — Models, Modes, Guardrails</h2>
+  <p class="sub">Where Sigma swaps models by message content, Claude routes by <b>task difficulty</b> and shifts <b>autonomy gears</b> per situation.</p>
+
+  <h3 style="font-size:.95rem;margin:8px 0 12px">A) Model routing (by difficulty, per the patterns blog)</h3>
+  <div style="display:flex;flex-direction:column;gap:10px;max-width:720px;margin:0 auto">
+    <div class="hflow">
+      <div class="node amber grow">Easy, well-scoped question?</div>
+      <div class="harrow"><svg width="26" height="20" viewBox="0 0 24 24"><path d="M5 12h14m-6-6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="node grow">Haiku<small>cheap &amp; fast — "easier questions to smaller models"</small></div>
+    </div>
+    <div class="hflow">
+      <div class="node amber grow">Hard reasoning / orchestration?</div>
+      <div class="harrow"><svg width="26" height="20" viewBox="0 0 24 24"><path d="M5 12h14m-6-6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="node grow">Opus-class model<small>"harder ones to more capable models" — subagents can pin <code>model:</code> in frontmatter</small></div>
+    </div>
+  </div>
+
+  <h3 style="font-size:.95rem;margin:24px 0 12px">B) Autonomy gears</h3>
+  <div class="tax">
+    <div class="tcard"><h4>🪜 Plan mode</h4><p>read-only until the human approves the plan — for big or risky changes</p></div>
+    <div class="tcard"><h4>🧠 Extended thinking</h4><p>more reasoning tokens for hard problems, less for routine edits</p></div>
+    <div class="tcard"><h4>🤖 Headless mode</h4><p>scripted runs (<code>claude -p</code>) with no interactive gates — prompts must spell out success criteria</p></div>
+  </div>
+
+  <h3 style="font-size:.95rem;margin:24px 0 12px">C) Guardrails around the open loop</h3>
+  <div class="chips" style="justify-content:flex-start">
+    <span>🚧 permission prompts before consequential actions</span>
+    <span>🪝 hooks run shell commands before/after any action</span>
+    <span>🧪 "extensive testing in sandboxed environments"</span>
+    <span>⏸ checkpoints: pause for human input at blockers</span>
+  </div>
+
+  <p class="ref">Sources: <i>Building Effective Agents</i> (routing by difficulty, sandbox testing) • code.claude.com/docs — common-workflows (plan mode, headless), sub-agents (<code>model:</code>, hooks)</p>
+</section>
+
+<!-- ===================== 6. TAXONOMY ===================== -->
+<section>
+  <h2><span class="num">6</span> Claude on Anthropic's Own Pattern Map — and Next to Sigma</h2>
+  <p class="sub">The six patterns come from Anthropic's <i>Building Effective Agents</i> — so Claude Code is graded against its own company's taxonomy.</p>
+
+  <div class="tax">
+    <div class="tcard">
+      <h4>⛓️ Prompt Chaining<span class="badge half">◐ within turns</span></h4>
+      <p>decompose → step → step, with gates. Claude does this inside the loop when useful — but nothing is fixed in code</p>
+    </div>
+    <div class="tcard">
+      <h4>🚚 Routing<span class="badge yes">✔</span></h4>
+      <p>difficulty → model, task → subagent (matched against each subagent's description), skill selection</p>
+    </div>
+    <div class="tcard">
+      <h4>🔀 Parallelization<span class="badge yes">✔</span></h4>
+      <p>sectioning via fan-out subagents running simultaneously; voting is available and used for confidence-critical checks</p>
+    </div>
+    <div class="tcard core">
+      <h4>🎺 Orchestrator–Workers<span class="badge core">★ core</span></h4>
+      <p>the lead-agent + subagent architecture — dynamic decomposition, results merged back. Claude Code's signature</p>
+    </div>
+    <div class="tcard">
+      <h4>🪞 Evaluator–Optimizer<span class="badge half">◐ loop form</span></h4>
+      <p>the verify→fix cycle iterates against test output &amp; criteria — but the same model plays both roles, no separate critic</p>
+    </div>
+    <div class="tcard core">
+      <h4>🤖 Autonomous Agent<span class="badge core">★ the design</span></h4>
+      <p>"LLMs dynamically direct their own processes and tool usage" in a loop with guardrails — the exact definition Claude Code implements</p>
+    </div>
+  </div>
+
+  <div class="compare">
+    <div class="ccard sigma">
+      <h4>🎓 Sigma (yours)</h4>
+      <ul>
+        <li>Fixed pipeline — 11 pre-coded steps, deterministic rails</li>
+        <li>Bounded ReAct — tools capped at 15 steps, statically filtered by intent</li>
+        <li>Model swaps by message content (media / textbook / vision)</li>
+        <li>Critic optional, off by default</li>
+        <li>Optimized for: predictability, known cost, TPM safety</li>
+      </ul>
+    </div>
+    <div class="ccard claude">
+      <h4>🤖 Claude (Code)</h4>
+      <ul>
+        <li>Open loop — model directs its own path, no pre-coded chain</li>
+        <li>Unbounded steps — exits on verified evidence, caps only on subagents</li>
+        <li>Model routes by task difficulty; subagents isolate context</li>
+        <li>Human gates wired in — permissions &amp; plan mode</li>
+        <li>Optimized for: flexibility on open-ended problems</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="ref">And Anthropic's own advice cuts both ways: "find the simplest solution first" — workflows give predictability for well-defined tasks; agents earn their cost only when the path can't be hardcoded. Your Sigma pipeline is the textbook workflow-plus-bounded-loop for a chat product; Claude Code is the textbook autonomous agent for coding.</p>
+</section>
+
+<footer style="text-align:center;color:var(--muted);font-size:.8rem">
+  Claude page — built from Anthropic's published material, 2026-08-30: anthropic.com/research/building-effective-agents • code.claude.com/docs (overview, sub-agents, common-workflows) • Claude is closed-source, so this maps documented behavior, not implementation code
+</footer>
+
+</div>
+</body>
+</html>

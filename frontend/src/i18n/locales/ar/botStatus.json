@@ -36,7 +36,8 @@
       "web_search": {
         "label": "البحث في الويب",
         "completed_one": "بحث في مصدر واحد",
-        "completed_other": "بحث في {{count}} مصادر"
+        "completed_other": "بحث في {{count}} مصادر",
+        "past": "بحث بالإنترنت"
       },
       "calculator": {
         "label": "حساب",
@@ -91,6 +92,13 @@
       "create_artifact": {
         "label": "إنشاء محتوى"
       }
+    },
+    "completed": {
+      "rag_pipeline": "بحث بقاعدة المعرفة",
+      "fetch_user_courses": "حمّل مساقاتك",
+      "memory_context": "راجع ذاكرتك",
+      "thread_resolution": "حمّل المحادثة",
+      "context_window": "جهّز السياق"
     }
   },
   "result": {
@@ -103,10 +111,11 @@
     "text_one": "سطر واحد",
     "text_other": "{{count}} سطور"
   },
+  "sources": "المصادر",
   "tokens_one": "كلمة واحدة",
   "tokens_other": "{{count}} كلمات",
   "thinking": {
-    "active": "يفكّر…",
+    "active": "يفكّر",
     "done": "فكّر لمدة {{duration}}",
     "past": "الأفكار"
   },
@@ -115,5 +124,13 @@
   "stop": "إيقاف",
   "stopping": "يتم الإيقاف…",
   "expand": "عرض التفاصيل",
-  "collapse": "إخفاء التفاصيل"
+  "collapse": "إخفاء التفاصيل",
+  "verbs": [
+    "يفكّر",
+    "بيحلّل",
+    "بيتأمل",
+    "بيربط الخيوط",
+    "بيجمع الخلاصة",
+    "بيحضّر الجواب"
+  ]
 }

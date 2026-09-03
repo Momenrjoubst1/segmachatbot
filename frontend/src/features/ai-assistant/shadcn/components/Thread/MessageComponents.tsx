@@ -24,8 +24,7 @@ const MarkdownTextOrNothing: FC = () => (
 );
 import { Perspective } from "@/components/ui/perspective-highlight";
 import { MessageTiming } from "../../../ui/message-timing";
-import { BotStatusInline } from "../../../ui/bot-activity/components/BotStatusInline";
-import { MessageSkeleton } from "../../../ui/bot-activity/components/MessageSkeleton";
+import { BotStatusInline, ParkedSpark } from "../../../ui/bot-activity/components/BotStatusInline";
 import { ThinkingBlock } from "../../../ui/bot-activity/components/ThinkingBlock";
 import { splitThinkBlocks } from "../../../ui/bot-activity/thinkTags";
 import type {
@@ -36,9 +35,7 @@ import { QuoteBlock } from "../../../ui/quote";
 import { DirectiveText } from "../../../ui/directive-text";
 import { TooltipIconButton } from "../../../ui/tooltip-icon-button";
 import {
-  ActionBarMorePrimitive,
   ActionBarPrimitive,
-  BranchPickerPrimitive,
   ComposerPrimitive,
   ErrorPrimitive,
   MessagePrimitive,
@@ -49,12 +46,8 @@ import {
   BoxIcon,
   CheckIcon,
   ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   CopyIcon,
-  DownloadIcon,
   FileTextIcon,
-  MoreHorizontalIcon,
   PencilIcon,
   RefreshCwIcon,
   ThumbsDownIcon,
@@ -228,32 +221,9 @@ const AssistantStatusLine: FC<{ onRetry: () => void }> = ({ onRetry }) => {
   return <BotStatusInline onRetry={onRetry} />;
 };
 
-export const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({ className, ...rest }) => {
-  return (
-    <BranchPickerPrimitive.Root
-      hideWhenSingleBranch
-      className={cn(
-        "aui-branch-picker-root mr-2 -ml-2 inline-flex items-center text-muted-foreground text-xs",
-        className,
-      )}
-      {...rest}
-    >
-      <BranchPickerPrimitive.Previous asChild>
-        <TooltipIconButton tooltip="Previous version">
-          <ChevronLeftIcon />
-        </TooltipIconButton>
-      </BranchPickerPrimitive.Previous>
-      <span className="aui-branch-picker-state font-medium">
-        Version <BranchPickerPrimitive.Number /> of <BranchPickerPrimitive.Count />
-      </span>
-      <BranchPickerPrimitive.Next asChild>
-        <TooltipIconButton tooltip="Next version">
-          <ChevronRightIcon />
-        </TooltipIconButton>
-      </BranchPickerPrimitive.Next>
-    </BranchPickerPrimitive.Root>
-  );
-};
+// BranchPicker removed entirely (user request): the "Version 2 of 2" picker
+// and the fork-note added noise without value — every message now renders
+// as a single version.
 
 const ActionBarButton: FC<{ tooltip: string; className?: string; onClick?: () => void; children: React.ReactNode }> = ({ tooltip, className, onClick, children }) => (
   <Tooltip>
@@ -386,25 +356,8 @@ const AssistantActionBar: FC = () => {
         </TooltipTrigger>
         <TooltipContent side="bottom">{t("chat:feedback.notHelpful")}</TooltipContent>
       </Tooltip>
-      <ActionBarMorePrimitive.Root>
-        <ActionBarMorePrimitive.Trigger asChild>
-          <ActionBarButton tooltip="More" className="data-[state=open]:bg-accent">
-            <MoreHorizontalIcon className="size-4" />
-          </ActionBarButton>
-        </ActionBarMorePrimitive.Trigger>
-        <ActionBarMorePrimitive.Content
-          side="bottom"
-          align="start"
-          className="aui-action-bar-more-content z-50 min-w-32 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-        >
-          <ActionBarPrimitive.ExportMarkdown asChild>
-            <ActionBarMorePrimitive.Item className="aui-action-bar-more-item flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
-              <DownloadIcon className="size-4" />
-              Export as Markdown
-            </ActionBarMorePrimitive.Item>
-          </ActionBarPrimitive.ExportMarkdown>
-        </ActionBarMorePrimitive.Content>
-      </ActionBarMorePrimitive.Root>
+      {/* "More" dropdown removed entirely (user request) — the action bar
+          keeps its flat buttons only. */}
       <MessageTiming />
     </ActionBarPrimitive.Root>
       {/* Rendered outside ActionBarPrimitive.Root — the bar unmounts while a
@@ -500,7 +453,7 @@ const EditComposer: FC = () => {
   return (
     <MessagePrimitive.Root
       data-slot="aui_edit-composer-wrapper"
-      className="mx-auto flex w-full max-w-3xl flex-col px-2"
+      className="mx-auto flex w-full max-w-4xl flex-col px-2"
     >
       <ComposerPrimitive.Root className="aui-edit-composer-root ml-auto flex w-full max-w-[85%] flex-col rounded-2xl bg-muted">
         <LexicalComposerInput
@@ -563,6 +516,26 @@ const InlineAttachmentChip: FC<{ name: string; content: string }> = ({ name, con
 };
 
 // Claude's rose-tinted inline code + modest headings for user messages.
+// `trimTrailingInline` strips trailing whitespace off the paragraph's last
+// text node — inside `whitespace-pre-wrap` a trailing "\n"/spaces would
+// otherwise render as phantom width inside the bubble.
+function trimTrailingInline(children: ReactNode): ReactNode {
+  if (typeof children === "string") return children.replace(/\s+$/, "");
+  if (Array.isArray(children) && children.length > 0) {
+    const out = [...children];
+    for (let i = out.length - 1; i >= 0; i--) {
+      const child = out[i];
+      if (typeof child === "string") {
+        out[i] = child.replace(/\s+$/, "");
+        break;
+      }
+      if (child != null) break; // real element — nothing to trim past it
+    }
+    return out;
+  }
+  return children;
+}
+
 const MarkdownLazy = lazy(async () => {
   const [{ default: Markdown }, { default: remarkGfm }] = await Promise.all([
     import("react-markdown"),
@@ -575,10 +548,10 @@ const MarkdownLazy = lazy(async () => {
 });
 
 const UserMarkdown: FC<{ text: string }> = memo(({ text }) => (
-  <Suspense fallback={<div className="whitespace-pre-wrap">{text}</div>}>
+  <Suspense fallback={<div className="whitespace-pre-wrap">{text.trim()}</div>}>
   <MarkdownLazy
     components={{
-      p: ({ children }: any) => <p className="m-0">{children}</p>,
+      p: ({ children }: any) => <p className="m-0">{trimTrailingInline(children)}</p>,
       h1: ({ children }: any) => <h3 className="mt-3 mb-1 text-[15px] font-semibold first:mt-0">{children}</h3>,
       h2: ({ children }: any) => <h3 className="mt-3 mb-1 text-[15px] font-semibold first:mt-0">{children}</h3>,
       h3: ({ children }: any) => <h4 className="mt-2.5 mb-1 text-[15px] font-semibold first:mt-0">{children}</h4>,
@@ -641,7 +614,11 @@ UserMarkdown.displayName = "UserMarkdown";
 const DIRECTIVE_TOKEN_RE = /:([\w-]{1,64})\[/;
 
 const UserTextPart: FC<{ text?: string }> = ({ text }) => {
-  const value = text ?? "";
+  // Display-trim: stored messages often end with "\n" (composer/persistence
+  // artifacts). With `whitespace-pre-wrap` that renders a phantom empty line
+  // inside the bubble and inflates its height — Claude's bubble hugs the
+  // text, so trailing/leading whitespace never reaches the bubble.
+  const value = (text ?? "").trim();
   ATTACHMENT_BLOCK_RE.lastIndex = 0;
   const matches = [...value.matchAll(ATTACHMENT_BLOCK_RE)];
 
@@ -737,10 +714,6 @@ const UserTextCollapsible: FC<{ children: ReactNode }> = ({ children }) => {
 export const UserMessage: FC = () => {
   const status = useAuiState((s) => s.message.status);
   const hasError = (status as Record<string, unknown>)?.type === "error" || (status as Record<string, unknown>)?.type === "failed";
-  const branchCount = useAuiState(
-    (s) => (s.message as Record<string, unknown>).branchCount as number | undefined,
-  );
-  const isForked = (branchCount ?? 1) > 1;
   const { t } = useTranslation();
   // Only wrap text in the collapsible when there IS text — an unconditional
   // wrapper div would defeat the bubble's empty:hidden for attachment-only
@@ -765,7 +738,7 @@ export const UserMessage: FC = () => {
       <MessagePrimitive.Root
       data-slot="aui_user-message-root"
       data-role="user"
-      className="fade-in slide-in-from-bottom-1 mx-auto grid w-full min-w-0 max-w-3xl animate-in auto-rows-auto grid-cols-[minmax(72px,1fr)_minmax(0,88%)] content-start gap-y-2 px-2 duration-150 [&:where(>*)]:col-start-2"
+      className="fade-in slide-in-from-bottom-1 mx-auto grid w-full min-w-0 max-w-4xl animate-in auto-rows-auto grid-cols-[minmax(72px,1fr)_minmax(0,88%)] content-start gap-y-2 px-2 duration-150 [&:where(>*)]:col-start-2"
     >
       <UserMessageAttachments />
 
@@ -773,12 +746,10 @@ export const UserMessage: FC = () => {
         <div
           className={cn(
             "message-hover-wrapper",
-            "aui-user-message-content wrap-break-word whitespace-pre-wrap peer rounded-2xl bg-muted px-4 py-2.5 text-[15px] leading-[1.6] text-foreground empty:hidden shadow-sm border",
+            "aui-user-message-content wrap-break-word whitespace-pre-wrap peer rounded-2xl bg-muted px-4 py-3 text-[15px] leading-[1.5] text-foreground empty:hidden shadow-sm border",
             hasError
               ? "border-destructive bg-destructive/5"
-              : isForked
-                ? "border-l-2 border-l-blue-400 border-primary/20"
-                : "border-transparent",
+              : "border-transparent",
           )}
           dir="auto"
         >
@@ -786,11 +757,6 @@ export const UserMessage: FC = () => {
           {hasTextContent ? <UserTextCollapsible>{textParts}</UserTextCollapsible> : textParts}
         </div>
         <UserActionBar />
-        {isForked && (
-          <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
-            <span>This created a new branch. Use ← → to navigate between versions.</span>
-          </div>
-        )}
       </div>
 
       {hasError && (
@@ -808,10 +774,6 @@ export const UserMessage: FC = () => {
         </div>
       )}
 
-<BranchPicker
-          data-slot="aui_user-branch-picker"
-          className="col-span-full col-start-1 row-start-3 -mr-1 justify-end"
-        />
       </MessagePrimitive.Root>
     </ErrorBoundary>
   );
@@ -853,7 +815,7 @@ export const AssistantMessage: FC = () => {
       <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="fade-in slide-in-from-bottom-1 relative mx-auto w-full min-w-0 max-w-3xl animate-in duration-150"
+      className="fade-in slide-in-from-bottom-1 relative mx-auto w-full min-w-0 max-w-4xl animate-in duration-150"
     >
       {/* Hidden reload trigger — programmatic regeneration for this message
           (code-block Regenerate button + interrupted-retry path). */}
@@ -918,10 +880,8 @@ export const AssistantMessage: FC = () => {
               return null;
             }}
           </MessagePrimitive.Parts>
-          {/* Empty-state skeleton — shows two placeholder lines while the
-              bot is working but hasn't produced any text yet. Renders null
-              once text arrives, so it auto-disappears on first token. */}
-          <MessageSkeleton />
+          {/* Claude.ai has no skeleton placeholder — the shimmering status
+              line above carries the "working" signal until first token. */}
           <MessageError />
 
           {chatMessage?.interrupted && (
@@ -948,9 +908,12 @@ export const AssistantMessage: FC = () => {
           data-slot="aui_assistant-message-footer"
           className={cn("ml-2 flex items-center relative z-10", ACTION_BAR_HEIGHT)}
         >
-          <BranchPicker />
           <AssistantActionBar />
         </div>
+
+        {/* Sigma's brand mark parks below the action row once the reply
+            finishes — Claude.ai starburst placement. */}
+        <ParkedSpark />
       </div>
     </MessagePrimitive.Root>
   </ErrorBoundary>

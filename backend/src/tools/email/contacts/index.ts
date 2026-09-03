@@ -90,7 +90,7 @@ async function searchContactsByName(userId: string, query: string): Promise<any[
 // SAVE EMAIL CONTACT
 // ========================================
 registerTool("save_email_contact", {
-  description: "Save an email address to the user's contact list with a display name. The display name is automatically generated from the email address (e.g., 'أحمد واحد', 'أحمد اثنين'). Use this when the user provides an email address and wants to save it for future use.",
+  description: "Save an email address to the user's contact list with a display name. The display name is automatically generated from the email address (e.g., 'John Smith', 'John Smith 2'). Use this when the user provides an email address and wants to save it for future use.",
   inputSchema: z.object({
     email: z.string().describe("The email address to save"),
     notes: z.string().optional().describe("Optional notes about this contact"),
@@ -175,7 +175,7 @@ registerTool("save_email_contact", {
 registerTool("get_email_contacts", {
   description: "Get the user's saved email contacts. Can filter by search query to find contacts by name. Returns all contacts with their display names and email addresses.",
   inputSchema: z.object({
-    searchQuery: z.string().optional().describe("Search contacts by display name (e.g., 'أحمد', 'محمد')"),
+    searchQuery: z.string().optional().describe("Search contacts by display name (e.g., 'John', 'Sarah')"),
     favoritesOnly: z.boolean().optional().describe("Only show favorite contacts"),
     limit: z.number().optional().describe("Maximum number of contacts to return (default: 50)"),
   }),

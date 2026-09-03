@@ -1,6 +1,6 @@
 /**
  * Tool Metadata System
- * نظام البيانات الوصفية للأدوات
+ * Automatic metadata description system for tools
  * 
  * Automatic tool registration system that replaces manual tool lists.
  * Tools register themselves with metadata that can be scanned at startup.

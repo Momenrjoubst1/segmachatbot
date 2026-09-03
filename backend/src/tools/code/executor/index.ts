@@ -3,11 +3,11 @@ import { registerTool } from "../../tool-registry.js";
 import { executeCode } from "./wandbox-code-executor.js";
 
 registerTool("code_executor", {
-  description: "نفذ كود برمجي بلغات متعددة (Python, JavaScript, Java, C++, Rust, Go, وغيرها). استخدم عندما يطلب المستخدم تشغيل كود ورؤية المخرجات. مهم: لا تستخدم إلا بطلب مباشر من المستخدم.",
+  description: "Execute code in multiple languages (Python, JavaScript, Java, C++, Rust, Go, and others). Use when the user asks to run code and see the output. Important: only use upon direct user request.",
   inputSchema: z.object({
-    code: z.string().describe("الكود البرمجي المراد تنفيذه"),
-    language: z.string().describe("لغة البرمجة (python, javascript, typescript, java, cpp, c, rust, go, ruby, php, sql, bash)"),
-    stdin: z.string().optional().describe("المدخلات القياسية للبرنامج (اختياري)"),
+    code: z.string().describe("The code to execute"),
+    language: z.string().describe("Programming language (python, javascript, typescript, java, cpp, c, rust, go, ruby, php, sql, bash)"),
+    stdin: z.string().optional().describe("Standard input for the program (optional)"),
   }),
   execute: async (args: { code: string; language: string; stdin?: string; __userId?: string }) => {
     const { code, language, stdin, __userId } = args;

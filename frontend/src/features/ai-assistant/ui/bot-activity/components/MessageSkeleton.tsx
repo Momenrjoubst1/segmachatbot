@@ -3,12 +3,10 @@
  * message bubble while the bot is working but hasn't produced any text
  * yet. Matches Claude.ai's "two-line shimmer" UX.
  *
- * Reads from `useBotActivity()` to decide:
- *  - If the message is running (status in running-* set) AND
- *  - There are no text parts yet,
- *  → render a 2-line skeleton placeholder.
- *
- * Honors `prefers-reduced-motion` (skeleton becomes static gray bars).
+ * @deprecated Unused since the Claude.ai status-indicator alignment:
+ * claude.ai shows NO skeleton — the shimmering status line is the loading
+ * signal until first token. Kept only so a future direct import still
+ * resolves (same pattern as BotStatusWidget).
  */
 
 import { type FC, useEffect, useState } from "react";

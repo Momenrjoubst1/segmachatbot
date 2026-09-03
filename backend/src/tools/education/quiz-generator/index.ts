@@ -3,21 +3,21 @@ import { registerTool } from "../../tool-registry.js";
 import { createToolMetadata } from "../../tool-metadata.js";
 import { generateQuizQuestions, DIFFICULTIES } from "../../../services/study/quiz-generator.service.js";
 
-createToolMetadata("generate_quiz", "توليد أسئلة اختبار من كتاب الطالب بمستوى صعوبة مناسب لتقدمه", {
+createToolMetadata("generate_quiz", "Generate quiz questions from the student's textbook at a difficulty level suited to their progress", {
   requiresUserId: true,
   category: "education",
   enabledByDefault: true,
 });
 
 registerTool("generate_quiz", {
-  description: "ولّد أسئلة اختبار عن موضوع محدد من كتاب الطالب نفسه. الصعوبة تتكيف تلقائياً مع مستوى تمكن الطالب (أو حددها بنفسك). استخدم الأداة ثم اختبر الطالب سؤالاً بسؤال وصحح إجاباته.",
+  description: "Generate quiz questions on a specific topic from the student's own textbook. Difficulty adapts automatically to the student's mastery level (or set it yourself). Use the tool, then quiz the student one question at a time and grade their answers.",
   inputSchema: z.object({
-    topic: z.string().describe("الموضوع المطلوب الاختبار فيه (مثال: 'قوانين نيوتن')"),
-    count: z.number().int().min(1).max(10).optional().describe("عدد الأسئلة (افتراضياً 5)"),
-    difficulty: z.enum(["auto", "easy", "medium", "hard"]).optional().describe("الصعوبة — auto يختار حسب تقدم الطالب (افتراضياً auto)"),
-    textbookId: z.string().uuid().optional().describe("معرف الكتاب المدرسي (اختياري)"),
-    courseId: z.string().uuid().optional().describe("معرف المادة الدراسية (اختياري)"),
-    __userId: z.string().optional().describe("معرّف المستخدم (يُمرر تلقائياً)"),
+    topic: z.string().describe("The topic to be tested on (e.g. 'Newton's laws')"),
+    count: z.number().int().min(1).max(10).optional().describe("Number of questions (default 5)"),
+    difficulty: z.enum(["auto", "easy", "medium", "hard"]).optional().describe("Difficulty — auto picks based on the student's progress (default auto)"),
+    textbookId: z.string().uuid().optional().describe("Textbook ID (optional)"),
+    courseId: z.string().uuid().optional().describe("Course ID (optional)"),
+    __userId: z.string().optional().describe("User ID (passed automatically)"),
   }),
   execute: async ({
     topic,
@@ -35,7 +35,7 @@ registerTool("generate_quiz", {
     __userId?: string;
   }) => {
     if (!__userId) {
-      return JSON.stringify({ status: "error", message: "يتطلب تسجيل الدخول" });
+      return JSON.stringify({ status: "error", message: "Login required" });
     }
     try {
       const quiz = await generateQuizQuestions({
@@ -54,14 +54,14 @@ registerTool("generate_quiz", {
         from_book: quiz.fromBook,
         questions: quiz.questions,
         tutor_instruction:
-          "اختبر الطالب سؤالاً واحداً في كل مرة، وانتظر إجابته قبل السؤال التالي. " +
-          "قيّم كل إجابة مقارنةً بالإجابة النموذجية، وبعد كل تقييم استدعِ record_quiz_result فوراً " +
-          `مع topic="${quiz.topic}" و correct=<true/false>. لا تعرض الإجابة النموذجية قبل محاولة الطالب.`,
+          "Quiz the student with one question at a time and wait for their answer before the next question. " +
+          "Grade each answer against the model answer, and immediately after each grading call record_quiz_result " +
+          `with topic="${quiz.topic}" and correct=<true/false>. Do not reveal the model answer before the student attempts.`,
       });
     } catch (err: unknown) {
       return JSON.stringify({
         status: "error",
-        message: "فشل في توليد الأسئلة",
+        message: "Question generation failed",
         error: err instanceof Error ? err.message : String(err),
       });
     }

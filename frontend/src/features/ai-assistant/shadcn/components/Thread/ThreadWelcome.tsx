@@ -706,16 +706,17 @@ export const Thread: FC<{
     >
       {isOnboarded ? (
         <>
+          <div className="relative min-h-0 flex-1">
           <ThreadPrimitive.Viewport
             turnAnchor="top"
             autoScroll={false}
             data-slot="aui_thread-viewport"
             dir="ltr"
             ref={scrollContainerRef}
-            className="relative flex flex-1 flex-col overflow-x-auto overflow-y-auto scroll-smooth"
+            className="relative flex h-full flex-col overflow-x-auto overflow-y-auto scroll-smooth"
             style={{ direction: "ltr" }}
           >
-            <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pt-4 md:px-7">
+            <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 pt-4 md:px-7">
               <AuiIf condition={(s) => s.thread.isEmpty && shouldShowWelcome}>
                 {/* Empty state: logo, greeting, composer and suggestions grouped and centered */}
                 <div className="flex w-full flex-1 flex-col items-center justify-center gap-6 pb-24">
@@ -744,9 +745,15 @@ export const Thread: FC<{
               }}
             />
           </ThreadPrimitive.Viewport>
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b from-background via-background/70 to-transparent" />
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-10 bg-gradient-to-t from-background via-background/70 to-transparent" />
+          </div>
 
           <AuiIf condition={(s) => !(s.thread.isEmpty && shouldShowWelcome)}>
-            <div className="mx-auto w-full max-w-3xl px-4 pb-4 md:px-7 md:pb-6 bg-background">
+            {/* Claude pins the composer flush to the window bottom — the
+                disclaimer strip is the last thing on screen, so the message
+                viewport gets every spare pixel. */}
+            <div className="mx-auto w-full max-w-4xl px-4 pb-1 md:px-7 md:pb-1.5 bg-background">
               <ThreadComposer />
             </div>
           </AuiIf>

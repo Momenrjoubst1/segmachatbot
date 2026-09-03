@@ -191,6 +191,59 @@
   100% { background-position: -200% center; }
 }
 
+/* Sigma mark working animation: same elastic wobble + node bounce as the
+   welcome-logo click animation, looped gently while the bot works. */
+@keyframes sigmaElasticWobble {
+  0%   { transform: rotate(0deg) scale(1); }
+  15%  { transform: rotate(-14deg) scale(0.92); }
+  35%  { transform: rotate(18deg) scale(1.22); }
+  55%  { transform: rotate(-8deg) scale(1.12); }
+  75%  { transform: rotate(4deg) scale(1.04); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+@keyframes sigmaNodePop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.35); }
+  75%  { transform: scale(0.85); }
+  100% { transform: scale(1); }
+}
+
+.sigma-activity {
+  transform-origin: center center;
+  animation: sigmaElasticWobble 1.8s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+}
+
+.sigma-activity circle {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: sigmaNodePop 1.8s ease-in-out infinite;
+}
+
+.sigma-activity circle:nth-of-type(1) { animation-delay: 0s; }
+.sigma-activity circle:nth-of-type(2) { animation-delay: 0.12s; }
+.sigma-activity circle:nth-of-type(3) { animation-delay: 0.24s; }
+.sigma-activity circle:nth-of-type(4) { animation-delay: 0.36s; }
+.sigma-activity circle:nth-of-type(5) { animation-delay: 0.48s; }
+
+/* Click easter-egg: same wobble + node pops, two finite cycles (~1.8s). */
+.sigma-click {
+  transform-origin: center center;
+  animation: sigmaElasticWobble 0.9s cubic-bezier(0.34, 1.56, 0.64, 1) 2;
+}
+
+.sigma-click circle {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: sigmaNodePop 0.9s ease-in-out 2;
+}
+
+.sigma-click circle:nth-of-type(1) { animation-delay: 0s; }
+.sigma-click circle:nth-of-type(2) { animation-delay: 0.12s; }
+.sigma-click circle:nth-of-type(3) { animation-delay: 0.24s; }
+.sigma-click circle:nth-of-type(4) { animation-delay: 0.36s; }
+.sigma-click circle:nth-of-type(5) { animation-delay: 0.48s; }
+
 @keyframes simple-thinking-circle-bounce {
   0% {
     top: 13px;

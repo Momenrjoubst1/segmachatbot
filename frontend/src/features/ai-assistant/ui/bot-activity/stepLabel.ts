@@ -15,6 +15,8 @@ import type { BotStep, StepKind, StepResult } from "./types";
 /**
  * Resolve a human-readable label for a step, optionally with the final
  * "completed" rephrasing (e.g. "Searched 5 sources" instead of "Searching the web").
+ * Claude.ai keeps a past-tense line for finished tools ("Searched the web"),
+ * so completion has its own lookup path.
  */
 export function resolveStepLabel(
   t: TFunction,
@@ -32,16 +34,25 @@ export function resolveStepLabel(
       const candidate = t(key, { count, defaultValue: "" });
       if (candidate) return candidate;
     }
+    // Count-less past tense ("Searched the web").
+    const past = t(`botStatus:steps.tool.${step.toolName}.past`, { defaultValue: "" });
+    if (past) return past;
   }
 
-  // 3. Per-tool "running" label.
+  // 3. Kind-level past tense ("Searched the knowledge base").
+  if (opts?.completed && !step.toolName) {
+    const kindPast = t(`botStatus:steps.completed.${step.kind}`, { defaultValue: "" });
+    if (kindPast) return kindPast;
+  }
+
+  // 4. Per-tool "running" label.
   if (step.toolName) {
     const toolKey = `botStatus:steps.tool.${step.toolName}.label`;
     const toolLabel = t(toolKey, { defaultValue: "" });
     if (toolLabel) return toolLabel;
   }
 
-  // 4. Generic kind label.
+  // 5. Generic kind label.
   const kindKey = `botStatus:steps.kind.${step.kind}`;
   return t(kindKey, { defaultValue: step.kind });
 }

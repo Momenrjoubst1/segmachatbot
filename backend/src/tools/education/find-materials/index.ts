@@ -20,7 +20,7 @@ registerTool("find_materials", {
   description:
     "Search the student's personal library of uploaded study materials (textbook PDFs) and their courses. " +
     "USE WHENEVER the user asks to see, open, get or show a material/book/subject/file they previously added " +
-    "(e.g. \"بدي مادة الفيزياء\", \"افتح كتاب الكيمياء\", \"show my math book\"), even casually inside another request. " +
+    "(e.g. \"show my physics material\", \"open the chemistry book\", \"show my math book\"), even casually inside another request. " +
     "Also use when the user refers to one of their materials by name and showing it would help. " +
     "Call with an empty query to list their most recent materials. " +
     "AFTER calling: copy each ready-made markdown card line from result.cards into your reply EXACTLY as given, " +

@@ -80,17 +80,7 @@ export function assembleSystemPrompt(args: {
     abTest: abConfig,
   };
 
-  let systemPrompt = buildSystemPrompt(promptOptions);
-
-  if (process.env.OCTOPUS_UI_ACTIONS === "true") {
-    systemPrompt += "\n\n" + UI_ACTION_SYSTEM_PROMPT;
-  }
-
-  // Study panels exist only for authenticated students — teach the study actions
-  // unconditionally for them so the AI can surface otherwise-hidden study tools.
-  if (args.userId) {
-    systemPrompt += "\n\n" + STUDY_UI_ACTIONS_PROMPT;
-  }
+  const systemPrompt = buildSystemPrompt(promptOptions);
 
   const buildTimeMs = Date.now() - t0;
   const promptLength = systemPrompt.length;

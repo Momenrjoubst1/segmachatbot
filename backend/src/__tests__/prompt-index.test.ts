@@ -16,47 +16,25 @@ describe('Prompt Index - System Prompt Builder', () => {
     multiAgentMode: false,
   };
 
-  it('should build complete system prompt with all layers', () => {
+  it('should return an empty system prompt (schema-driven system)', () => {
     const result = buildSystemPrompt(baseOptions);
-    
-    expect(result).toContain('Identity — الهوية');
-    expect(result).toContain('Identity Guard — حماية الهوية');
-    expect(result).toContain('Formatting Rules — قواعد التنسيق');
-    expect(result).toContain('User courses: CS101, MATH201');
-    expect(result).toContain('Tool Use Rules — قواعد استخدام الأدوات');
-    expect(result).toContain('RAG Rules — تعليمات السياق المسترجع');
-    expect(result).toContain('Previous conversation summary');
+
+    expect(result).toBe('');
   });
 
-  it('should include tool instructions when tools enabled', () => {
-    const result = buildSystemPrompt({ ...baseOptions, enabledTools: ['web_search'] });
-    
-    expect(result).toContain('Tool Use Rules');
+  it('should stay empty regardless of tools, RAG, memory or budget options', () => {
+    expect(buildSystemPrompt({ ...baseOptions, enabledTools: [] })).toBe('');
+    expect(buildSystemPrompt({ ...baseOptions, ragContext: undefined })).toBe('');
+    expect(buildSystemPrompt({ ...baseOptions, memoryContext: undefined })).toBe('');
+    expect(buildSystemPrompt({ ...baseOptions, maxSystemTokens: 0 })).toBe('');
+    expect(buildSystemPrompt({ ...baseOptions, maxSystemTokens: undefined })).toBe('');
   });
 
-  it('should exclude tool instructions when no tools enabled', () => {
-    const result = buildSystemPrompt({ ...baseOptions, enabledTools: [] });
-    
-    expect(result).not.toContain('Tool Use Rules');
-  });
-
-  it('should exclude RAG when no ragContext', () => {
-    const result = buildSystemPrompt({ ...baseOptions, ragContext: undefined });
-    
-    expect(result).not.toContain('RAG Rules');
-  });
-
-  it('should exclude memory when no memoryContext', () => {
-    const result = buildSystemPrompt({ ...baseOptions, memoryContext: undefined });
-    
-    expect(result).not.toContain('Previous conversation summary');
-  });
-
-  it('should include multi-agent when enabled', () => {
+  it('should not include multi-agent instructions in the prompt', () => {
     const result = buildSystemPrompt({ ...baseOptions, multiAgentMode: true });
-    
-    expect(result).toContain('MULTI-AGENT PROTOCOL');
-    expect(result).toContain('MAIN AGENT DRAFTING');
+
+    expect(result).not.toContain('MULTI-AGENT PROTOCOL');
+    expect(result).not.toContain('MAIN AGENT DRAFTING');
   });
 
   describe('trimToTokenBudget', () => {
@@ -94,22 +72,10 @@ describe('Prompt Index - System Prompt Builder', () => {
   });
 
   describe('maxSystemTokens option', () => {
-    it('should apply token budget when maxSystemTokens provided', () => {
-      const result = buildSystemPrompt({ ...baseOptions, maxSystemTokens: 50 });
-      
-      expect(result.length).toBeLessThan(2000);
-    });
-
-    it('should not apply budget when maxSystemTokens is 0', () => {
-      const result = buildSystemPrompt({ ...baseOptions, maxSystemTokens: 0 });
-      
-      expect(result.length).toBeGreaterThan(500);
-    });
-
-    it('should not apply budget when maxSystemTokens is undefined', () => {
-      const result = buildSystemPrompt({ ...baseOptions, maxSystemTokens: undefined });
-      
-      expect(result.length).toBeGreaterThan(500);
+    it('should keep the prompt empty for any budget value', () => {
+      expect(buildSystemPrompt({ ...baseOptions, maxSystemTokens: 50 })).toBe('');
+      expect(buildSystemPrompt({ ...baseOptions, maxSystemTokens: 0 })).toBe('');
+      expect(buildSystemPrompt({ ...baseOptions, maxSystemTokens: undefined })).toBe('');
     });
   });
 
@@ -179,24 +145,24 @@ describe('Prompt Index - System Prompt Builder', () => {
       expect(persona).toContain('Behavioral Examples');
     });
 
-    it('should apply A/B variant to system prompt', () => {
+    it('should not inject A/B persona variants into the system prompt', () => {
       const result = buildSystemPrompt({ 
         ...baseOptions, 
         abTest: { forceVariant: 'concise' } 
       });
       
-      expect(result).toContain('Keep responses under 200 words');
-      expect(result).not.toContain('Behavioral Examples'); // Concise doesn't have examples
+      expect(result).not.toContain('Keep responses under 200 words');
+      expect(result).not.toContain('Behavioral Examples');
     });
 
-    it('should apply motivational variant to system prompt', () => {
+    it('should not inject motivational persona into the system prompt', () => {
       const result = buildSystemPrompt({ 
         ...baseOptions, 
         abTest: { forceVariant: 'motivational' } 
       });
       
-      expect(result).toContain('Great question');
-      expect(result).toContain('growth mindset');
+      expect(result).not.toContain('Great question');
+      expect(result).not.toContain('growth mindset');
     });
   });
 });

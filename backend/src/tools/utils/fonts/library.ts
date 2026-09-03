@@ -1,5 +1,5 @@
 /**
- * Fonts Library — مكتبة الخطوط
+ * Fonts Library
  *
  * Curated catalog of Google Fonts the chatbot can use when generating
  * HTML / React / SVG / Markdown artifacts. Each entry has:
@@ -7,7 +7,7 @@
  *   - weights: list of available font weights from Google Fonts
  *   - category: 'arabic' | 'sans' | 'serif' | 'mono' | 'display' | 'handwriting'
  *   - googleParam: the value used in `family=` inside the Google Fonts URL
- *   - description: short Arabic description so the LLM can pick intelligently
+ *   - description: short English description so the LLM can pick intelligently
  *
  * To add a font: append it to the right category. The library is exported
  * via `listFonts()`, `resolveFontLinks(names)` and `resolveFontFamily(names)`.
@@ -26,7 +26,7 @@ export interface FontEntry {
   category: FontCategory;
   weights: number[];
   googleParam: string;     // `family=Cairo:wght@400;700`
-  description: string;     // Arabic description for the LLM prompt
+  description: string;     // Short description for the LLM prompt
 }
 
 export const FONTS: Record<string, FontEntry> = {
@@ -36,70 +36,70 @@ export const FONTS: Record<string, FontEntry> = {
     category: 'arabic',
     weights: [200, 300, 400, 500, 600, 700, 800, 900],
     googleParam: 'Cairo:wght@200..900',
-    description: 'Cairo — خط عربي حديث وأنيق، مناسب للعناوين والنصوص.',
+    description: 'Cairo — modern, elegant Arabic font, suitable for headings and body text.',
   },
   'Tajawal': {
     family: 'Tajawal',
     category: 'arabic',
     weights: [200, 300, 400, 500, 700, 800, 900],
     googleParam: 'Tajawal:wght@200;300;400;500;700;800;900',
-    description: 'Tajawal — خط عربي نظيف وواضح للقراءة الطويلة.',
+    description: 'Tajawal — clean, clear Arabic font for long-form reading.',
   },
   Almarai: {
     family: 'Almarai',
     category: 'arabic',
     weights: [300, 400, 700, 800],
     googleParam: 'Almarai:wght@300;400;700;800',
-    description: 'Almarai — خط عربي هندسي حديث.',
+    description: 'Almarai — modern geometric Arabic font.',
   },
   'IBM Plex Sans Arabic': {
     family: 'IBM Plex Sans Arabic',
     category: 'arabic',
     weights: [100, 200, 300, 400, 500, 600, 700],
     googleParam: 'IBM+Plex+Sans+Arabic:wght@100;200;300;400;500;600;700',
-    description: 'IBM Plex Sans Arabic — خط عربي احترافي مناسب لواجهات المنتجات.',
+    description: 'IBM Plex Sans Arabic — professional Arabic font suitable for product interfaces.',
   },
   'Noto Sans Arabic': {
     family: 'Noto Sans Arabic',
     category: 'arabic',
     weights: [100, 200, 300, 400, 500, 600, 700, 800, 900],
     googleParam: 'Noto+Sans+Arabic:wght@100..900',
-    description: 'Noto Sans Arabic — خط عربي شامل لكل الأوزان.',
+    description: 'Noto Sans Arabic — comprehensive Arabic font covering all weights.',
   },
   'Amiri': {
     family: 'Amiri',
     category: 'arabic',
     weights: [400, 700],
     googleParam: 'Amiri:wght@400;700',
-    description: 'Amiri — خط عربي كلاسيكي أنيق مستوحى من الخط الديواني.',
+    description: 'Amiri — elegant classical Arabic font inspired by Diwani calligraphy.',
   },
   'Scheherazade New': {
     family: 'Scheherazade New',
     category: 'arabic',
     weights: [400, 500, 600, 700],
     googleParam: 'Scheherazade+New:wght@400;500;600;700',
-    description: 'Scheherazade New — خط عربي تقليدي مناسب للنصوص الطويلة والكتب.',
+    description: 'Scheherazade New — traditional Arabic font suitable for long texts and books.',
   },
   'Lateef': {
     family: 'Lateef',
     category: 'arabic',
     weights: [400, 500, 600, 700],
     googleParam: 'Lateef:wght@400;500;600;700',
-    description: 'Lateef — خط عربي ناعم ومقروء.',
+    description: 'Lateef — soft, readable Arabic font.',
   },
   'Reem Kufi': {
     family: 'Reem Kufi',
     category: 'arabic',
     weights: [400, 500, 600, 700],
     googleParam: 'Reem+Kufi:wght@400..700',
-    description: 'Reem Kufi — خط عربي معاصر مستوحى من خط الكوفي.',
+    description: 'Reem Kufi — contemporary Arabic font inspired by Kufic calligraphy.',
   },
   'Markazi Text': {
     family: 'Markazi Text',
     category: 'arabic',
     weights: [400, 500, 600, 700],
     googleParam: 'Markazi+Text:wght@400..700',
-    description: 'Markazi Text — خط عربي مناسب للعناوين الكبيرة.',
+    description: 'Markazi Text — Arabic font suitable for large headings.',
   },
 
   // ---------- Latin Sans ----------
@@ -108,56 +108,56 @@ export const FONTS: Record<string, FontEntry> = {
     category: 'sans',
     weights: [100, 200, 300, 400, 500, 600, 700, 800, 900],
     googleParam: 'Inter:wght@100..900',
-    description: 'Inter — خط لاتيني عصري شائع في واجهات الويب.',
+    description: 'Inter — modern Latin font popular in web interfaces.',
   },
   Roboto: {
     family: 'Roboto',
     category: 'sans',
     weights: [100, 300, 400, 500, 700, 900],
     googleParam: 'Roboto:wght@100;300;400;500;700;900',
-    description: 'Roboto — خط Google الرسمي للنصوص اللاتينية.',
+    description: 'Roboto — Google\'s official Latin font.',
   },
   Poppins: {
     family: 'Poppins',
     category: 'sans',
     weights: [100, 200, 300, 400, 500, 600, 700, 800, 900],
     googleParam: 'Poppins:wght@100;200;300;400;500;600;700;800;900',
-    description: 'Poppins — خط لاتيني عصري هندسي.',
+    description: 'Poppins — modern geometric Latin font.',
   },
   Montserrat: {
     family: 'Montserrat',
     category: 'sans',
     weights: [100, 200, 300, 400, 500, 600, 700, 800, 900],
     googleParam: 'Montserrat:wght@100..900',
-    description: 'Montserrat — خط لاتيني أنيق للعناوين.',
+    description: 'Montserrat — elegant Latin font for headings.',
   },
   'Open Sans': {
     family: 'Open Sans',
     category: 'sans',
     weights: [300, 400, 500, 600, 700, 800],
     googleParam: 'Open+Sans:wght@300;400;500;600;700;800',
-    description: 'Open Sans — خط لاتيني واضح ومقروء.',
+    description: 'Open Sans — clear, readable Latin font.',
   },
   Lato: {
     family: 'Lato',
     category: 'sans',
     weights: [100, 300, 400, 700, 900],
     googleParam: 'Lato:wght@100;300;400;700;900',
-    description: 'Lato — خط لاتيني دافئ وأنيق.',
+    description: 'Lato — warm, elegant Latin font.',
   },
   Nunito: {
     family: 'Nunito',
     category: 'sans',
     weights: [200, 300, 400, 500, 600, 700, 800, 900],
     googleParam: 'Nunito:wght@200..900',
-    description: 'Nunito — خط لاتيني ناعم مع زوايا مستديرة.',
+    description: 'Nunito — soft Latin font with rounded corners.',
   },
   'Work Sans': {
     family: 'Work Sans',
     category: 'sans',
     weights: [100, 200, 300, 400, 500, 600, 700, 800, 900],
     googleParam: 'Work+Sans:wght@100..900',
-    description: 'Work Sans — خط لاتيني مخصص للشاشات.',
+    description: 'Work Sans — Latin font designed for screens.',
   },
 
   // ---------- Latin Serif ----------
@@ -166,28 +166,28 @@ export const FONTS: Record<string, FontEntry> = {
     category: 'serif',
     weights: [300, 400, 700, 900],
     googleParam: 'Merriweather:wght@300;400;700;900',
-    description: 'Merriweather — خط لاتيني Serif للقراءة الطويلة.',
+    description: 'Merriweather — Latin Serif font for long-form reading.',
   },
   Playfair: {
     family: 'Playfair Display',
     category: 'serif',
     weights: [400, 500, 600, 700, 800, 900],
     googleParam: 'Playfair+Display:wght@400..900',
-    description: 'Playfair Display — خط لاتيني Serif فخم للعناوين.',
+    description: 'Playfair Display — luxurious Latin Serif font for headings.',
   },
   Lora: {
     family: 'Lora',
     category: 'serif',
     weights: [400, 500, 600, 700],
     googleParam: 'Lora:wght@400..700',
-    description: 'Lora — خط Serif لاتيني دافئ ومتوازن.',
+    description: 'Lora — warm, balanced Latin Serif font.',
   },
   'PT Serif': {
     family: 'PT Serif',
     category: 'serif',
     weights: [400, 700],
     googleParam: 'PT+Serif:wght@400;700',
-    description: 'PT Serif — خط Serif كلاسيكي بسيط.',
+    description: 'PT Serif — simple classical Serif font.',
   },
 
   // ---------- Monospace ----------
@@ -196,35 +196,35 @@ export const FONTS: Record<string, FontEntry> = {
     category: 'mono',
     weights: [100, 200, 300, 400, 500, 600, 700],
     googleParam: 'Roboto+Mono:wght@100..700',
-    description: 'Roboto Mono — خط Monospace ممتاز للأكواد.',
+    description: 'Roboto Mono — excellent Monospace font for code.',
   },
   'JetBrains Mono': {
     family: 'JetBrains Mono',
     category: 'mono',
     weights: [100, 200, 300, 400, 500, 600, 700, 800],
     googleParam: 'JetBrains+Mono:wght@100..800',
-    description: 'JetBrains Mono — خط Monospace مصمم خصيصاً للمطورين.',
+    description: 'JetBrains Mono — Monospace font designed specifically for developers.',
   },
   'Fira Code': {
     family: 'Fira Code',
     category: 'mono',
     weights: [300, 400, 500, 600, 700],
     googleParam: 'Fira+Code:wght@300;400;500;600;700',
-    description: 'Fira Code — خط Monospace مع Ligatures للأكواد.',
+    description: 'Fira Code — Monospace font with ligatures for code.',
   },
   'Source Code Pro': {
     family: 'Source Code Pro',
     category: 'mono',
     weights: [200, 300, 400, 500, 600, 700, 800, 900],
     googleParam: 'Source+Code+Pro:wght@200..900',
-    description: 'Source Code Pro — خط Monospace احترافي من Adobe.',
+    description: 'Source Code Pro — professional Monospace font by Adobe.',
   },
   'IBM Plex Mono': {
     family: 'IBM Plex Mono',
     category: 'mono',
     weights: [100, 200, 300, 400, 500, 600, 700],
     googleParam: 'IBM+Plex+Mono:wght@100;200;300;400;500;600;700',
-    description: 'IBM Plex Mono — خط Monospace هندسي من IBM.',
+    description: 'IBM Plex Mono — geometric Monospace font by IBM.',
   },
 
   // ---------- Display / Decorative ----------
@@ -233,35 +233,35 @@ export const FONTS: Record<string, FontEntry> = {
     category: 'display',
     weights: [400],
     googleParam: 'Bebas+Neue',
-    description: 'Bebas Neue — خط Display لاتيني قوي للعناوين الضخمة.',
+    description: 'Bebas Neue — strong Latin Display font for large headlines.',
   },
   Oswald: {
     family: 'Oswald',
     category: 'display',
     weights: [200, 300, 400, 500, 600, 700],
     googleParam: 'Oswald:wght@200..700',
-    description: 'Oswald — خط Display لاتيني مكثف.',
+    description: 'Oswald — condensed Latin Display font.',
   },
   Anton: {
     family: 'Anton',
     category: 'display',
     weights: [400],
     googleParam: 'Anton',
-    description: 'Anton — خط Display لاتيني ثقيل وملفت.',
+    description: 'Anton — heavy, attention-grabbing Latin Display font.',
   },
   Abril: {
     family: 'Abril Fatface',
     category: 'display',
     weights: [400],
     googleParam: 'Abril+Fatface',
-    description: 'Abril Fatface — خط Display Serif فخم وفني.',
+    description: 'Abril Fatface — luxurious, artistic Display Serif font.',
   },
   Lobster: {
     family: 'Lobster',
     category: 'display',
     weights: [400],
     googleParam: 'Lobster',
-    description: 'Lobster — خط Display Script لافت.',
+    description: 'Lobster — eye-catching Display Script font.',
   },
 
   // ---------- Handwriting ----------
@@ -270,28 +270,28 @@ export const FONTS: Record<string, FontEntry> = {
     category: 'handwriting',
     weights: [400, 500, 600, 700],
     googleParam: 'Caveat:wght@400..700',
-    description: 'Caveat — خط يدوي عفوي.',
+    description: 'Caveat — spontaneous handwriting font.',
   },
   Pacifico: {
     family: 'Pacifico',
     category: 'handwriting',
     weights: [400],
     googleParam: 'Pacifico',
-    description: 'Pacifico — خط يدوي مرح.',
+    description: 'Pacifico — playful handwriting font.',
   },
   Dancing: {
     family: 'Dancing Script',
     category: 'handwriting',
     weights: [400, 500, 600, 700],
     googleParam: 'Dancing+Script:wght@400..700',
-    description: 'Dancing Script — خط يدوي أنيق.',
+    description: 'Dancing Script — elegant handwriting font.',
   },
   Shadows: {
     family: 'Shadows Into Light',
     category: 'handwriting',
     weights: [400],
     googleParam: 'Shadows+Into+Light',
-    description: 'Shadows Into Light — خط يدوي بنمط دفتر ملاحظات.',
+    description: 'Shadows Into Light — notebook-style handwriting font.',
   },
 };
 
@@ -409,9 +409,9 @@ export function listFonts(): { count: number; byCategory: Record<FontCategory, s
 export function buildFontsCatalogPrompt(): string {
   const { count, byCategory } = listFonts();
   const lines: string[] = [
-    `# مكتبة الخطوط المتاحة (${count} خط)`,
-    'يمكنك استخدام هذه الخطوط في HTML/React/SVG artifacts عبر تمرير `fonts: [...]` إلى create_artifact.',
-    'كل خط له مفتاح (key) تستخدمه في `fonts`، وقيمة `family` تستخدمها في CSS.',
+    `# Available Fonts Library (${count} fonts)`,
+    'You can use these fonts in HTML/React/SVG artifacts by passing `fonts: [...]` to create_artifact.',
+    'Each font has a key you use in `fonts`, and a `family` value you use in CSS.',
   ];
   for (const cat of Object.keys(byCategory) as FontCategory[]) {
     const items = byCategory[cat];

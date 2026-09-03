@@ -61,9 +61,7 @@ export async function generateAndStreamResponse(
   let currentModelName = modelName;
   let currentClient = client;
 
-  const resolvedSystemPrompt = MULTI_AGENT_ENABLED
-    ? `${augmentedSystemPrompt}\n\n=========================================\n🤖 MULTI-AGENT PROTOCOL: MAIN AGENT DRAFTING\n=========================================\n${MAIN_AGENT_SYSTEM_PROMPT}`
-    : `${augmentedSystemPrompt}\n\n**QUALITY GUIDELINES:**\n- Double-check facts and citations before responding\n- Use clear, well-structured Markdown\n- Ensure accuracy and completeness\n- Keep responses concise but thorough`;
+  const resolvedSystemPrompt = augmentedSystemPrompt;
 
   let attemptModelName = currentModelName;
 

@@ -37,7 +37,6 @@ import { useChatModel } from "../../../context/ChatModelContext";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useSendState } from "@/context/SendStateContext";
-import { ComposerStatus } from "../../../ui/bot-activity/components/ComposerStatus";
 import { PROMPT_TEMPLATES } from "../../../config/prompt-templates";
 import {
   MODELS,
@@ -134,13 +133,9 @@ const ComposerAction: FC<{ disabled?: boolean }> = ({ disabled }) => {
             MicButton hides itself for guests, exposing the hide reason). */}
         {VOICE_DEBUG_PARAM.enabled && <VoiceDebugOverlay />}
 
-        {/* ── live status indicator: tokens + elapsed ──────────
-            Shown only while submitting or streaming. Sits to the LEFT
-            of the action button so the visual hierarchy reads:
-            "[Model] [Mic] [X tokens · Y.Ys] [Stop]". */}
-        <ComposerStatus active={effectiveState !== "idle"} />
-
-        {/* ── idle + text: send button (Claude-style filled) ───── */}
+        {/* ── idle + text: send button (Claude-style filled) ─────
+            Claude shows NO token/elapsed counter in the composer — the
+            status line in the message area is the only progress signal. */}
         {effectiveState === "idle" && hasText && (
           <ComposerPrimitive.Send asChild>
             <Tooltip>
@@ -350,8 +345,10 @@ export const ThreadComposer: FC = () => {
             />
           </div>
         </ComposerPrimitive.AttachmentDropzone>
+        {/* Claude-exact: the disclaimer is the last strip on screen —
+            flush under the card, minimal padding to the window edge. */}
         {!isThreadEmpty && (
-          <p className="disclaimer-text px-1.5 pt-1.5 text-center text-xs text-muted-foreground/60">
+          <p className="disclaimer-text px-1.5 pt-1 text-center text-xs leading-4 text-muted-foreground/60">
             {t("composerDisclaimer")}
           </p>
         )}

@@ -123,7 +123,10 @@ export function FullScreenCalendar({
   const [searchOpen, setSearchOpen] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
   const [createPrefillDate, setCreatePrefillDate] = React.useState<Date | undefined>(undefined)
-  const firstDayCurrentMonth = parse(currentMonth, "MMM-yyyy", new Date())
+  const firstDayCurrentMonth = React.useMemo(
+    () => parse(currentMonth, "MMM-yyyy", new Date()),
+    [currentMonth],
+  )
   const isDesktop = useMediaQuery("(min-width: 768px)")
   const dateLocale = React.useMemo(getDateFnsLocale, [i18n.language])
 

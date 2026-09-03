@@ -141,6 +141,9 @@ export const IconSpark: FC<IconProps> = (p) => (
   </svg>
 );
 
+// IconStarburst removed: replaced by Sigma's own mark (`SigmaMark.tsx`) —
+// the Claude-style coral starburst was never Sigma's brand.
+
 export const IconFilter: FC<IconProps> = (p) => (
   <svg {...baseProps} {...p}>
     <path d="M2 3h12l-4 5v5l-4-2V8L2 3Z" />

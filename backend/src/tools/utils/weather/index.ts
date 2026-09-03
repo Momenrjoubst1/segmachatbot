@@ -2,22 +2,22 @@ import { z } from "zod";
 import { registerTool } from "../../tool-registry.js";
 
 registerTool("get_weather", {
-  description: "احصل على حالة الطقس لمدينة معينة. استخدم عندما يسأل المستخدم عن الطقس.",
+  description: "Get the weather conditions for a specific city. Use when the user asks about the weather.",
   inputSchema: z.object({
-    city: z.string().describe("اسم المدينة (مثال: 'Amman', 'Irbid', 'New York')"),
+    city: z.string().describe("City name (e.g. 'Amman', 'Irbid', 'New York')"),
   }),
   execute: async ({ city }: { city: string }) => {
     try {
       const apiKey = process.env.WEATHER_API_KEY;
       if (!apiKey) {
-        return JSON.stringify({ status: "unavailable", message: "خدمة الطقس غير متوفرة حالياً" });
+        return JSON.stringify({ status: "unavailable", message: "The weather service is currently unavailable" });
       }
       const res = await fetch(
         `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${apiKey}&units=metric&lang=ar`
       );
       if (!res.ok) {
-        if (res.status === 404) return JSON.stringify({ status: "error", message: `المدينة '${city}' غير موجودة` });
-        return JSON.stringify({ status: "error", message: "فشل في جلب بيانات الطقس" });
+        if (res.status === 404) return JSON.stringify({ status: "error", message: `City '${city}' was not found` });
+        return JSON.stringify({ status: "error", message: "Failed to fetch weather data" });
       }
       const data = await res.json() as { name?: string; visibility?: number; main?: Record<string, unknown>; sys?: Record<string, unknown>; weather?: Array<Record<string, unknown>>; wind?: Record<string, unknown> };
       const main = data.main as Record<string, unknown> | undefined;
@@ -40,7 +40,7 @@ registerTool("get_weather", {
         visibility_km: Math.round(((data.visibility as number) ?? 0) / 1000),
       });
     } catch (err: unknown) {
-      return JSON.stringify({ status: "error", message: "فشل في جلب الطقس", error: err instanceof Error ? err.message : String(err) });
+      return JSON.stringify({ status: "error", message: "Failed to get the weather", error: err instanceof Error ? err.message : String(err) });
     }
   },
 });

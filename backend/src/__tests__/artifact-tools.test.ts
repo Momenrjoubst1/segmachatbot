@@ -95,11 +95,11 @@ describe('applyReplacements', () => {
 
   it('supports nth-occurrence targeting and rejects missing occurrences', () => {
     expect(applyReplacements('a1b1c1', [{ find: '1', replace: '2', occurrence: 3 }]).content).toBe('a1b1c2');
-    expect(() => applyReplacements('a1b1c1', [{ find: '1', replace: '2', occurrence: 9 }])).toThrowError(/الحدوث رقم 9/);
+    expect(() => applyReplacements('a1b1c1', [{ find: '1', replace: '2', occurrence: 9 }])).toThrowError(/Occurrence number 9/);
   });
 
   it('throws a helpful error when the find text is missing', () => {
-    expect(() => applyReplacements('hello', [{ find: 'nope', replace: 'x' }])).toThrowError(/لم يتم العثور/);
+    expect(() => applyReplacements('hello', [{ find: 'nope', replace: 'x' }])).toThrowError(/not found/);
   });
 
   it('applies edits sequentially so later finds see earlier replaces', () => {

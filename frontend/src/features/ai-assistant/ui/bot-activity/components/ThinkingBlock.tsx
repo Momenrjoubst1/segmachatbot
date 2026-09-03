@@ -1,26 +1,35 @@
 /**
  * `ThinkingBlock` — collapsible view of the model's streamed reasoning.
- * Claude.ai-style "Thought for Ns" pattern:
+ * Claude.ai's exact pattern:
  *
- *   while thinking:  [🧠 Thinking… ▾]     ← expanded, text streams in
- *                    | muted reasoning    |
- *                    |  text, auto-scroll |
+ *   while thinking:  [Thinking      ▾]   ← "Thinking" carries the shimmer
+ *                      | muted reasoning |   sweep, no icon, no timer
+ *                      |  text, muted    |
  *
- *   after done:      [✓ Thought for 3.2s ▴]  ← collapsed, click to expand
+ *   after done:      [Thought for 12s  ▸] ← collapsed pill with frozen
+ *                                           duration; click to expand
  *
  * Used in two shapes:
  *  - native `reasoning` parts (Gemini thoughts via the AI SDK)
  *  - <think>…</think> segments recovered from OpenAI-compatible streams
  *
  * Auto-expands while running and auto-collapses when done (unless the user
- * toggled manually). Honors `prefers-reduced-motion` via motion-reduce classes.
+ * toggled manually). No live seconds counter — Claude shows the duration
+ * only once thinking completes.
  */
 
 import { type FC, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { IconBrain, IconChevronDown, IconChevronRight, IconLoader } from "./icons";
+import { IconChevronDown, IconChevronRight } from "./icons";
+import { ShimmerText } from "./ShimmerText";
 
-const THINKING_BLOCK_MAX = 3; // seconds resolution for the done-label
+/** Whole-second duration format, Claude pill style: `6s`, `2m 15s`. */
+function formatThinkDuration(seconds: number): string {
+  const s = Math.max(1, Math.round(seconds));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m ${(s % 60).toString().padStart(2, "0")}s`;
+}
 
 interface ThinkingBlockProps {
   /** Accumulated reasoning text so far. */
@@ -52,7 +61,7 @@ export const ThinkingBlock: FC<ThinkingBlockProps> = ({ text, running }) => {
     if (!userToggledRef.current) setExpanded(running);
   }, [running]);
 
-  // Auto-scroll the thought body while streaming.
+  // Follow the thought body while streaming.
   useEffect(() => {
     if (running && expanded && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -66,17 +75,11 @@ export const ThinkingBlock: FC<ThinkingBlockProps> = ({ text, running }) => {
 
   if (!text) return null;
 
-  const seconds =
-    durationRef.current ??
-    (startedAtRef.current != null
-      ? Math.max(0, (Date.now() - startedAtRef.current) / 1000)
-      : null);
-  const showDuration = !running && seconds != null && seconds >= THINKING_BLOCK_MAX;
-
+  const seconds = durationRef.current;
   const label = running
     ? t("thinking.active")
-    : showDuration
-      ? t("thinking.done", { duration: `${seconds.toFixed(1)}s` })
+    : seconds != null
+      ? t("thinking.done", { duration: formatThinkDuration(seconds) })
       : t("thinking.past");
 
   return (
@@ -86,14 +89,13 @@ export const ThinkingBlock: FC<ThinkingBlockProps> = ({ text, running }) => {
         onClick={onToggle}
         aria-expanded={expanded}
         aria-label={expanded ? t("collapse") : t("expand")}
-        className="group flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-muted/60 transition-colors duration-150"
+        className="group flex items-center gap-1.5 rounded-md px-2 py-1 transition-colors duration-150 hover:bg-muted/60"
       >
         {running ? (
-          <IconLoader className="size-3.5 text-primary motion-reduce:hidden" />
+          <ShimmerText className="text-[13px] font-medium">{label}</ShimmerText>
         ) : (
-          <IconBrain className="size-3.5 text-primary/70" />
+          <span className="text-[13px] font-medium text-muted-foreground">{label}</span>
         )}
-        <span className="text-[13px] font-medium text-muted-foreground">{label}</span>
         {expanded ? (
           <IconChevronDown className="size-3 text-muted-foreground/60 group-hover:text-muted-foreground" />
         ) : (
@@ -104,9 +106,9 @@ export const ThinkingBlock: FC<ThinkingBlockProps> = ({ text, running }) => {
       {expanded && (
         <div
           ref={scrollRef}
-          className="ml-3 mr-2 mt-1 max-h-56 overflow-y-auto rounded-md border-l-2 border-primary/30 bg-muted/30 px-3 py-2 animate-in fade-in slide-in-from-top-1 duration-200"
+          className="ml-4 mr-2 mt-0.5 max-h-64 overflow-y-auto border-l border-border/40 py-1 pl-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          <p className="whitespace-pre-wrap break-words text-[12.5px] leading-6 text-muted-foreground/85">
+          <p className="whitespace-pre-wrap break-words text-[12.5px] leading-6 text-muted-foreground/80">
             {text}
           </p>
         </div>

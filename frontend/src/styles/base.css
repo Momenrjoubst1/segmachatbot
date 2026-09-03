@@ -216,9 +216,18 @@ a {
   .tool-card-running::before,
   .reasoning-active::before,
   .shimmer,
+  .shimmer-text,
   .simple-thinking-circle,
   .simple-thinking-shadow {
     animation: none !important;
+  }
+
+  /* Frozen shimmer gradient would leave a bright band mid-text — fall back
+     to a solid muted label instead. */
+  .shimmer-text {
+    background: none !important;
+    -webkit-text-fill-color: currentColor;
+    color: hsl(var(--muted-foreground)) !important;
   }
 
   /* Disable Tailwind animation utilities */

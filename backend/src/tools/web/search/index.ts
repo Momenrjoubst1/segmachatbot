@@ -3,15 +3,15 @@ import { registerTool } from "../../tool-registry.js";
 import { searchWeb, isWebSearchAvailable } from "./search-engine.js";
 
 registerTool("web_search", {
-  description: "ابحث في الإنترنت عن معلومات حديثة أو أخبار. استخدم عندما يحتاج المستخدم معلومات خارج معرفتك أو آخر الأخبار.",
+  description: "Search the internet for recent information or news. Use when the user needs information beyond your knowledge or the latest news.",
   inputSchema: z.object({
-    query: z.string().describe("استعلام البحث بالعربية أو الإنجليزية"),
+    query: z.string().describe("Search query in Arabic or English"),
   }),
   execute: async ({ query }: { query: string }) => {
     try {
       const results = await searchWeb(query, 5);
       if (results.length === 0) {
-        return JSON.stringify({ status: "no_results", message: "لم يتم العثور على نتائج", results: [] });
+        return JSON.stringify({ status: "no_results", message: "No results found", results: [] });
       }
       return JSON.stringify({
         status: "success",
@@ -19,7 +19,7 @@ registerTool("web_search", {
         total_results: results.length,
       });
     } catch (err: unknown) {
-      return JSON.stringify({ status: "error", message: "خطأ في البحث", error: err instanceof Error ? err.message : String(err) });
+      return JSON.stringify({ status: "error", message: "Search error", error: err instanceof Error ? err.message : String(err) });
     }
   },
 });

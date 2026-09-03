@@ -171,57 +171,12 @@ Adhere to the following roles in your responses:
 
 // Build the final system prompt from the enabled modular layers.
 export function buildSystemPrompt(options: PromptBuildOptions): string {
-  // Resolve A/B variant if configured
-  const variant = options.abTest ? resolveABVariant(options.abTest) : 'default';
-  const persona = buildPersonaWithVariant(variant, options.language);
-
-  // Layer contents keyed by the context-budget layer registry
-  const layerContents: Record<string, string> = {
-    base_persona: persona,
-    identity_guard: buildIdentityGuard(),
-    formatting_rules: buildFormattingRules(),
-    user_courses: options.userCoursesContext ?? '',
-    tool_instructions:
-      options.enabledTools && options.enabledTools.length > 0
-        ? (buildToolInstructions(options.enabledTools) ?? '')
-        : '',
-    rag_context: options.ragContext ? buildRAGInstructions(options.ragContext) : '',
-    memory_context: options.memoryContext ?? '',
-    multi_agent: options.multiAgentMode ? buildMultiAgentInstructions() : '',
-  };
-
-  let prompt: string;
-  let budgetResult: BudgetAllocationResult | undefined;
-
-  if (options.modelId) {
-    // Allocate tokens per layer from the model's context window, lowest priority first.
-    budgetResult = applyBudget(
-      calculateContextBudget(
-        {
-          modelId: options.modelId,
-          reservedOutputTokens: options.reservedOutputTokens,
-        },
-        layerContents,
-      ),
-    );
-    prompt = budgetResult.finalPrompt;
-  } else {
-    // Legacy path: simple char-approximation trim
-    prompt = Object.values(layerContents).filter(Boolean).join('\n\n');
-    if (options.maxSystemTokens && options.maxSystemTokens > 0) {
-      prompt = trimToTokenBudget(prompt, options.maxSystemTokens);
-    }
-  }
-
-  if (budgetResult && budgetResult.trimmedLayers.length > 0) {
-    console.warn('[prompt-budget] layers trimmed to fit context window', {
-      modelId: options.modelId,
-      trimmedLayers: budgetResult.trimmedLayers,
-      warnings: budgetResult.warnings,
-    });
-  }
-
-  return prompt;
+  // Schema-driven system (2026-08-30): the system prompt is intentionally
+  // empty. All model-facing knowledge lives in the tool schemas themselves
+  // (see tools/tool-registry.ts usage notes + general discipline), the way
+  // Claude/GPT/Gemini ship tool awareness.
+  void options;
+  return '';
 }
 
 // Re-export individual builders for direct testing / composition

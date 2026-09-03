@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sigma Agent Patterns — Visual Maps</title>
+<style>
+  :root{
+    --ink:#2B2320;
+    --muted:#7A6E66;
+    --paper:#FAF8F5;
+    --card:#FFFFFF;
+    --line:#E7DFD8;
+    --brand:#BE1E2D;
+    --brand2:#A03C3C;
+    --amber-bg:#FFF7E8; --amber-bd:#F0C987; --amber-tx:#92400E;
+    --green-bg:#EAF7EE; --green-bd:#A5D6B5; --green-tx:#166534;
+    --blue-bg:#EEF3FE;  --blue-bd:#B9CBF2;  --blue-tx:#1E40AF;
+    --gray-bg:#F4F1EE;  --gray-bd:#DDD5CC;  --gray-tx:#6B625B;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"Segoe UI",Tahoma,Arial,sans-serif;
+    background:var(--paper); color:var(--ink);
+    line-height:1.65; padding:32px 16px 64px;
+  }
+  .wrap{max-width:1060px;margin:0 auto}
+  code{font-family:Consolas,"Courier New",monospace;background:#F3EDE7;border:1px solid var(--line);
+    border-radius:5px;padding:0 6px;font-size:.85em;color:var(--brand2)}
+
+  /* ---------- header ---------- */
+  header{border-bottom:3px solid var(--brand);padding-bottom:18px;margin-bottom:10px}
+  header h1{font-size:1.7rem;color:var(--brand)}
+  header p{color:var(--muted);margin-top:6px}
+  .formula{
+    margin:18px 0 8px;background:var(--card);border:2px solid var(--brand);
+    border-radius:14px;padding:14px 18px;text-align:center;font-size:1.05rem;font-weight:600;
+  }
+  .formula .op{color:var(--brand);font-weight:800;padding:0 8px}
+
+  /* ---------- legend ---------- */
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 30px}
+  .legend span{display:inline-flex;align-items:center;gap:7px;font-size:.82rem;color:var(--muted);
+    background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 12px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+
+  /* ---------- sections ---------- */
+  section{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:26px 26px 30px;margin-bottom:34px;box-shadow:0 1px 3px rgba(43,35,32,.05)}
+  section h2{font-size:1.25rem;color:var(--brand2);display:flex;align-items:center;gap:10px}
+  section h2 .num{background:var(--brand);color:#fff;border-radius:8px;min-width:30px;height:30px;
+    display:inline-flex;align-items:center;justify-content:center;font-size:.95rem}
+  .sub{color:var(--muted);font-size:.9rem;margin:6px 0 20px}
+  .ref{font-size:.78rem;color:var(--muted);margin-top:16px;border-top:1px dashed var(--line);padding-top:10px}
+
+  /* ---------- generic node boxes ---------- */
+  .node{background:var(--blue-bg);border:1.5px solid var(--blue-bd);color:var(--blue-tx);
+    border-radius:10px;padding:9px 14px;text-align:center;font-size:.9rem;font-weight:600}
+  .node small{display:block;font-weight:400;font-size:.74rem;color:var(--muted);margin-top:2px}
+  .node.amber{background:var(--amber-bg);border-color:var(--amber-bd);color:var(--amber-tx)}
+  .node.green{background:var(--green-bg);border-color:var(--green-bd);color:var(--green-tx)}
+  .node.gray{background:var(--gray-bg);border-color:var(--gray-bd);color:var(--gray-tx)}
+  .node.brand{background:#FBEDEE;border-color:#E5A9AF;color:var(--brand)}
+
+  .varrow{display:flex;justify-content:center;padding:2px 0;color:#B9ADA3}
+  .hflow{display:flex;align-items:stretch;gap:10px;flex-wrap:nowrap}
+  .hflow .grow{flex:1}
+  .harrow{align-self:center;color:#B9ADA3;flex:0 0 auto}
+
+  /* ---------- big picture nested ---------- */
+  .nest-user{max-width:460px;margin:0 auto}
+  .nest-pipeline{border:2px dashed var(--brand2);border-radius:16px;padding:16px 16px 18px;background:#FDF9F6}
+  .nest-pipeline>.tag{font-size:.8rem;font-weight:700;color:var(--brand2);margin-bottom:10px;display:block;text-align:center}
+  .nest-loop{border:2px solid var(--brand);border-radius:12px;padding:12px;background:#fff;margin-top:12px}
+  .nest-loop>.tag{font-size:.78rem;font-weight:700;color:var(--brand);margin-bottom:8px;display:block;text-align:center}
+  .mini-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  .mini{background:var(--blue-bg);border:1px solid var(--blue-bd);color:var(--blue-tx);
+    border-radius:7px;padding:3px 9px;font-size:.76rem;font-weight:600}
+
+  /* ---------- phases ---------- */
+  .phase{border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px;background:#FDFCFA}
+  .phase>h3{font-size:.95rem;color:var(--ink);margin-bottom:4px;display:flex;align-items:center;gap:8px}
+  .phase>h3 .pnum{background:var(--brand2);color:#fff;border-radius:6px;font-size:.72rem;padding:1px 8px}
+  .phase>p{font-size:.78rem;color:var(--muted);margin-bottom:12px}
+  .steps{display:flex;flex-direction:column;gap:0}
+  .step{display:flex;align-items:flex-start;gap:10px;padding:7px 10px;border-radius:9px}
+  .step .n{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--brand);color:#fff;
+    font-size:.75rem;display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .step .b{flex:1}
+  .step .b strong{font-size:.88rem}
+  .step .b small{display:block;font-size:.75rem;color:var(--muted)}
+  .step.swap{background:var(--amber-bg)}
+  .step.swap .n{background:var(--amber-tx)}
+  .step.exit{background:var(--green-bg)}
+  .step.exit .n{background:var(--green-tx)}
+  .step.after{background:var(--gray-bg);border:1px dashed var(--gray-bd)}
+  .step.after .n{background:var(--gray-tx)}
+  .step-core{background:#FBEDEE;border:1.5px solid #E5A9AF}
+  .step-core .n{background:var(--brand)}
+  .phase-link{display:flex;justify-content:center;padding:2px 0 10px;color:#B9ADA3}
+
+  /* ---------- svg ---------- */
+  svg{display:block;margin:0 auto;max-width:100%;height:auto}
+  svg text{font-family:"Segoe UI",Tahoma,Arial,sans-serif}
+
+  /* ---------- ladder ---------- */
+  .ladder{max-width:600px;margin:0 auto}
+  .rung{display:flex;align-items:center;gap:12px}
+  .rung .box{flex:1}
+  .rung .fail{flex:0 0 auto;color:var(--brand);font-weight:800;font-size:.85rem;
+    background:#FBEDEE;border:1.5px solid #E5A9AF;border-radius:9px;padding:5px 10px}
+
+  /* ---------- taxonomy ---------- */
+  .tax{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}
+  .tcard{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#FDFCFA}
+  .tcard h4{font-size:.95rem;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .badge{font-size:.72rem;border-radius:999px;padding:2px 10px;font-weight:700;white-space:nowrap}
+  .badge.yes{background:var(--green-bg);color:var(--green-tx);border:1px solid var(--green-bd)}
+  .badge.half{background:var(--amber-bg);color:var(--amber-tx);border:1px solid var(--amber-bd)}
+  .badge.no{background:var(--gray-bg);color:var(--gray-tx);border:1px solid var(--gray-bd)}
+  .tcard p{font-size:.8rem;color:var(--muted);margin-top:6px}
+  .tcard.hit{border-color:var(--green-bd);background:var(--green-bg)}
+  .tcard.hit p{color:var(--green-tx)}
+
+  @media (max-width:640px){
+    .hflow{flex-direction:column}
+    .harrow{transform:rotate(90deg);justify-content:center}
+    section{padding:18px 14px 22px}
+  }
+  @media print{
+    body{background:#fff;padding:0}
+    section{box-shadow:none;break-inside:avoid;margin-bottom:14px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ===================== HEADER ===================== -->
+<header>
+  <h1>🧭 Sigma Agent-Pipeline Patterns</h1>
+  <p>Visual maps of how a student's request travels through the system — from first bot call to final streamed token</p>
+</header>
+
+<div class="formula">
+  Your system = <span>Fixed Pipeline (Workflow)</span><span class="op">+</span><span>Bounded ReAct Tool Loop (≤ 15)</span><span class="op">+</span><span>Optional Critic</span>
+</div>
+
+<div class="legend">
+  <span><i class="dot" style="background:#1D4ED8"></i> Hard-coded step</span>
+  <span><i class="dot" style="background:#B45309"></i> Decision / model swap</span>
+  <span><i class="dot" style="background:#15803D"></i> Early exit to user</span>
+  <span><i class="dot" style="background:#BE1E2D"></i> Heart of the agent</span>
+  <span><i class="dot" style="background:#9A8F87"></i> Post-response work</span>
+</div>
+
+<!-- ===================== 1. BIG PICTURE ===================== -->
+<section>
+  <h2><span class="num">1</span> The Big Picture — Hybrid Architecture</h2>
+  <p class="sub">The outer frame is <b>fixed code</b> (a workflow). The real agent — thinking + tools — lives <b>only inside</b>, with a step cap.</p>
+
+  <div class="nest-user">
+    <div class="node green">👤 Student sends a message</div>
+    <div class="varrow">
+      <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+
+    <div class="nest-pipeline">
+      <span class="tag">⚙️ Fixed pipeline — pre-ordered step chain (chat.pipeline.ts)</span>
+      <div class="mini-row">
+        <span class="mini">Validate</span><span class="mini">Moderate</span><span class="mini">Intent</span>
+        <span class="mini">RAG</span><span class="mini">Memory</span><span class="mini">Prompt</span>
+      </div>
+
+      <div class="nest-loop">
+        <span class="tag">🔁 Agent loop — the model decides on its own (≤ 15 steps)</span>
+        <div class="mini-row">
+          <span class="mini" style="background:#FBEDEE;border-color:#E5A9AF;color:#BE1E2D">Think</span>
+          <span class="mini" style="background:#FBEDEE;border-color:#E5A9AF;color:#BE1E2D">Call tool?</span>
+          <span class="mini" style="background:#FBEDEE;border-color:#E5A9AF;color:#BE1E2D">Execute</span>
+          <span class="mini" style="background:#FBEDEE;border-color:#E5A9AF;color:#BE1E2D">Continue</span>
+        </div>
+      </div>
+
+      <div class="varrow">
+        <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="node amber" style="font-size:.82rem">🪞 (Optional) Critic polishes the draft — MULTI_AGENT_ENABLED</div>
+    </div>
+
+    <div class="varrow">
+      <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="node green">📡 SSE stream — the student watches the answer being written</div>
+  </div>
+
+  <p class="ref">Reference: <code>backend/src/services/chat/chat.pipeline.ts</code> (frame) + <code>response-generator.service.ts</code> (loop)</p>
+</section>
+
+<!-- ===================== 2. MESSAGE JOURNEY ===================== -->
+<section>
+  <h2><span class="num">2</span> Message Journey, Step by Step — In-bot → Out-bot</h2>
+  <p class="sub">The actual execution order in <code>executeChatPipeline</code>. Numbers = the step numbering used in the code itself.</p>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase A</span> Reception &amp; Screening</h3>
+    <p>Protection gates and initial selection — any failure here returns an error immediately, before ever reaching a model</p>
+    <div class="steps">
+      <div class="step"><span class="n">1</span><div class="b"><strong>Request validation</strong><small><code>validateAndPrepareRequest</code> — model, user, messages, RAG flag</small></div></div>
+      <div class="step swap"><span class="n">1.5</span><div class="b"><strong>⭕ Media model swap</strong><small>Unsupported video/audio, or oversized video? → media-capable model (sets <code>X-Media-Mode</code>)</small></div></div>
+      <div class="step"><span class="n">2+3</span><div class="b"><strong>Processing + moderation</strong><small><code>processAndModerate</code> — forbidden content? reject 400 and stop</small></div></div>
+    </div>
+  </div>
+  <div class="phase-link"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase B</span> Understanding the Student</h3>
+    <p>Building the "who is this student and what do they want" context before any generation</p>
+    <div class="steps">
+      <div class="step"><span class="n">4</span><div class="b"><strong>Courses + thread files context</strong><small>Enrolled courses + study progress + thread attachments</small></div></div>
+      <div class="step"><span class="n">4b</span><div class="b"><strong>Intent detection</strong><small>A classifier decides: small talk? study question? email? — it controls everything downstream</small></div></div>
+      <div class="step"><span class="n">5</span><div class="b"><strong>RAG retrieval</strong><small>Response cache → retrieval → reranking → context + sources <code>X-RAG-Sources</code></small></div></div>
+      <div class="step swap"><span class="n">5b+5c</span><div class="b"><strong>⭕ Content-driven swaps</strong><small>Textbook chunks? → textbook-QA model (<code>X-Study-Mode</code>) • Images? → vision model (<code>X-Vision-Mode</code>)</small></div></div>
+    </div>
+  </div>
+  <div class="phase-link"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase C</span> Assembly &amp; Memory</h3>
+    <p>Fusing everything into one prompt + preparing storage</p>
+    <div class="steps">
+      <div class="step"><span class="n">6</span><div class="b"><strong>Memory context</strong><small>Long-term memory scoped to this user and thread</small></div></div>
+      <div class="step"><span class="n">6b</span><div class="b"><strong>System prompt assembly</strong><small>Persona + RAG + courses + memory (with A/B variant for metrics)</small></div></div>
+      <div class="step"><span class="n">7+7b+8</span><div class="b"><strong>Thread + PDF routing + persist</strong><small>Create/reuse thread, route attachments as material, save the student's message</small></div></div>
+      <div class="step"><span class="n">9</span><div class="b"><strong>Context-window management</strong><small>Long conversation? auto-summarize so tokens never explode</small></div></div>
+      <div class="step exit"><span class="n">10</span><div class="b"><strong>🚪 UI fast-passes</strong><small>UI commands (open calendar…) execute and exit early — no model involved</small></div></div>
+    </div>
+  </div>
+  <div class="phase-link"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase D</span> Generation — Where the Agent Lives</h3>
+    <p>The only part where "the model decides by itself" — everything else is fixed rails</p>
+    <div class="steps">
+      <div class="step swap"><span class="n">10b</span><div class="b"><strong>⭕ Tool activation</strong><small><code>buildEnabledTools</code> — statically filtered by intent: small talk = zero tools</small></div></div>
+      <div class="step step-core"><span class="n">🔁</span><div class="b"><strong>ReAct loop + streaming</strong><small>Think → tool → result → think … up to 15 steps, text flows instantly (details in Map 3)</small></div></div>
+      <div class="step after"><span class="n">∞</span><div class="b"><strong>Note</strong><small>If the stream fails: up to 3 attempts with a model fallback ladder (Map 5)</small></div></div>
+    </div>
+  </div>
+  <div class="phase-link"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase E</span> After the Response</h3>
+    <p>Background work that never blocks the user</p>
+    <div class="steps">
+      <div class="step after"><span class="n">11</span><div class="b"><strong>Misconception capture</strong><small><code>misconception-catcher</code> — fire-and-forget, feeds study_progress (only when the student's own textbook is in play)</small></div></div>
+    </div>
+  </div>
+
+  <p class="ref">Reference: <code>backend/src/services/chat/chat.pipeline.ts</code> + <code>pipeline/</code> folder</p>
+</section>
+
+<!-- ===================== 3. REACT LOOP ===================== -->
+<section>
+  <h2><span class="num">3</span> Heart of the Agent — The Bounded ReAct Loop</h2>
+  <p class="sub">Before the loop spins, tools are filtered <b>statically by intent</b> — the model doesn't pick its toolbox, only decides <b>whether/when</b> to use it.</p>
+
+  <svg viewBox="0 0 900 600" role="img" aria-label="ReAct loop">
+    <defs>
+      <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L8,4.5 L0,9 z" fill="#B9ADA3"/>
+      </marker>
+      <marker id="arR" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L8,4.5 L0,9 z" fill="#BE1E2D"/>
+      </marker>
+      <marker id="arG" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L8,4.5 L0,9 z" fill="#15803D"/>
+      </marker>
+    </defs>
+
+    <!-- pre-loop static filter -->
+    <rect x="270" y="8" width="360" height="54" rx="10" fill="#FFF7E8" stroke="#F0C987" stroke-width="1.5"/>
+    <text x="450" y="30" text-anchor="middle" font-size="14" font-weight="700" fill="#92400E">Intent-based tool filtering (static)</text>
+    <text x="450" y="50" text-anchor="middle" font-size="11" fill="#92400E">tool-router.ts • small_talk ⇒ no tools at all</text>
+
+    <line x1="450" y1="62" x2="450" y2="98" stroke="#B9ADA3" stroke-width="2" marker-end="url(#ar)"/>
+    <text x="466" y="84" font-size="11" fill="#7A6E66">only the allowed tool list</text>
+
+    <!-- loop container -->
+    <rect x="40" y="102" width="820" height="360" rx="16" fill="none" stroke="#BE1E2D" stroke-width="2" stroke-dasharray="7 5"/>
+    <rect x="270" y="90" width="360" height="26" rx="13" fill="#FBEDEE" stroke="#E5A9AF"/>
+    <text x="450" y="108" text-anchor="middle" font-size="12.5" font-weight="700" fill="#BE1E2D">Agent loop — up to 15 steps (stepCountIs(15))</text>
+
+    <!-- think node -->
+    <rect x="300" y="134" width="300" height="56" rx="10" fill="#FBEDEE" stroke="#BE1E2D" stroke-width="1.8"/>
+    <text x="450" y="157" text-anchor="middle" font-size="14.5" font-weight="700" fill="#BE1E2D">Model thinks &amp; generates</text>
+    <text x="450" y="177" text-anchor="middle" font-size="11" fill="#7A6E66">streamText — streaming starts immediately</text>
+
+    <line x1="450" y1="190" x2="450" y2="228" stroke="#B9ADA3" stroke-width="2" marker-end="url(#ar)"/>
+
+    <!-- decision diamond -->
+    <polygon points="450,232 550,288 450,344 350,288" fill="#FFF7E8" stroke="#F0C987" stroke-width="1.8"/>
+    <text x="450" y="284" text-anchor="middle" font-size="14" font-weight="700" fill="#92400E">Needs a</text>
+    <text x="450" y="304" text-anchor="middle" font-size="14" font-weight="700" fill="#92400E">tool?</text>
+
+    <!-- NO branch: final answer (left) -->
+    <line x1="350" y1="288" x2="256" y2="288" stroke="#15803D" stroke-width="2.2" marker-end="url(#arG)"/>
+    <text x="303" y="274" text-anchor="middle" font-size="12.5" font-weight="700" fill="#15803D">No</text>
+    <rect x="40" y="262" width="212" height="52" rx="10" fill="#EAF7EE" stroke="#A5D6B5" stroke-width="1.8"/>
+    <text x="146" y="283" text-anchor="middle" font-size="13.5" font-weight="700" fill="#166534">Final answer</text>
+    <text x="146" y="301" text-anchor="middle" font-size="11" fill="#166534">streams to the student 📡</text>
+
+    <!-- YES branch: tool (down) -->
+    <line x1="450" y1="344" x2="450" y2="378" stroke="#BE1E2D" stroke-width="2.2" marker-end="url(#arR)"/>
+    <text x="466" y="366" font-size="12.5" font-weight="700" fill="#BE1E2D">Yes</text>
+
+    <rect x="310" y="382" width="280" height="54" rx="10" fill="#EEF3FE" stroke="#B9CBF2" stroke-width="1.8"/>
+    <text x="450" y="404" text-anchor="middle" font-size="14" font-weight="700" fill="#1E40AF">Execute tool</text>
+    <text x="450" y="423" text-anchor="middle" font-size="11" fill="#1E40AF">execute() — search, email, quiz, artifact…</text>
+
+    <!-- result box (right) -->
+    <line x1="590" y1="409" x2="640" y2="409" stroke="#B9ADA3" stroke-width="2" marker-end="url(#ar)"/>
+    <rect x="644" y="382" width="196" height="54" rx="10" fill="#EEF3FE" stroke="#B9CBF2" stroke-width="1.8"/>
+    <text x="742" y="404" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1E40AF">Result injected</text>
+    <text x="742" y="423" text-anchor="middle" font-size="11" fill="#1E40AF">into conversation context</text>
+
+    <!-- loop back to think -->
+    <path d="M742,378 V162 Q742,152 732,152 H606" fill="none" stroke="#BE1E2D" stroke-width="2.2" marker-end="url(#arR)"/>
+    <text x="756" y="270" font-size="12" font-weight="700" fill="#BE1E2D">and back</text>
+    <text x="756" y="287" font-size="12" font-weight="700" fill="#BE1E2D">we think</text>
+    <text x="756" y="304" font-size="12" font-weight="700" fill="#BE1E2D">again ↻</text>
+
+    <!-- step counter chip -->
+    <rect x="60" y="122" width="150" height="30" rx="15" fill="#fff" stroke="#DDD5CC"/>
+    <text x="135" y="142" text-anchor="middle" font-size="11.5" fill="#7A6E66">step 1 … 2 … 3 …</text>
+
+    <!-- bottom notes -->
+    <rect x="40" y="486" width="820" height="98" rx="12" fill="#F4F1EE" stroke="#DDD5CC"/>
+    <text x="460" y="514" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2320">Stop conditions — one of three:</text>
+    <text x="460" y="540" text-anchor="middle" font-size="12.5" fill="#2B2320">① the model settles on an answer with no extra tool (No) &nbsp;&nbsp; ② 15 steps reached &nbsp;&nbsp; ③ student disconnects</text>
+    <text x="460" y="564" text-anchor="middle" font-size="12.5" fill="#2B2320">Mid-loop: every successful artifact auto-opens its panel for the student (UI action inside the stream)</text>
+  </svg>
+
+  <p class="ref">Reference: <code>response-generator.service.ts:106-110</code> (tools + stopWhen) • <code>pipeline/tool-router.ts</code> (static filtering)</p>
+</section>
+
+<!-- ===================== 4. GENERATOR + CRITIC ===================== -->
+<section>
+  <h2><span class="num">4</span> Generator + Critic Pattern — Multi-Agent (Optional)</h2>
+  <p class="sub">Runs only when <code>MULTI_AGENT_ENABLED=true</code>: one model writes the draft, a second model polishes it and streams it.</p>
+
+  <div class="hflow" style="justify-content:center">
+    <div class="node" style="max-width:200px">🧠 Main agent<small>generateText — no streaming, with tools</small></div>
+    <div class="harrow"><svg width="26" height="20" viewBox="0 0 24 24"><path d="M5 12h14m-6-6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="node amber" style="max-width:180px">📄 Draft<small>raw text + model usage</small></div>
+    <div class="harrow"><svg width="26" height="20" viewBox="0 0 24 24"><path d="M5 12h14m-6-6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="node brand" style="max-width:200px">🪞 Critic<small>second model reviews &amp; polishes</small></div>
+    <div class="harrow"><svg width="26" height="20" viewBox="0 0 24 24"><path d="M5 12h14m-6-6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="node green" style="max-width:170px">📡 Polished stream<small>the only version the student sees</small></div>
+  </div>
+
+  <p class="ref">Reference: <code>response-generator.service.ts:123-163</code> • critic prompt from <code>prompts/multi-agent.ts</code></p>
+</section>
+
+<!-- ===================== 5. MODEL ROUTER ===================== -->
+<section>
+  <h2><span class="num">5</span> Model Router — Smart Swaps + a Rescue Ladder</h2>
+  <p class="sub">Two levels: <b>proactive</b> swaps based on content type (before generation), and <b>reactive</b> fallback when the stream fails.</p>
+
+  <h3 style="font-size:.95rem;margin:8px 0 12px">A) Proactive swaps based on content</h3>
+  <div style="display:flex;flex-direction:column;gap:10px;max-width:720px;margin:0 auto">
+    <div class="hflow">
+      <div class="node amber grow">📹 Unsupported video/audio — or oversized video?</div>
+      <div class="harrow"><svg width="26" height="20" viewBox="0 0 24 24"><path d="M5 12h14m-6-6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="node grow">Media model<small><code>X-Media-Mode</code></small></div>
+    </div>
+    <div class="hflow">
+      <div class="node amber grow">📚 Textbook chunks from RAG?</div>
+      <div class="harrow"><svg width="26" height="20" viewBox="0 0 24 24"><path d="M5 12h14m-6-6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="node grow">Textbook-QA model<small><code>X-Study-Mode</code></small></div>
+    </div>
+    <div class="hflow">
+      <div class="node amber grow">🖼️ Message carries images?</div>
+      <div class="harrow"><svg width="26" height="20" viewBox="0 0 24 24"><path d="M5 12h14m-6-6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="node grow">Vision model<small><code>X-Vision-Mode</code></small></div>
+    </div>
+  </div>
+
+  <h3 style="font-size:.95rem;margin:24px 0 12px">B) Fallback ladder on stream failure (up to 3 attempts)</h3>
+  <div class="ladder">
+    <div class="rung">
+      <div class="node box">Attempt 1 — the selected model</div>
+    </div>
+    <div class="varrow"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v16M5 13l7 7 7-7" fill="none" stroke="#BE1E2D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="rung"><span class="fail">✖ Failed → report to modelRouter</span></div>
+    <div class="varrow"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v16M5 13l7 7 7-7" fill="none" stroke="#BE1E2D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="rung">
+      <div class="node box amber">Attempt 2 — first model in the fallback chain<small>UI notified via X-Model-Fallback</small></div>
+    </div>
+    <div class="varrow"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v16M5 13l7 7 7-7" fill="none" stroke="#BE1E2D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="rung"><span class="fail">✖ Failed → wait 500ms×2</span></div>
+    <div class="varrow"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v16M5 13l7 7 7-7" fill="none" stroke="#BE1E2D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="rung">
+      <div class="node box amber">Attempt 3 — second fallback model</div>
+    </div>
+    <div class="varrow"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v16M5 13l7 7 7-7" fill="none" stroke="#BE1E2D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="rung">
+      <div class="node box brand">✖ All attempts failed — Arabic apology message + error chunk in the stream</div>
+    </div>
+  </div>
+
+  <p class="ref">Reference: <code>chat.pipeline.ts</code> steps 1.5 / 5b / 5c (proactive) • <code>response-generator.service.ts:112-228</code> (reactive)</p>
+</section>
+
+<!-- ===================== 6. TAXONOMY ===================== -->
+<section>
+  <h2><span class="num">6</span> Where Your System Sits on the Known Pattern Map</h2>
+  <p class="sub">Compared against the standard agent-pattern taxonomy — so you know exactly where you stand.</p>
+
+  <div class="tax">
+    <div class="tcard hit">
+      <h4>🚚 Routing<span class="badge yes">✔ have it</span></h4>
+      <p>Intent classifier + tool router + model router — every request gets a path tailored to its type</p>
+    </div>
+    <div class="tcard hit">
+      <h4>⛓️ Prompt Chaining (fixed chain)<span class="badge yes">✔ have it</span></h4>
+      <p>Phases A→E: each step prepares inputs for the next in a locked, pre-defined order</p>
+    </div>
+    <div class="tcard">
+      <h4>🪞 Evaluator-Optimizer<span class="badge half">◐ optional</span></h4>
+      <p>The generator+critic pattern — implemented in code but off by default (MULTI_AGENT_ENABLED)</p>
+    </div>
+    <div class="tcard">
+      <h4>🔧 Tool-Calling Agent<span class="badge yes">✔ capped</span></h4>
+      <p>A real ReAct loop but bounded — 15 steps max, against a pre-filtered tool list</p>
+    </div>
+    <div class="tcard">
+      <h4>🎺 Orchestrator-Workers<span class="badge no">✖ not present</span></h4>
+      <p>No lead agent fanning tasks out to parallel sub-agents — everything is sequential</p>
+    </div>
+    <div class="tcard">
+      <h4>🤖 Autonomous Agent<span class="badge no">✖ not present</span></h4>
+      <p>No uncapped open loop, no self-directed planning — and that's a sound choice for a production app</p>
+    </div>
+  </div>
+
+  <p class="ref">Bottom line: <b>Intent-Routed Pipeline + Bounded ReAct Loop (+ optional Critic)</b> — balancing predictability and known cost, with model flexibility only at generation time</p>
+</section>
+
+<footer style="text-align:center;color:var(--muted);font-size:.8rem">
+  Sigma — diagram built from reading the actual code on 2026-08-30 • Files: chat.pipeline.ts / response-generator.service.ts / pipeline/*
+</footer>
+
+</div>
+</body>
+</html>

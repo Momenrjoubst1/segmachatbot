@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { assembleSystemPrompt } from '../services/chat/pipeline/system-prompt.js';
+
+// initTools() never runs in the test env; provide a minimal registry so the
+// tool-only system prompt contract is exercised.
+vi.mock('../tools/tool-definitions-aggregator.js', () => ({
+  getToolDefinitions: () => ({ calculator: {}, create_calendar_event: {} }),
+}));
 
 describe('assembleSystemPrompt — Integration (A/B + metrics)', () => {
   it('should return default variant when no userId', () => {
@@ -9,9 +15,9 @@ describe('assembleSystemPrompt — Integration (A/B + metrics)', () => {
       memoryPrompt: '',
     });
     expect(res.promptVariant).toBe('default');
-    expect(res.systemPrompt).toContain('Sigma');
-    expect(res.promptLength).toBeGreaterThan(500);
-    expect(res.promptTokensEstimate).toBeGreaterThan(100);
+    expect(res.systemPrompt).toBe('');
+    expect(res.promptLength).toBe(0);
+    expect(res.promptTokensEstimate).toBe(0);
     expect(res.buildTimeMs).toBeGreaterThanOrEqual(0);
   });
 
@@ -23,20 +29,19 @@ describe('assembleSystemPrompt — Integration (A/B + metrics)', () => {
       forceVariant: 'concise',
     });
     expect(res.promptVariant).toBe('concise');
-    expect(res.systemPrompt).toContain('Keep responses under 200 words');
+    expect(res.systemPrompt).toBe('');
     expect(res.basePersona).toContain('Keep responses under 200 words');
   });
 
-  it('should include RAG and memory in metrics', () => {
+  it('should keep RAG and memory out of the prompt but report them in metrics', () => {
     const res = assembleSystemPrompt({
       ragContext: { hasContext: true, contextText: '[Source: Test.pdf] hello', sourceNames: ['Test.pdf'], retrievalMethod: 'hybrid' },
       userCoursesContext: 'Courses: CS101',
       memoryPrompt: 'Memory: user likes concise answers',
       userId: 'user-123',
     });
-    expect(res.systemPrompt).toContain('Test.pdf');
-    expect(res.systemPrompt).toContain('Courses: CS101');
-    expect(res.promptLength).toBe(res.systemPrompt.length);
+    expect(res.systemPrompt).toBe('');
+    expect(res.promptLength).toBe(0);
   });
 
   it('should assign variant deterministically via env auto when AB_ENABLED', () => {

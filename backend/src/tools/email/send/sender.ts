@@ -35,7 +35,7 @@ export { escapeHtml, buildHtmlEmail, buildTemplateEmail } from "./email-template
 export { logEmailToDB, updateJobStatus, getEmailHistory, getEmailDetails, deleteEmailFromHistory, resendEmail, getEmailStats } from "./email-history.js";
 
 export const sendEmailSchema = z.object({
-  to: z.string().describe("Recipient email address OR contact name (e.g., 'أحمد', 'محمد'). If a name is provided, the system will search for matching contacts."),
+  to: z.string().describe("Recipient email address OR contact name (e.g., 'John', 'Sarah'). If a name is provided, the system will search for matching contacts."),
   subject: z.string().describe("Email subject line"),
   body: z.string().describe("Email body text (plain text)"),
   html: z.string().optional().describe("Optional HTML version - ONLY use if user explicitly requests HTML formatting"),

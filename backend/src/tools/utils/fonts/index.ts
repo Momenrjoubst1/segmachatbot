@@ -8,34 +8,34 @@ import {
 } from "./library.js";
 
 /**
- * apply_fonts — طبّق خطوط Google Fonts على مقتطف HTML/SVG/Markdown موجود
+ * apply_fonts — apply Google Fonts to an existing HTML/SVG/Markdown snippet
  *
  * The bot uses this when it already generated an artifact and wants to
  * retro-fit it with a specific font set, OR to inspect the available fonts.
  */
 registerTool("apply_fonts", {
   description:
-    "طبّق خطوط Google Fonts على محتوى HTML/SVG/Markdown موجود، أو اعرض قائمة الخطوط المتاحة في مكتبة الخطوط. " +
-    "استخدم عند توليد محتوى يحتاج خطاً معيناً (عربي، لاتيني، مونو، ديكور، خط يدوي). " +
-    "المحتوى يغلّف داخل مستند HTML كامل مع <link> لخطوط Google و font-family مناسب.",
+    "Apply Google Fonts to existing HTML/SVG/Markdown content, or list the fonts available in the font library. " +
+    "Use when generating content that needs a specific font (Arabic, Latin, mono, decorative, handwriting). " +
+    "The content is wrapped in a full HTML document with a Google Fonts <link> and a suitable font-family.",
   inputSchema: z.object({
     action: z.enum(["apply", "list", "resolve"]).describe(
-      "الإجراء: 'apply' لتطبيق الخطوط على محتوى، 'list' لعرض الخطوط المتاحة، 'resolve' للحصول على معلومات CSS لخطوط محددة.",
+      "Action: 'apply' to apply fonts to content, 'list' to show available fonts, 'resolve' to get CSS info for specific fonts.",
     ),
     fonts: z.array(z.string()).optional().describe(
-      "أسماء الخطوط المطلوبة (مثال: ['Cairo', 'JetBrains Mono']). تُقبل الأسماء المستعارة والجزئية.",
+      "Requested font names (e.g. ['Cairo', 'JetBrains Mono']). Aliases and partial names are accepted.",
     ),
     content: z.string().optional().describe(
-      "محتوى HTML/SVG/Markdown لتطبيق الخطوط عليه (مطلوب عند action='apply').",
+      "HTML/SVG/Markdown content to apply fonts to (required when action='apply').",
     ),
     bodyFontFamily: z.string().optional().describe(
-      "قيمة CSS font-family اختيارية تُطبّق على body (تستخدم إذا كانت مختلفة عن الخطوط المطلوبة).",
+      "Optional CSS font-family value applied to body (used when it differs from the requested fonts).",
     ),
     category: z
       .enum(["arabic", "sans", "serif", "mono", "display", "handwriting", "all"])
       .optional()
-      .describe("تصفية حسب الفئة عند action='list'."),
-    maxItems: z.number().int().min(1).max(200).optional().describe("الحد الأقصى لعدد العناصر في action='list'."),
+      .describe("Filter by category when action='list'."),
+    maxItems: z.number().int().min(1).max(200).optional().describe("Maximum number of items for action='list'."),
   }),
   execute: async (args: {
     action: "apply" | "list" | "resolve";
@@ -59,7 +59,7 @@ registerTool("apply_fonts", {
             category,
             fonts: items.slice(0, maxItems ?? 100),
             prompt: buildFontsCatalogPrompt(),
-            message: `يوجد ${items.length} خط في فئة '${category}'.`,
+            message: `There are ${items.length} fonts in the '${category}' category.`,
           });
         }
         return JSON.stringify({
@@ -67,13 +67,13 @@ registerTool("apply_fonts", {
           count,
           byCategory,
           prompt: buildFontsCatalogPrompt(),
-          message: `إجمالي ${count} خط متاح في ${Object.keys(byCategory).length} فئات.`,
+          message: `${count} fonts available in total across ${Object.keys(byCategory).length} categories.`,
         });
       }
 
       if (action === "resolve") {
         if (!fonts || fonts.length === 0) {
-          return JSON.stringify({ status: "error", message: "fonts مطلوب عند action='resolve'." });
+          return JSON.stringify({ status: "error", message: "fonts is required when action='resolve'." });
         }
         const resolved = resolveFontLinks(fonts);
         return JSON.stringify({
@@ -91,24 +91,24 @@ registerTool("apply_fonts", {
           },
           message:
             resolved.missing.length > 0
-              ? `تم حل ${resolved.names.length} خط. لم يُعثر على: ${resolved.missing.join(", ")}.`
-              : `تم حل ${resolved.names.length} خط بنجاح.`,
+              ? `Resolved ${resolved.names.length} fonts. Not found: ${resolved.missing.join(", ")}.`
+              : `Successfully resolved ${resolved.names.length} fonts.`,
         });
       }
 
       // action === "apply"
       if (!fonts || fonts.length === 0) {
-        return JSON.stringify({ status: "error", message: "fonts مطلوب عند action='apply'." });
+        return JSON.stringify({ status: "error", message: "fonts is required when action='apply'." });
       }
       if (!content) {
-        return JSON.stringify({ status: "error", message: "content مطلوب عند action='apply'." });
+        return JSON.stringify({ status: "error", message: "content is required when action='apply'." });
       }
 
       const resolved = resolveFontLinks(fonts);
       if (!resolved.linkHref) {
         return JSON.stringify({
           status: "error",
-          message: "لم يُعثر على أي خط من الأسماء المُدخلة.",
+          message: "None of the provided font names could be found.",
           missing: resolved.missing,
         });
       }
@@ -124,11 +124,11 @@ registerTool("apply_fonts", {
         html: finalHtml,
         message:
           resolved.missing.length > 0
-            ? `طُبّقت ${resolved.names.length} خط. تحذير: لم يُعثر على ${resolved.missing.join(", ")}.`
-            : `طُبّقت ${resolved.names.length} خط بنجاح.`,
+            ? `Applied ${resolved.names.length} fonts. Warning: ${resolved.missing.join(", ")} not found.`
+            : `Successfully applied ${resolved.names.length} fonts.`,
       });
     } catch (err: unknown) {
-      return JSON.stringify({ status: "error", message: "فشل تطبيق الخطوط", error: err instanceof Error ? err.message : String(err) });
+      return JSON.stringify({ status: "error", message: "Font application failed", error: err instanceof Error ? err.message : String(err) });
     }
   },
 });

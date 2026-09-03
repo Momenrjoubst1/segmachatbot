@@ -476,6 +476,26 @@ textarea.text-transparent::-moz-selection {
   animation: shimmer-flow 1.5s ease-in-out infinite;
 }
 
+/* Claude.ai-style status shimmer — the label text itself carries the
+   animation: a bright band sweeps across otherwise-muted text. No spinner
+   icon, no timer; the text IS the loading indicator. */
+.shimmer-text {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted-foreground) / 0.65) 0%,
+    hsl(var(--muted-foreground) / 0.65) 40%,
+    hsl(var(--foreground) / 0.95) 50%,
+    hsl(var(--muted-foreground) / 0.65) 60%,
+    hsl(var(--muted-foreground) / 0.65) 100%
+  );
+  background-size: 250% 100%;
+  background-position: 200% center;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-flow 2.2s ease-in-out infinite;
+}
+
 .dynamic-status-indicator {
   animation: fade-in 0.3s ease-out;
 }

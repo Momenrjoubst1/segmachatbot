@@ -3,7 +3,7 @@ import { registerTool } from "../../tool-registry.js";
 import { createToolMetadata } from "../../tool-metadata.js";
 import { supabase } from "../../../config/supabase.config.js";
 
-createToolMetadata("generate_image", "توليد صورة من وصف نصي بالذكاء الاصطناعي وعرضها للمستخدم", {
+createToolMetadata("generate_image", "Generate an image from a text description using AI and show it to the user", {
   requiresUserId: true,
   category: "other",
   enabledByDefault: true,
@@ -38,7 +38,7 @@ async function callGeminiImage(prompt: string): Promise<{ mimeType: string; base
   if (res.status === 429) {
     throw Object.assign(
       new Error("quota_exceeded"),
-      { code: "QUOTA", userMessage: "انتهت حصة توليد الصور المجانية حاليًا — جرّب لاحقًا اليوم أو غدًا. Image quota exhausted, try again later." },
+      { code: "QUOTA", userMessage: "The free image generation quota is currently exhausted — try again later today or tomorrow." },
     );
   }
   if (!res.ok) {
@@ -66,18 +66,18 @@ async function callGeminiImage(prompt: string): Promise<{ mimeType: string; base
 
 registerTool("generate_image", {
   description:
-    "ولّد صورة بالذكاء الاصطناعي من وصف نصي (رسوم توضيحية، مشاهد، تصاميم). استخدمها عندما يطلب المستخدم إنشاء/توليد/رسم صورة.",
+    "Generate an AI image from a text description (illustrations, scenes, designs). Use when the user asks to create/generate/draw an image.",
   inputSchema: z.object({
     prompt: z
       .string()
       .min(3)
       .max(1000)
-      .describe("وصف مفصل للصورة المطلوبة بالإنجليزية أو العربية"),
-    __userId: z.string().optional().describe("معرّف المستخدم (يُمرر تلقائياً)"),
+      .describe("Detailed description of the requested image, in English or Arabic"),
+    __userId: z.string().optional().describe("User ID (passed automatically)"),
   }),
   execute: async ({ prompt, __userId }: { prompt: string; __userId?: string }) => {
     if (!__userId) {
-      return JSON.stringify({ status: "error", message: "يتطلب تسجيل الدخول لتوليد الصور" });
+      return JSON.stringify({ status: "error", message: "Login is required to generate images" });
     }
 
     try {
@@ -94,7 +94,7 @@ registerTool("generate_image", {
       if ((count ?? 0) >= DAILY_LIMIT) {
         return JSON.stringify({
           status: "error",
-          message: `وصلت للحد اليومي (${DAILY_LIMIT} صورة). يعود الحد غدًا. Daily image limit reached, resets tomorrow.`,
+          message: `You have reached the daily limit (${DAILY_LIMIT} images). The limit resets tomorrow.`,
         });
       }
 
@@ -124,8 +124,8 @@ registerTool("generate_image", {
       return JSON.stringify({
         status: "success",
         imageUrl,
-        markdown: `![صورة مولدة]( ${imageUrl} )`,
-        instruction: "اعرض الصورة على المستخدم بتضمين صيغة الماركداون أعلاه في ردك كما هي، واذكر أنه يمكنه تنزيلها من الزر أسفل الصورة.",
+        markdown: `![Generated image]( ${imageUrl} )`,
+        instruction: "Show the image to the user by including the markdown above in your reply exactly as given, and mention that they can download it via the button below the image.",
       });
     } catch (err: unknown) {
       const e = err as Error & { code?: string; userMessage?: string };
@@ -133,10 +133,10 @@ registerTool("generate_image", {
         return JSON.stringify({ status: "error", message: e.userMessage });
       }
       if (e.code === "NO_IMAGE") {
-        return JSON.stringify({ status: "error", message: "النموذج رفض توليد هذه الصورة (قد تكون خارج السياسات). جرّب وصفًا مختلفًا.", detail: e.message });
+        return JSON.stringify({ status: "error", message: "The model refused to generate this image (it may violate policies). Try a different description.", detail: e.message });
       }
       console.error("[generate_image] failed:", e.message);
-      return JSON.stringify({ status: "error", message: "فشل توليد الصورة حاليًا، حاول مجددًا بعد قليل." });
+      return JSON.stringify({ status: "error", message: "Image generation failed for now, try again in a moment." });
     }
   },
 });

@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude.ai (the Chatbot) — Visual Maps</title>
+<style>
+  :root{
+    --ink:#2B2320;
+    --muted:#7A6E66;
+    --paper:#FAF8F5;
+    --card:#FFFFFF;
+    --line:#E7DFD8;
+    --brand:#C15F3C;
+    --brand2:#A64B2A;
+    --coral-bg:#FBEEE7; --coral-bd:#EDBFA5;
+    --amber-bg:#FFF7E8; --amber-bd:#F0C987; --amber-tx:#92400E;
+    --green-bg:#EAF7EE; --green-bd:#A5D6B5; --green-tx:#166534;
+    --blue-bg:#EEF3FE;  --blue-bd:#B9CBF2;  --blue-tx:#1E40AF;
+    --gray-bg:#F4F1EE;  --gray-bd:#DDD5CC;  --gray-tx:#6B625B;
+    --violet-bg:#F4EFFB; --violet-bd:#D4C4EE; --violet-tx:#5B21B6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"Segoe UI",Tahoma,Arial,sans-serif;
+    background:var(--paper); color:var(--ink);
+    line-height:1.65; padding:32px 16px 64px;
+  }
+  .wrap{max-width:1060px;margin:0 auto}
+  code{font-family:Consolas,"Courier New",monospace;background:#F3EDE7;border:1px solid var(--line);
+    border-radius:5px;padding:0 6px;font-size:.85em;color:var(--brand2)}
+
+  .notice{background:var(--amber-bg);border:1.5px solid var(--amber-bd);color:var(--amber-tx);
+    border-radius:12px;padding:12px 18px;margin:16px 0 26px;font-size:.85rem}
+  .notice b{display:block;margin-bottom:2px}
+
+  header{border-bottom:3px solid var(--brand);padding-bottom:18px;margin-bottom:6px}
+  header h1{font-size:1.7rem;color:var(--brand2)}
+  header p{color:var(--muted);margin-top:6px}
+  .formula{
+    margin:18px 0 0;background:var(--card);border:2px solid var(--brand);
+    border-radius:14px;padding:14px 18px;text-align:center;font-size:1rem;font-weight:600;
+  }
+  .formula .op{color:var(--brand);font-weight:800;padding:0 8px}
+
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 30px}
+  .legend span{display:inline-flex;align-items:center;gap:7px;font-size:.82rem;color:var(--muted);
+    background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 12px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+
+  section{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:26px 26px 30px;margin-bottom:34px;box-shadow:0 1px 3px rgba(43,35,32,.05)}
+  section h2{font-size:1.25rem;color:var(--brand2);display:flex;align-items:center;gap:10px}
+  section h2 .num{background:var(--brand);color:#fff;border-radius:8px;min-width:30px;height:30px;
+    display:inline-flex;align-items:center;justify-content:center;font-size:.95rem}
+  .sub{color:var(--muted);font-size:.9rem;margin:6px 0 20px}
+  .ref{font-size:.78rem;color:var(--muted);margin-top:16px;border-top:1px dashed var(--line);padding-top:10px}
+
+  .node{background:var(--blue-bg);border:1.5px solid var(--blue-bd);color:var(--blue-tx);
+    border-radius:10px;padding:9px 14px;text-align:center;font-size:.9rem;font-weight:600}
+  .node small{display:block;font-weight:400;font-size:.74rem;color:var(--muted);margin-top:2px}
+  .node.amber{background:var(--amber-bg);border-color:var(--amber-bd);color:var(--amber-tx)}
+  .node.green{background:var(--green-bg);border-color:var(--green-bd);color:var(--green-tx)}
+  .node.gray{background:var(--gray-bg);border-color:var(--gray-bd);color:var(--gray-tx)}
+  .node.coral{background:var(--coral-bg);border-color:var(--coral-bd);color:var(--brand2)}
+  .node.violet{background:var(--violet-bg);border-color:var(--violet-bd);color:var(--violet-tx)}
+
+  .varrow{display:flex;justify-content:center;padding:2px 0;color:#B9ADA3}
+  .hflow{display:flex;align-items:stretch;gap:10px;flex-wrap:nowrap}
+  .hflow .grow{flex:1}
+  .harrow{align-self:center;color:#B9ADA3;flex:0 0 auto}
+
+  .nest-user{max-width:540px;margin:0 auto}
+  .nest{border:2px dashed var(--brand);border-radius:16px;padding:16px 16px 18px;background:#FDFAF7}
+  .nest>.tag{font-size:.8rem;font-weight:700;color:var(--brand2);margin-bottom:12px;display:block;text-align:center}
+  .mini-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  .mini{background:var(--blue-bg);border:1px solid var(--blue-bd);color:var(--blue-tx);
+    border-radius:7px;padding:3px 9px;font-size:.76rem;font-weight:600}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px}
+  .chips span{background:var(--gray-bg);border:1px solid var(--gray-bd);color:var(--gray-tx);
+    border-radius:999px;padding:3px 12px;font-size:.76rem;font-weight:600}
+
+  .phase{border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px;background:#FDFCFA}
+  .phase>h3{font-size:.95rem;color:var(--ink);margin-bottom:4px;display:flex;align-items:center;gap:8px}
+  .phase>h3 .pnum{background:var(--brand2);color:#fff;border-radius:6px;font-size:.72rem;padding:1px 8px}
+  .phase>p{font-size:.78rem;color:var(--muted);margin-bottom:12px}
+  .steps{display:flex;flex-direction:column;gap:0}
+  .step{display:flex;align-items:flex-start;gap:10px;padding:7px 10px;border-radius:9px}
+  .step .n{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--brand);color:#fff;
+    font-size:.75rem;display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .step .b{flex:1}
+  .step .b strong{font-size:.88rem}
+  .step .b small{display:block;font-size:.75rem;color:var(--muted)}
+  .step.gate{background:var(--violet-bg)}
+  .step.gate .n{background:var(--violet-tx)}
+  .step.exit{background:var(--green-bg)}
+  .step.exit .n{background:var(--green-tx)}
+  .step.hidden{background:var(--coral-bg);border:1.5px solid var(--coral-bd)}
+  .phase-link{display:flex;justify-content:center;padding:2px 0 10px;color:#B9ADA3}
+
+  svg{display:block;margin:0 auto;max-width:100%;height:auto}
+  svg text{font-family:"Segoe UI",Tahoma,Arial,sans-serif}
+
+  .tax{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}
+  .tcard{border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#FDFCFA}
+  .tcard h4{font-size:.95rem;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .badge{font-size:.72rem;border-radius:999px;padding:2px 10px;font-weight:700;white-space:nowrap}
+  .badge.yes{background:var(--green-bg);color:var(--green-tx);border:1px solid var(--green-bd)}
+  .badge.core{background:var(--coral-bg);color:var(--brand2);border:1px solid var(--coral-bd)}
+  .badge.half{background:var(--amber-bg);color:var(--amber-tx);border:1px solid var(--amber-bd)}
+  .badge.no{background:var(--gray-bg);color:var(--gray-tx);border:1px solid var(--gray-bd)}
+  .tcard p{font-size:.8rem;color:var(--muted);margin-top:6px}
+  .tcard.core{border-color:var(--coral-bd);background:var(--coral-bg)}
+  .tcard.core p{color:var(--brand2)}
+
+  .compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px;margin-top:16px}
+  .ccard{border-radius:12px;padding:14px 16px;border:1.5px solid}
+  .ccard h4{font-size:.92rem;margin-bottom:6px}
+  .ccard ul{margin:0;padding-inline-start:18px;font-size:.78rem}
+  .ccard li{margin:2px 0}
+  .ccard.sigma{border-color:#E5A9AF;background:#FBEDEE;color:#8A2229}
+  .ccard.chat{border-color:var(--coral-bd);background:var(--coral-bg);color:var(--brand2)}
+  .ccard.code{border-color:var(--violet-bd);background:var(--violet-bg);color:var(--violet-tx)}
+
+  @media (max-width:640px){
+    .hflow{flex-direction:column}
+    .harrow{transform:rotate(90deg);justify-content:center}
+    section{padding:18px 14px 22px}
+  }
+  @media print{
+    body{background:#fff;padding:0}
+    section{box-shadow:none;break-inside:avoid;margin-bottom:14px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ===================== HEADER ===================== -->
+<header>
+  <h1>🧭 Claude.ai — the Chatbot's Patterns</h1>
+  <p>The consumer chat itself: what happens between your message and the streaming answer — mapped the same way as Sigma and Claude Code</p>
+</header>
+
+<div class="notice">
+  <b>⚠️ Honesty note — read first</b>
+  Claude.ai's internal pipeline is closed-source and unpublished. Unlike Sigma (we read the code) and Claude Code (Anthropic documents its mechanics), the chatbot can only be mapped from <b>publicly announced features and behavior</b> — plus one big exception: the <b>Research mode internals are officially published</b> in Anthropic's engineering blog, and are mapped faithfully here. Everything else on this page is documented surface, not implementation.
+</div>
+
+<div class="formula">
+  Claude.ai chat = <span>Conversation surface</span><span class="op">+</span><span>Hidden tool loop (search • analysis • connectors)</span><span class="op">+</span><span>Full orchestrator–workers in Research mode</span><span class="op">+</span><span>Context layers (memory • projects • skills)</span>
+</div>
+
+<div class="legend">
+  <span><i class="dot" style="background:#1D4ED8"></i> Documented mechanism</span>
+  <span><i class="dot" style="background:#5B21B6"></i> Visible to the user</span>
+  <span><i class="dot" style="background:#C15F3C"></i> Hidden machinery</span>
+  <span><i class="dot" style="background:#15803D"></i> Output</span>
+  <span><i class="dot" style="background:#B45309"></i> Model decision</span>
+</div>
+
+<!-- ===================== 1. BIG PICTURE ===================== -->
+<section>
+  <h2><span class="num">1</span> The Big Picture — a Calm Surface Over Hidden Machinery</h2>
+  <p class="sub">The chat window is deliberately quiet: streaming text, a collapsible thinking panel, citations. Underneath sit the same agentic ideas — just kept out of sight.</p>
+
+  <div class="nest-user">
+    <div class="node green">👤 You type a message</div>
+    <div class="varrow">
+      <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+
+    <div class="nest">
+      <span class="tag">🫥 What you don't see — assembled per message</span>
+      <div class="mini-row">
+        <span class="mini" style="background:#FBEEE7;border-color:#EDBFA5;color:#A64B2A">memory recall</span>
+        <span class="mini" style="background:#FBEEE7;border-color:#EDBFA5;color:#A64B2A">project knowledge</span>
+        <span class="mini" style="background:#FBEEE7;border-color:#EDBFA5;color:#A64B2A">skill matching</span>
+        <span class="mini" style="background:#FBEEE7;border-color:#EDBFA5;color:#A64B2A">hidden tool loop</span>
+      </div>
+      <div class="chips" style="margin-top:12px">
+        <span>🪟 artifacts panel opens beside the chat</span>
+        <span>🏷️ citations attach to claims</span>
+        <span>🧠 extended thinking panel is collapsible</span>
+      </div>
+    </div>
+
+    <div class="varrow">
+      <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="node green">💬 The answer streams — the machinery stays invisible</div>
+  </div>
+
+  <p class="ref">Everything above is the documented product surface: web search with citations, artifacts, extended thinking, memory, projects, skills, connectors — all publicly announced Claude.ai features</p>
+</section>
+
+<!-- ===================== 2. ANATOMY OF ONE ANSWER ===================== -->
+<section>
+  <h2><span class="num">2</span> Anatomy of One Answer — Message to Streaming Reply</h2>
+  <p class="sub">Reconstructed from documented behavior — ordered by what's observable, not by internals we can't see.</p>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase A</span> Context Assembly (invisible)</h3>
+    <p>What Claude knows before answering — layered in per message</p>
+    <div class="steps">
+      <div class="step"><span class="n">a1</span><div class="b"><strong>Memory</strong><small>past-chat recall, rolled out to all subscribers and unified across chat &amp; Cowork (Aug 2026)</small></div></div>
+      <div class="step"><span class="n">a2</span><div class="b"><strong>Project knowledge</strong><small>files + custom instructions injected when chatting inside a Project</small></div></div>
+      <div class="step"><span class="n">a3</span><div class="b"><strong>Skills (progressive disclosure)</strong><small>skill folders are matched by description and their instructions load only when relevant — keeping context lean</small></div></div>
+    </div>
+  </div>
+  <div class="phase-link"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase B</span> Thinking (semi-visible)</h3>
+    <p>The only interior state users can actually watch</p>
+    <div class="steps">
+      <div class="step gate"><span class="n">b1</span><div class="b"><strong>🧠 Extended thinking</strong><small>a reasoning scratchpad rendered as a collapsible panel above the answer</small></div></div>
+    </div>
+  </div>
+  <div class="phase-link"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase C</span> The Hidden Tool Loop</h3>
+    <p>Where chat behaves like a quiet agent — the user sees at most a shimmer</p>
+    <div class="steps">
+      <div class="step hidden"><span class="n">c1</span><div class="b"><strong>🔎 Agentic web search</strong><small>"Claude decides when to search" — multi-step searching, reading pages, then answering with inline citations</small></div></div>
+      <div class="step hidden"><span class="n">c2</span><div class="b"><strong>⚙️ Analysis tool</strong><small>a JavaScript sandbox for calculations, data files, and charts</small></div></div>
+      <div class="step hidden"><span class="n">c3</span><div class="b"><strong>🔌 Connectors &amp; files</strong><small>MCP connectors to external apps; vision over uploaded images/PDFs</small></div></div>
+    </div>
+  </div>
+  <div class="phase-link"><svg width="20" height="24" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+  <div class="phase">
+    <h3><span class="pnum">Phase D</span> Streaming Output (visible)</h3>
+    <div class="steps">
+      <div class="step exit"><span class="n">d1</span><div class="b"><strong>💬 Streamed answer</strong><small>text flows token by token; a created artifact opens its panel mid-stream</small></div></div>
+      <div class="step exit"><span class="n">d2</span><div class="b"><strong>🏷️ Citations &amp; sources</strong><small>search-backed claims carry inline citations linking to sources</small></div></div>
+    </div>
+  </div>
+
+  <p class="ref">Sources: Anthropic product announcements for web search / artifacts / extended thinking / memory (The Verge, TechCrunch coverage) • Agent Skills docs (progressive disclosure) — links in the footer</p>
+</section>
+
+<!-- ===================== 3. HIDDEN LOOP SVG ===================== -->
+<section>
+  <h2><span class="num">3</span> The Hidden Loop — Two Lanes, One Decision</h2>
+  <p class="sub">The chatbot's routing: simple questions take the direct lane; anything needing tools or fresh info enters a small agent loop — all invisible.</p>
+
+  <svg viewBox="0 0 900 690" role="img" aria-label="Claude.ai hidden tool loop">
+    <defs>
+      <marker id="gar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L8,4.5 L0,9 z" fill="#B9ADA3"/>
+      </marker>
+      <marker id="ggn" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L8,4.5 L0,9 z" fill="#15803D"/>
+      </marker>
+      <marker id="gcr" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L8,4.5 L0,9 z" fill="#C15F3C"/>
+      </marker>
+    </defs>
+
+    <!-- user message -->
+    <rect x="320" y="8" width="260" height="46" rx="10" fill="#EAF7EE" stroke="#A5D6B5" stroke-width="1.8"/>
+    <text x="450" y="36" text-anchor="middle" font-size="14" font-weight="700" fill="#166534">👤 Your message</text>
+
+    <line x1="450" y1="54" x2="450" y2="92" stroke="#B9ADA3" stroke-width="2" marker-end="url(#gar)"/>
+
+    <!-- routing diamond -->
+    <polygon points="450,96 545,136 450,176 355,136" fill="#FFF7E8" stroke="#F0C987" stroke-width="1.8"/>
+    <text x="450" y="131" text-anchor="middle" font-size="13.5" font-weight="700" fill="#92400E">Needs tools or</text>
+    <text x="450" y="150" text-anchor="middle" font-size="13.5" font-weight="700" fill="#92400E">fresh info?</text>
+
+    <!-- NO: direct lane (left) -->
+    <line x1="355" y1="136" x2="300" y2="136" stroke="#15803D" stroke-width="2.2" marker-end="url(#ggn)"/>
+    <text x="326" y="124" text-anchor="middle" font-size="12.5" font-weight="700" fill="#15803D">No</text>
+    <rect x="56" y="110" width="240" height="52" rx="10" fill="#EAF7EE" stroke="#A5D6B5" stroke-width="1.8"/>
+    <text x="176" y="131" text-anchor="middle" font-size="13" font-weight="700" fill="#166534">Direct answer</text>
+    <text x="176" y="149" text-anchor="middle" font-size="10.5" fill="#166534">streams instantly — zero tools</text>
+
+    <!-- YES: into the loop -->
+    <line x1="450" y1="176" x2="450" y2="212" stroke="#C15F3C" stroke-width="2.2" marker-end="url(#gcr)"/>
+    <text x="466" y="200" font-size="12.5" font-weight="700" fill="#C15F3C">Yes</text>
+
+    <!-- loop container -->
+    <rect x="150" y="216" width="710" height="266" rx="16" fill="none" stroke="#C15F3C" stroke-width="2" stroke-dasharray="7 5"/>
+    <rect x="255" y="204" width="500" height="26" rx="13" fill="#FBEEE7" stroke="#EDBFA5"/>
+    <text x="505" y="222" text-anchor="middle" font-size="12.5" font-weight="700" fill="#C15F3C">Hidden agent loop — invisible to the user</text>
+
+    <!-- think -->
+    <rect x="370" y="248" width="270" height="52" rx="10" fill="#FBEEE7" stroke="#C15F3C" stroke-width="1.8"/>
+    <text x="505" y="269" text-anchor="middle" font-size="14" font-weight="700" fill="#C15F3C">Think — plan the answer</text>
+    <text x="505" y="287" text-anchor="middle" font-size="10.5" fill="#7A6E66">extended thinking as scratchpad</text>
+
+    <line x1="505" y1="300" x2="505" y2="330" stroke="#B9ADA3" stroke-width="2" marker-end="url(#gar)"/>
+
+    <!-- tool -->
+    <rect x="370" y="334" width="270" height="52" rx="10" fill="#EEF3FE" stroke="#B9CBF2" stroke-width="1.8"/>
+    <text x="505" y="355" text-anchor="middle" font-size="14" font-weight="700" fill="#1E40AF">Use a hidden tool</text>
+    <text x="505" y="373" text-anchor="middle" font-size="10.5" fill="#1E40AF">web search • JS analysis • files • connectors</text>
+
+    <line x1="505" y1="386" x2="505" y2="416" stroke="#B9ADA3" stroke-width="2" marker-end="url(#gar)"/>
+
+    <!-- observe -->
+    <rect x="370" y="420" width="270" height="48" rx="10" fill="#EEF3FE" stroke="#B9CBF2" stroke-width="1.8"/>
+    <text x="505" y="449" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1E40AF">Observe results</text>
+
+    <!-- user shimmer chip (left inside container) -->
+    <rect x="170" y="334" width="180" height="52" rx="10" fill="#F4F1EE" stroke="#DDD5CC"/>
+    <text x="260" y="355" text-anchor="middle" font-size="12" font-weight="700" fill="#6B625B">What you see:</text>
+    <text x="260" y="373" text-anchor="middle" font-size="10.5" fill="#6B625B">a "Searching…" shimmer, at most</text>
+
+    <!-- loop back -->
+    <path d="M640,444 H800 V274 H646" fill="none" stroke="#C15F3C" stroke-width="2.2" marker-end="url(#gcr)"/>
+    <text x="810" y="352" font-size="12" font-weight="700" fill="#C15F3C">repeat ↻</text>
+
+    <!-- exit -->
+    <line x1="505" y1="468" x2="505" y2="504" stroke="#15803D" stroke-width="2.2" marker-end="url(#ggn)"/>
+    <text x="520" y="492" font-size="12.5" font-weight="700" fill="#15803D">enough</text>
+    <rect x="360" y="508" width="290" height="52" rx="10" fill="#EAF7EE" stroke="#A5D6B5" stroke-width="1.8"/>
+    <text x="505" y="529" text-anchor="middle" font-size="13.5" font-weight="700" fill="#166534">Answer streams</text>
+    <text x="505" y="547" text-anchor="middle" font-size="10.5" fill="#166534">with inline citations • artifacts open mid-stream</text>
+
+    <!-- bottom notes -->
+    <rect x="40" y="586" width="820" height="92" rx="12" fill="#F4F1EE" stroke="#DDD5CC"/>
+    <text x="450" y="612" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2320">What's known about the loop's limits:</text>
+    <text x="450" y="637" text-anchor="middle" font-size="12" fill="#2B2320">No published step cap for chat — Anthropic says the model scales effort to the query.</text>
+    <text x="450" y="660" text-anchor="middle" font-size="12" fill="#C15F3C">Research mode is the exception: it publishes explicit effort budgets → next map.</text>
+  </svg>
+
+  <p class="ref">Sources: Anthropic web-search announcement ("Claude decides when to search", citations) • analysis-tool docs (JS sandbox) • <i>Building Effective Agents</i> (the routing idea this map instantiates)</p>
+</section>
+
+<!-- ===================== 4. RESEARCH MODE ===================== -->
+<section>
+  <h2><span class="num">4</span> Research Mode — the One Published Interior 🏆</h2>
+  <p class="sub">Anthropic's engineering blog documents this system in full: a true orchestrator–worker architecture with numbers. This is the best publicly-documented agentic pipeline anywhere.</p>
+
+  <div class="nest-user" style="max-width:620px">
+    <div class="node green">❓ Research query</div>
+    <div class="varrow">
+      <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="node coral">🧭 Lead agent<small>thinks through the approach in extended thinking, saves the plan to Memory (context &gt;200k tokens truncates), picks an effort tier, gives each worker an objective + output format + task boundaries</small></div>
+    <div class="varrow">
+      <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px">
+      <div class="node" style="font-size:.78rem">🔎 Subagent<small>own context</small></div>
+      <div class="node" style="font-size:.78rem">🔎 Subagent<small>own context</small></div>
+      <div class="node" style="font-size:.78rem">🔎 Subagent<small>own context</small></div>
+      <div class="node" style="font-size:.78rem">🔎 …up to 10+<small>by effort tier</small></div>
+    </div>
+    <div class="chips">
+      <span>3–5 spawned in parallel for broad queries</span>
+      <span>each fires 3+ tool calls in parallel — cut research time up to 90%</span>
+      <span>subagents act as "intelligent filters": search → evaluate → condense</span>
+    </div>
+    <div class="varrow">
+      <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="node coral">🧭 Lead synthesizes<small>or spawns more workers / refines the strategy / exits the loop</small></div>
+    <div class="varrow">
+      <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="node violet">🏷️ CitationAgent<small>runs after the loop exits — walks the draft and attaches every claim to its source</small></div>
+    <div class="varrow">
+      <svg width="20" height="26" viewBox="0 0 24 30"><path d="M12 2v22M5 17l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="node green">📄 Research report, fully cited</div>
+  </div>
+
+  <div class="chips">
+    <span>📈 +90.2% vs single-agent Opus 4 on internal evals</span>
+    <span>🎯 effort ladder: fact-finding = 1 agent / 3–10 calls • comparison = 2–4 subagents / 10–15 calls • complex = 10+ subagents</span>
+    <span>💰 token cost: chat → agent ≈ 4×, chat → multi-agent ≈ 15×</span>
+    <span>🛡️ guardrails: effort budgets, retries, checkpoints, resumable runs, full tracing</span>
+    <span>🐛 documented failure: early version spawned 50 subagents for simple queries — fixed by effort-scaling rules</span>
+  </div>
+
+  <p class="ref">Source: Anthropic Engineering — <i>How we built our multi-agent research system</i> (anthropic.com/engineering/multi-agent-research-system): orchestrator-worker pattern, all numbers above</p>
+</section>
+
+<!-- ===================== 5. CONTEXT LAYERS ===================== -->
+<section>
+  <h2><span class="num">5</span> Context Layers — What Claude Remembers and Pulls In</h2>
+  <p class="sub">Sigma builds context in pipeline steps 4–6; the chatbot does it through product features.</p>
+
+  <div class="tax">
+    <div class="tcard"><h4>🧠 Memory<span class="badge yes">all tiers</span></h4><p>automatic recall of past conversations; unified memory across chat &amp; Cowork announced Aug 2026; free-tier rollout included</p></div>
+    <div class="tcard"><h4>📁 Projects<span class="badge yes">per-project</span></h4><p>uploaded files + custom instructions injected into every chat inside the project — the closest thing to Sigma's course context</p></div>
+    <div class="tcard"><h4>🎒 Skills<span class="badge yes">progressive</span></h4><p>folder-based capability packs (instructions + scripts); matched by description, loaded only when relevant — context stays lean</p></div>
+    <div class="tcard"><h4>🔌 Connectors / MCP<span class="badge yes">opt-in</span></h4><p>external app integrations via the connector directory — the chatbot's equivalent of your enabled-tools map</p></div>
+  </div>
+
+  <p class="ref">Sources: The Verge / TechCrunch / Mashable coverage of memory &amp; skills • platform.claude.com Agent Skills docs • Anthropic connector announcements</p>
+</section>
+
+<!-- ===================== 6. TAXONOMY ===================== -->
+<section>
+  <h2><span class="num">6</span> The Chatbot on the Pattern Map — Sigma vs Claude.ai vs Claude Code</h2>
+  <p class="sub">Same taxonomy as the other two pages — now all three systems side by side.</p>
+
+  <div class="tax">
+    <div class="tcard">
+      <h4>⛓️ Prompt Chaining<span class="badge no">✖ not fixed</span></h4>
+      <p>no published pre-coded chain; context assembly is feature-driven, not a hardcoded step list</p>
+    </div>
+    <div class="tcard">
+      <h4>🚚 Routing<span class="badge yes">✔</span></h4>
+      <p>"needs tools?" split at every message (Map 3) • manual model picker (Opus/Sonnet/Haiku) • effort tiers in Research</p>
+    </div>
+    <div class="tcard core">
+      <h4>🔀 Parallelization<span class="badge core">✔ in Research</span></h4>
+      <p>3–5 subagents simultaneously, each with 3+ parallel tool calls — the documented 90% time cut</p>
+    </div>
+    <div class="tcard core">
+      <h4>🎺 Orchestrator–Workers<span class="badge core">✔ in Research</span></h4>
+      <p>lead agent + parallel workers + synthesis + CitationAgent — Anthropic's own published architecture</p>
+    </div>
+    <div class="tcard">
+      <h4>🪞 Evaluator–Optimizer<span class="badge half">◐ one pass</span></h4>
+      <p>CitationAgent is a verifier pass after generation — but there's no documented iterate-until-good critic loop</p>
+    </div>
+    <div class="tcard">
+      <h4>🤖 Autonomous Agent<span class="badge half">◐ bounded</span></h4>
+      <p>the hidden loop decides its own tool use, but consumer chat shows no open-ended autonomy — that's reserved for Research and Claude Code</p>
+    </div>
+  </div>
+
+  <div class="compare">
+    <div class="ccard sigma">
+      <h4>🎓 Sigma (yours)</h4>
+      <ul>
+        <li>Fixed 11-step pipeline, deterministic rails</li>
+        <li>Bounded ReAct — 15 steps, intent-filtered tools</li>
+        <li>Context built in pipeline steps (courses, RAG, memory)</li>
+        <li>Every mechanism visible in your own code</li>
+      </ul>
+    </div>
+    <div class="ccard chat">
+      <h4>💬 Claude.ai (chatbot)</h4>
+      <ul>
+        <li>Calm surface; machinery invisible by design</li>
+        <li>Hidden tool loop, effort scaled to the query</li>
+        <li>Context via product features (memory, projects, skills)</li>
+        <li>Full orchestrator-workers — but only in Research mode</li>
+      </ul>
+    </div>
+    <div class="ccard code">
+      <h4>⌨️ Claude Code</h4>
+      <ul>
+        <li>The loop is the whole program — no fixed chain</li>
+        <li>Unbounded steps, exits on verified evidence</li>
+        <li>Subagents on demand, any task, any time</li>
+        <li>Human gates wired in (permissions, plan mode)</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="ref">The gradient to remember: <b>autonomy grows left → right</b> (Sigma's rails → chatbot's hidden loop → Code's open loop), and so does <b>cost &amp; unpredictability</b>. Anthropic's own advice — simplest thing that works — is exactly the logic that puts your Sigma pipeline where it is.</p>
+</section>
+
+<footer style="text-align:center;color:var(--muted);font-size:.8rem">
+  Claude.ai page — built from published material, 2026-08-30: anthropic.com/engineering/multi-agent-research-system (Research internals) • anthropic.com/research/building-effective-agents (taxonomy) • platform.claude.com (skills, tools) • The Verge / TechCrunch / Mashable (memory, features rollout) • the plain chat pipeline remains closed-source — only its documented surface is mapped here
+</footer>
+
+</div>
+</body>
+</html>

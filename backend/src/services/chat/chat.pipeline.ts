@@ -273,27 +273,7 @@ async function executeChatPipelineInner(
       detail: `${promptLength} chars in ${buildTimeMs}ms`,
     } as never);
 
-    // Step 6c: post-prompt layers — image grounding + tutor-mode pedagogy.
-    // The tutor layer activates only on explicit study requests ("علمني", "حل لي",
-    // "teach me"…) so ordinary factual questions keep their direct answers.
-    const { detectTutorMode, buildTutorModeInstruction } = await import("../../prompts/tutor-mode.js");
-    const tutorMode = detectTutorMode(lastUserText);
-    if (tutorMode) {
-      log.info("Tutor mode activated", { mode: tutorMode });
-    }
-
-    let postPromptLayers = "";
-    if (hasImages && ragResult.hasTextbookChunks) {
-      postPromptLayers +=
-        `\n\n## Image Question Grounding\nThe user's latest message includes a photo (e.g. a photographed exercise or page). ` +
-        `If the photo shows a question covered by the retrieved textbook excerpts, solve it using those excerpts and cite the page number(s). ` +
-        `If it is not covered by the book, still solve it step by step in the user's language.`;
-    }
-    if (tutorMode) {
-      postPromptLayers += "\n\n" + buildTutorModeInstruction(tutorMode);
-    }
-
-    const systemPromptForGeneration = augmentedSystemPrompt + postPromptLayers;
+    const systemPromptForGeneration = augmentedSystemPrompt;
 
     // ---- Step 7: Thread management ----
     const threadResult = await withTimeout(

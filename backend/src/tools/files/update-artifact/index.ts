@@ -21,7 +21,7 @@ export function applyReplacements(
     const occurrences = result.split(edit.find).length - 1;
     if (occurrences === 0) {
       throw new Error(
-        `لم يتم العثور على النص المطلوب استبداله: "${truncate(edit.find, 80)}". اقرأ أرتفاكت الحالي (route GET /api/artifacts/:id أو اطلب من المستخدم عرض الكود) وحاول مجددًا بنص مطابق تمامًا.`,
+        `The text to replace was not found: "${truncate(edit.find, 80)}". Read the current artifact (route GET /api/artifacts/:id or ask the user to show the code) and try again with exactly matching text.`,
       );
     }
     if (edit.replace_all || edit.occurrence === undefined) {
@@ -31,7 +31,7 @@ export function applyReplacements(
     } else {
       const idx = indexOfOccurrence(result, edit.find, edit.occurrence);
       if (idx === -1) {
-        throw new Error(`الحدوث رقم ${edit.occurrence} غير موجود للنص: "${truncate(edit.find, 80)}".`);
+        throw new Error(`Occurrence number ${edit.occurrence} does not exist for the text: "${truncate(edit.find, 80)}".`);
       }
       result = result.slice(0, idx) + edit.replace + result.slice(idx + edit.find.length);
     }
@@ -56,20 +56,20 @@ function truncate(text: string, max: number): string {
 
 registerTool("update_artifact", {
   description:
-    "عدّل أرتفاكتًا موجودًا بدل إعادة إنشائه — يحافظ على الإصدارات السابقة ويسجّل كل تعديل كإصدار جديد. " +
-    "مرّر `content` لاستبدال المحتوى بالكامل، أو `find_replace` لإجراء تعديلات موضعية دقيقة (مفضّل للملفات الطويلة)، " +
-    "أو `title` لإعادة التسمية فقط. يمكنك الدمج بينها في نداء واحد.",
+    "Edit an existing artifact instead of recreating it — previous versions are preserved and every edit is recorded as a new version. " +
+    "Pass `content` to replace the entire content, or `find_replace` for precise localized edits (preferred for long files), " +
+    "or `title` to rename only. You can combine them in a single call.",
   inputSchema: z.object({
-    artifact_id: z.string().describe("معرّف الأرتفاكت المراد تعديله (من نتيجة create_artifact)"),
-    title: z.string().optional().describe("عنوان جديد اختياري"),
-    content: z.string().optional().describe("المحتوى الجديد الكامل (يستبدل القديم)"),
+    artifact_id: z.string().describe("ID of the artifact to edit (from the create_artifact result)"),
+    title: z.string().optional().describe("Optional new title"),
+    content: z.string().optional().describe("Full new content (replaces the old content)"),
     find_replace: z.array(z.object({
-      find: z.string().describe("النص الحالي المطابق تمامًا (بما فيه المسافات والأسطر)"),
-      replace: z.string().describe("النص البديل"),
-      replace_all: z.boolean().optional().describe("استبدال كل الحدوثات (افتراضيًا يُستبدل أول حدوث فقط)"),
-      occurrence: z.number().int().positive().optional().describe("رقم الحدث المطلوب استبداله (1-based)"),
-    })).optional().describe("تعديلات موضعية متسلسلة تُطبَّق على المحتوى الحالي"),
-    change_summary: z.string().optional().describe("وصف قصير للتغيير يظهر في سجل الإصدارات"),
+      find: z.string().describe("Existing text to match exactly (including whitespace and lines)"),
+      replace: z.string().describe("Replacement text"),
+      replace_all: z.boolean().optional().describe("Replace all occurrences (by default only the first occurrence is replaced)"),
+      occurrence: z.number().int().positive().optional().describe("Number of the occurrence to replace (1-based)"),
+    })).optional().describe("Sequential localized edits applied to the current content"),
+    change_summary: z.string().optional().describe("Short description of the change shown in the version history"),
   }),
   execute: async (args: {
     artifact_id: string;
@@ -82,18 +82,18 @@ registerTool("update_artifact", {
     const { artifact_id, title, content, find_replace, change_summary, __userId } = args;
     try {
       if (!__userId) {
-        return JSON.stringify({ status: "error", message: "لا يمكن تعديل Artifact بدون مستخدم مسجّل." });
+        return JSON.stringify({ status: "error", message: "Cannot edit an artifact without a registered user." });
       }
       if (!title && !content && (!find_replace || find_replace.length === 0)) {
         return JSON.stringify({
           status: "error",
-          message: "لا يوجد تعديل. مرّر content أو find_replace أو title على الأقل.",
+          message: "No changes provided. Pass at least one of content, find_replace, or title.",
         });
       }
 
       const current = await getArtifact(artifact_id, __userId);
       if (!current) {
-        return JSON.stringify({ status: "error", message: `الأرتفاكت ${artifact_id} غير موجود أو غير متاح.` });
+        return JSON.stringify({ status: "error", message: `Artifact ${artifact_id} does not exist or is not accessible.` });
       }
 
       // Composition order: full replacement first, then targeted edits run
@@ -125,12 +125,12 @@ registerTool("update_artifact", {
         previous_version: current.version,
         title: updated.title,
         replacements_applied: replacementsApplied,
-        message: `تم تحديث "${updated.title}" — الإصدار ${updated.version}.`,
+        message: `Updated "${updated.title}" — version ${updated.version}.`,
       });
     } catch (err: unknown) {
       return JSON.stringify({
         status: "error",
-        message: err instanceof Error ? err.message : "فشل تحديث الـ Artifact",
+        message: err instanceof Error ? err.message : "Artifact update failed",
       });
     }
   },

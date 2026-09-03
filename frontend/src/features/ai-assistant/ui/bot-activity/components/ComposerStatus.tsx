@@ -3,9 +3,10 @@
  * action group. Shows token count + elapsed time while a message is
  * being generated.
  *
- * Renders nothing in idle state. The stop / send button is owned by
- * the existing `ComposerAction` component — this is purely an indicator
- * that sits to the LEFT of the action button.
+ * @deprecated Unused since the Claude.ai status-indicator alignment:
+ * claude.ai renders NO token/elapsed counter in the composer — the status
+ * line inside the message area is the only progress signal. Kept only so
+ * a future direct import still resolves (same pattern as BotStatusWidget).
  */
 
 import { type FC } from "react";

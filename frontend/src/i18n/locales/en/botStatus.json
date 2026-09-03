@@ -36,7 +36,8 @@
       "web_search": {
         "label": "Searching the web",
         "completed_one": "Searched {{count}} source",
-        "completed_other": "Searched {{count}} sources"
+        "completed_other": "Searched {{count}} sources",
+        "past": "Searched the web"
       },
       "calculator": {
         "label": "Calculating",
@@ -91,6 +92,13 @@
       "create_artifact": {
         "label": "Creating content"
       }
+    },
+    "completed": {
+      "rag_pipeline": "Searched the knowledge base",
+      "fetch_user_courses": "Loaded your courses",
+      "memory_context": "Reviewed your memory",
+      "thread_resolution": "Loaded the conversation",
+      "context_window": "Prepared the context"
     }
   },
   "result": {
@@ -103,10 +111,11 @@
     "text_one": "{{count}} line",
     "text_other": "{{count}} lines"
   },
+  "sources": "Sources",
   "tokens_one": "{{count}} token",
   "tokens_other": "{{count}} tokens",
   "thinking": {
-    "active": "Thinking…",
+    "active": "Thinking",
     "done": "Thought for {{duration}}",
     "past": "Thoughts"
   },
@@ -115,5 +124,13 @@
   "stop": "Stop",
   "stopping": "Stopping…",
   "expand": "Show details",
-  "collapse": "Hide details"
+  "collapse": "Hide details",
+  "verbs": [
+    "Thinking",
+    "Figuring",
+    "Pondering",
+    "Triangulating",
+    "Synthesizing",
+    "Noodling"
+  ]
 }

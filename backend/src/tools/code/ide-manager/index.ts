@@ -5,16 +5,16 @@ import { createLogger } from '../../../utils/logger.js';
 
 const log = createLogger('ide-manager');
 
-// IDE Manager Tool - لإدارة بيئة التطوير المتكاملة
+// IDE Manager Tool - for managing the integrated development environment
 registerTool("ide_execute_code", {
   description:
-    "تنفيذ كود برمجي في بيئة التطوير المتكاملة (IDE). يدعم Python, JavaScript, TypeScript, Java, C++, وغيرها. " +
-    "يمكن تمرير المتطلبات (dependencies) لتثبيتها قبل التنفيذ.",
+    "Execute code in the integrated development environment (IDE). Supports Python, JavaScript, TypeScript, Java, C++, and more. " +
+    "Dependencies can be passed to be installed before execution.",
   inputSchema: z.object({
-    code: z.string().describe("الكود المراد تنفيذه"),
-    language: z.string().describe("لغة البرمجة (python, javascript, typescript, java, cpp, etc)"),
-    dependencies: z.array(z.string()).optional().describe("قائمة المتطلبات/المكتبات المطلوبة (مثال: ['numpy', 'pandas'])"),
-    stdin: z.string().optional().describe("مدخلات stdin للبرنامج"),
+    code: z.string().describe("The code to execute"),
+    language: z.string().describe("Programming language (python, javascript, typescript, java, cpp, etc)"),
+    dependencies: z.array(z.string()).optional().describe("List of required packages/libraries (example: ['numpy', 'pandas'])"),
+    stdin: z.string().optional().describe("stdin input for the program"),
   }),
   execute: async (args: {
     code: string;
@@ -45,7 +45,7 @@ registerTool("ide_execute_code", {
     } catch (err: unknown) {
       return JSON.stringify({
         status: "error",
-        message: "فشل في تنفيذ الكود",
+        message: "Code execution failed",
         error: err instanceof Error ? err.message : String(err),
       });
     }
@@ -55,12 +55,12 @@ registerTool("ide_execute_code", {
 // Tool for managing IDE files
 registerTool("ide_manage_files", {
   description:
-    "إدارة ملفات ومجلدات في بيئة التطوير المتكاملة (IDE). يدعم إنشاء، حذف، نقل، ونسخ الملفات والمجلدات.",
+    "Manage files and folders in the integrated development environment (IDE). Supports creating, deleting, moving, and copying files and folders.",
   inputSchema: z.object({
-    action: z.enum(["create_file", "create_folder", "delete", "rename", "read", "update"]).describe("العملية المطلوبة"),
-    path: z.string().describe("مسار الملف أو المجلد"),
-    content: z.string().optional().describe("محتوى الملف (للإنشاء والتحديث)"),
-    newPath: z.string().optional().describe("المسار الجديد (لإعادة التسمية)"),
+    action: z.enum(["create_file", "create_folder", "delete", "rename", "read", "update"]).describe("The requested operation"),
+    path: z.string().describe("Path of the file or folder"),
+    content: z.string().optional().describe("File content (for create and update)"),
+    newPath: z.string().optional().describe("New path (for rename)"),
   }),
   execute: async (args: {
     action: string;
@@ -77,25 +77,25 @@ registerTool("ide_manage_files", {
       
       switch (action) {
         case "create_file":
-          message = `تم إنشاء الملف: ${path}`;
+          message = `File created: ${path}`;
           break;
         case "create_folder":
-          message = `تم إنشاء المجلد: ${path}`;
+          message = `Folder created: ${path}`;
           break;
         case "delete":
-          message = `تم حذف: ${path}`;
+          message = `Deleted: ${path}`;
           break;
         case "rename":
-          message = `تم إعادة تسمية ${path} إلى ${newPath}`;
+          message = `Renamed ${path} to ${newPath}`;
           break;
         case "read":
-          message = `تم قراءة الملف: ${path}`;
+          message = `File read: ${path}`;
           break;
         case "update":
-          message = `تم تحديث الملف: ${path}`;
+          message = `File updated: ${path}`;
           break;
         default:
-          throw new Error(`عملية غير معروفة: ${action}`);
+          throw new Error(`Unknown operation: ${action}`);
       }
       
       return JSON.stringify({
@@ -103,12 +103,12 @@ registerTool("ide_manage_files", {
         action,
         path,
         message,
-        content: action === "read" ? (content || "// محتوى الملف") : undefined,
+        content: action === "read" ? (content || "// file content") : undefined,
       });
     } catch (err: unknown) {
       return JSON.stringify({
         status: "error",
-        message: "فشل في إدارة الملفات",
+        message: "File management failed",
         error: err instanceof Error ? err.message : String(err),
       });
     }
@@ -118,11 +118,11 @@ registerTool("ide_manage_files", {
 // Tool for installing packages/dependencies
 registerTool("ide_install_packages", {
   description:
-    "تثبيت حزم ومكتبات في بيئة التطوير المتكاملة (IDE). يدعم pip (Python), npm/yarn (JavaScript), maven (Java), وغيرها.",
+    "Install packages and libraries in the integrated development environment (IDE). Supports pip (Python), npm/yarn (JavaScript), maven (Java), and more.",
   inputSchema: z.object({
-    packages: z.array(z.string()).describe("قائمة الحزم المراد تثبيتها"),
-    packageManager: z.enum(["pip", "npm", "yarn", "maven", "gradle", "cargo"]).describe("مدير الحزم المستخدم"),
-    projectPath: z.string().optional().describe("مسار المشروع (افتراضي: /)"),
+    packages: z.array(z.string()).describe("List of packages to install"),
+    packageManager: z.enum(["pip", "npm", "yarn", "maven", "gradle", "cargo"]).describe("Package manager to use"),
+    projectPath: z.string().optional().describe("Project path (default: /)"),
   }),
   execute: async (args: {
     packages: string[];
@@ -162,13 +162,13 @@ registerTool("ide_install_packages", {
         total: packages.length,
         message:
           failedPackages.length === 0
-            ? `✓ تم تثبيت ${installedPackages.length} حزمة بنجاح`
-            : `تم تثبيت ${installedPackages.length} حزمة، فشل تثبيت ${failedPackages.length}`,
+            ? `✓ Successfully installed ${installedPackages.length} packages`
+            : `Installed ${installedPackages.length} packages, failed to install ${failedPackages.length}`,
       });
     } catch (err: unknown) {
       return JSON.stringify({
         status: "error",
-        message: "فشل في تثبيت الحزم",
+        message: "Package installation failed",
         error: err instanceof Error ? err.message : String(err),
       });
     }
